@@ -1,0 +1,36 @@
+[project]
+name = "missouri-vsr"
+version = "0.1.0"
+description = ""
+authors = [{ name = "David Eads", email = "deads@themarshallproject.org" }]
+requires-python = ">=3.12,<3.13"
+readme = "README.md"
+dependencies = [
+    "dagster>=1.10.5,<2",
+    "dagster-webserver>=1.10.5,<2",
+    "pandas>=2.2.3,<3",
+    "pyairtable>=3.0.2,<4",
+    "boto3>=1.37.12,<2",
+    "markdown~=3.7",
+    "google-api-python-client>=2.166.0,<3",
+    "python-slugify>=8.0.4",
+    "camelot-py>=1.0.0",
+    "pypdf2>=3.0.1",
+]
+
+[tool.dagster]
+module_name = "missouri_vsr.definitions"
+code_location_name = "missouri_vsr"
+
+[tool.hatch.build.targets.sdist]
+include = ["missouri_vsr"]
+
+[tool.hatch.build.targets.wheel]
+include = ["missouri_vsr"]
+
+[tool.hatch.build.targets.wheel.sources]
+"missouri_vsr" = "missouri_vsr"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
