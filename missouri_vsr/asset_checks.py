@@ -1,19 +1,9 @@
-"""
-Asset checks for the `extract_pdf_data` graph asset.
-"""
-
 import pandas as pd
+
+from slugify import slugify
 from dagster import AssetCheckResult, AssetCheckSpec, asset_check
+from missouri_vsr.assets import extract_pdf_data
 
-# ---------------------------------------------------------------------------
-# Import the asset under test.
-# ---------------------------------------------------------------------------
-# ⚠️  Update this import path to wherever your `extract_pdf_data` asset lives.
-from missouri_vsr.assets import extract_pdf_data  # noqa: F401,E501
-
-# ---------------------------------------------------------------------------
-# Constants – expected schema
-# ---------------------------------------------------------------------------
 EXPECTED_COLUMNS = [
     "key",
     "Total",
@@ -23,15 +13,14 @@ EXPECTED_COLUMNS = [
     "Native American",
     "Asian",
     "Other",
+    "slug",
     "department",
     "table name",
 ]
 
-NUMERIC_COLS = EXPECTED_COLUMNS[1:8]  # race‐specific totals only
+NUMERIC_COLS = EXPECTED_COLUMNS[1:8]  # Just the race-specific numbers
 
-# ---------------------------------------------------------------------------
-# 1. Schema check – ensure *exact* match with `EXPECTED_COLUMNS`.
-# ---------------------------------------------------------------------------
+# Schema check for extracted pdf data – ensure *exact* match with `EXPECTED_COLUMNS`.
 @asset_check(asset=extract_pdf_data)
 def check_expected_columns(df: pd.DataFrame) -> AssetCheckResult:  # noqa: D103
     missing = [c for c in EXPECTED_COLUMNS if c not in df.columns]
@@ -46,12 +35,10 @@ def check_expected_columns(df: pd.DataFrame) -> AssetCheckResult:  # noqa: D103
         },
     )
 
-# ---------------------------------------------------------------------------
-# 2. Duplicate‐key check – combination of dept/table/key must be unique.
-# ---------------------------------------------------------------------------
+# Duplicate‐slug check – combination of dept/table/slug must be unique.
 @asset_check(asset=extract_pdf_data)
-def check_no_duplicate_keys(df: pd.DataFrame) -> AssetCheckResult:  # noqa: D103
-    dupes = df[df.duplicated(["department", "table name", "key"], keep=False)]
+def check_no_duplicate_slugs(df: pd.DataFrame) -> AssetCheckResult:
+    dupes = df[df.duplicated(["department", "table name", "slug"], keep=False)]
     passed = dupes.empty
 
     return AssetCheckResult(
@@ -62,9 +49,7 @@ def check_no_duplicate_keys(df: pd.DataFrame) -> AssetCheckResult:  # noqa: D103
         },
     )
 
-# ---------------------------------------------------------------------------
-# 3. Numeric columns – verify every cell parses as a number or is NaN.
-# ---------------------------------------------------------------------------
+# Verify every numeric cell parses as a number or is NaN.
 @asset_check(asset=extract_pdf_data)
 def check_numeric_columns_parse(df: pd.DataFrame) -> AssetCheckResult:  # noqa: D103
     numeric_parsed = df[NUMERIC_COLS].apply(lambda s: pd.to_numeric(s, errors="coerce"))
@@ -80,43 +65,45 @@ def check_numeric_columns_parse(df: pd.DataFrame) -> AssetCheckResult:  # noqa: 
         },
     )
 
-# ---------------------------------------------------------------------------
-# 4. Row-level sanity checks – plug trusted rows here for regression tests.
-# ---------------------------------------------------------------------------
+# Row-level sanity checks – plug trusted rows here for regression tests.
 ROW_SANITY_CHECKS: list[dict] = [
-    # {
-    #     "key": "All stops",
-    #     "department": "Atchison County Sheriff's Department",
-    #     "table name": "Rates by Race",
-    #     "total": 22,
-    # } 
+    {
+        "slug": "stops-resident-stops",
+        "department": "Andrew County Sheriff's Dept",
+        "White": 634,
+    } 
 ]
 
-
-def _make_row_sanity_check(asset, check: dict, idx: int, id_field: str = "key") -> AssetCheckSpec:  # noqa: D401,E501
+def _make_row_sanity_check(asset, check: dict, idx: int) -> AssetCheckSpec:
     """Return an `asset_check` enforcing that *one* row matches `check`."""
 
-    check_name = f"sanity_check_{idx}_{check.get(id_field, 'unknown')}"
+    check_slug = check["slug"].replace("-", "_")
+    dept_slug = slugify(check["department"], separator="_")
+    check_name = f"sanity_check_{idx}_{check_slug}_{dept_slug}"
 
     @asset_check(name=check_name, asset=asset)
-    def _check(df: pd.DataFrame) -> AssetCheckResult:  # noqa: D401
-        row = df[df[id_field] == check[id_field]]
+    def _check(df: pd.DataFrame) -> AssetCheckResult:
+        # Ensure both conditions are applied correctly with parentheses
+        row = df[(df["slug"] == check["slug"]) & (df["department"] == check["department"])]
         if row.empty:
             return AssetCheckResult(
                 passed=False,
-                metadata={"reason": f"{id_field} not found", id_field: check[id_field]},
+                metadata={"reason": f"{check['slug']} + {check['department']} not found"},
             )
 
-        mismatches = {
-            key: (row.iloc[0].get(key), val)
-            for key, val in check.items()
-            if key != id_field and row.iloc[0].get(key) != val
-        }
+        # Check all additional fields in the dict (besides slug/department)
+        mismatches = {}
+        for key, val in check.items():
+            if key in ("slug", "department"):
+                continue
+            actual_val = row.iloc[0][key]
+            if actual_val != val:
+                mismatches[key] = {"expected": val, "actual": actual_val}
 
         return AssetCheckResult(
             passed=not mismatches,
             metadata={
-                "checked_fields": list(check.keys()),
+                "checked_fields": [k for k in check.keys() if k not in ("slug", "department")],
                 "mismatches": mismatches,
             },
         )
@@ -133,7 +120,7 @@ row_sanity_checks = [
 # Aggregate if you need to expose the list for Dagster’s loader utilities
 asset_checks = [
     check_expected_columns,
-    check_no_duplicate_keys,
+    check_no_duplicate_slugs,
     check_numeric_columns_parse,
     *row_sanity_checks,
 ]
