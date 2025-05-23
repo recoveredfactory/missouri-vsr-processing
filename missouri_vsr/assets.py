@@ -215,12 +215,9 @@ def concat_and_write_json(context, chunks: List[pd.DataFrame]) -> pd.DataFrame:
 # ----------------------------------------------------------------------------
 
 @graph_asset(
-    description=(
-        "Extracts tabular data from the annual VSR PDF via dynamic mapping; "
-        "each page‑range is processed in its own Dagster op, so logs stream naturally."
-    )
+    description="Extract tabular data from the VSR PDF via dynamic mapping.",
 )
-def extract_pdf_data():  # noqa: D401
-    page_ranges = calculate_page_ranges()            # DynamicOutput[str]
-    chunk_dfs = page_ranges.map(parse_page_range)    # dynamic mapping via .map on DynamicOutput
-    return concat_and_write_csv(chunk_dfs.collect())
+def extract_pdf_data():
+    ranges = calculate_page_ranges()
+    chunks = ranges.map(parse_page_range)
+    return concat_and_write_json(chunks.collect())
