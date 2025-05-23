@@ -70,7 +70,7 @@ _NUMERIC_COLS = FINAL_COLUMNS[1:8]  # cached once for speed
 # Table‑level cleanup
 # ----------------------------------------------------------------------------
 
-def _clean_camelot_table(table, log) -> pd.DataFrame | None:  # noqa: ANN001
+def _clean_camelot_table(table, log) -> pd.DataFrame | None: 
     """Return a tidy DataFrame for one Camelot table or *None* if unusable."""
 
     df = table.df.copy()
@@ -165,7 +165,7 @@ _CFG = {
     required_resource_keys={"data_dir_report_pdfs"},
     config_schema=_CFG,
 )
-def calculate_page_ranges(context):  # noqa: ANN001
+def calculate_page_ranges(context):  
     pdf_file = context.resources.data_dir_report_pdfs.get_path() / context.op_config["pdf_filename"]
     total_pages = len(PdfReader(pdf_file).pages)
     total_pages = min(total_pages, 100)
@@ -180,7 +180,7 @@ def calculate_page_ranges(context):  # noqa: ANN001
     required_resource_keys={"data_dir_report_pdfs"},
     config_schema=_CFG,
 )
-def parse_page_range(context, page_range: str) -> pd.DataFrame:  # noqa: ANN001
+def parse_page_range(context, page_range: str) -> pd.DataFrame:  
     pdf_file = context.resources.data_dir_report_pdfs.get_path() / context.op_config["pdf_filename"]
 
     try:
@@ -198,7 +198,7 @@ def parse_page_range(context, page_range: str) -> pd.DataFrame:  # noqa: ANN001
 
 
 @op(out=Out(pd.DataFrame), required_resource_keys={"data_dir_processed"})
-def concat_and_write_json(context, chunks: List[pd.DataFrame]) -> pd.DataFrame:  # noqa: ANN001
+def concat_and_write_json(context, chunks: List[pd.DataFrame]) -> pd.DataFrame:  
     non_empty = [c for c in chunks if not c.empty]
     if not non_empty:
         raise ValueError("No tables were extracted from the PDF.")
