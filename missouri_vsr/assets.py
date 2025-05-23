@@ -1,18 +1,6 @@
-"""Dagster asset that extracts VSR PDF tables via **dynamic mapping**.
-
-* Compatible with **dagster>=1.10.5,<2**.
-* Preserves **fine‑grained logging** inside the table‑cleanup helper so you can
-  debug malformed tables right from the Dagster UI.
-* **Recent upgrades**
-    * Config‑driven filename (default → *VSRreport2023.pdf*).
-    * Robust cleanup: blanks, “Notes” rows, ligatures, smart quotes, dot‑only rows.
-    * Slug column `<table>-<key>` for stable joins.
-    * **NEW (numeric patch)**
-        • Numeric columns coercively parsed to numbers; “.” becomes *null*.
-        • JSON output now emits unquoted numeric values for totals by race.
 """
-
-from __future__ import annotations
+Dagster asset that extracts VSR PDF tables into friendly, tidy JSON.
+"""
 
 import re
 import unicodedata
@@ -21,7 +9,7 @@ from typing import List
 import camelot
 import pandas as pd
 from PyPDF2 import PdfReader
-from slugify import slugify  # pip install python-slugify
+from slugify import slugify  
 from dagster import (
     DynamicOut,
     DynamicOutput,
@@ -141,7 +129,7 @@ def _clean_camelot_table(table, log) -> pd.DataFrame | None:
     df[_NUMERIC_COLS] = df[_NUMERIC_COLS].apply(lambda col: pd.to_numeric(col, errors="coerce"))
 
     # ---------------------- slugs & metadata ----------------------
-    df["slug"] = df["key"].apply(lambda k: f"{table_slug}-{slugify(str(k), lowercase=True)}")
+    df["slug"] = df["key"].apply(lambda k: f"{table_slug}-{slugify(str(k), lowercase=True, replacements=[['%', 'pct']])}")
     df["department"] = dept_name
     df["table name"] = raw_table_name
 
@@ -221,3 +209,12 @@ def extract_pdf_data():
     ranges = calculate_page_ranges()
     chunks = ranges.map(parse_page_range)
     return concat_and_write_json(chunks.collect())
+
+
+# @asset(
+#     description="Join department data with extracted PDF data.",
+#     required_resource_keys={"data_dir_processed", "data_dir_source"},
+# )
+# def join_department_data(context, extract_pdf_data: pd.DataFrame) -> pd.DataFrame:
+#     dept_data_file = context.resources.data_dir_source.get_path() / "2025-05-05-post-law-enforcement-agencies-list.xlsx"
+#     pass
