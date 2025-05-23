@@ -35,17 +35,20 @@ def check_expected_columns(df: pd.DataFrame) -> AssetCheckResult:
         },
     )
 
-# Duplicate‐slug check – combination of dept/table/slug must be unique.
+# Duplicate‐slug check – combination of dept/slug must be unique.
 @asset_check(asset=extract_pdf_data)
 def check_no_duplicate_slugs(df: pd.DataFrame) -> AssetCheckResult:
-    dupes = df[df.duplicated(["department", "table name", "slug"], keep=False)]
+    dupes = df[df.duplicated(["department", "slug"], keep=False)]
     passed = dupes.empty
+
+    # Include both department and slug for each duplicate row
+    example_duplicates = dupes[["department", "slug"]].drop_duplicates().to_dict(orient="records")
 
     return AssetCheckResult(
         passed=passed,
         metadata={
             "duplicate_count": len(dupes),
-            "example_duplicates": dupes["key"].unique().tolist()[:10],
+            "example_duplicates": example_duplicates,
         },
     )
 
