@@ -22,7 +22,7 @@ NUMERIC_COLS = EXPECTED_COLUMNS[1:8]  # Just the race-specific numbers
 
 # Schema check for extracted pdf data – ensure *exact* match with `EXPECTED_COLUMNS`.
 @asset_check(asset=extract_pdf_data)
-def check_expected_columns(df: pd.DataFrame) -> AssetCheckResult:  # noqa: D103
+def check_expected_columns(df: pd.DataFrame) -> AssetCheckResult:
     missing = [c for c in EXPECTED_COLUMNS if c not in df.columns]
     extra = [c for c in df.columns if c not in EXPECTED_COLUMNS]
 
@@ -51,7 +51,7 @@ def check_no_duplicate_slugs(df: pd.DataFrame) -> AssetCheckResult:
 
 # Verify every numeric cell parses as a number or is NaN.
 @asset_check(asset=extract_pdf_data)
-def check_numeric_columns_parse(df: pd.DataFrame) -> AssetCheckResult:  # noqa: D103
+def check_numeric_columns_parse(df: pd.DataFrame) -> AssetCheckResult:
     numeric_parsed = df[NUMERIC_COLS].apply(lambda s: pd.to_numeric(s, errors="coerce"))
 
     non_numeric_mask = numeric_parsed.isna() & df[NUMERIC_COLS].notna()
