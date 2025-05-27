@@ -33,6 +33,7 @@ FINAL_COLUMNS = [
     "Other",
     "department",
     "table name",
+    "section",
 ]
 
 TABLE_SLUG_LOOKUP = {
@@ -58,17 +59,37 @@ _NUMERIC_COLS = FINAL_COLUMNS[1:8]  # cached once for speed
 # Table‑level cleanup
 # ----------------------------------------------------------------------------
 
-def _clean_camelot_table(table, log) -> pd.DataFrame | None: 
-    """Return a tidy DataFrame for one Camelot table or *None* if unusable."""
+"""
+For later prompting...
 
+The input tables for this function from the PDF look something like...
+
+Population . . . . . . .
+2022 ACS pop. 1887 1250 6 250 15 27 516
+2022 ACS pop. % 100 66.24 .32 13.25 .79 1.43 27.34
+2020 Decennial pop. 1464 1049 11 149 48 13 194
+2020 Decennial pop. % 100 71.65 .75 10.18 3.28 .89 13.25
+
+But the "population" line needs to go into the "slug" field we're creating.
+
+Right now, we're just getting slugs like "search-other" when we need "search-probable-cause-other" for the slug. That's because we can also have "search-contraband-found-other"
+
+Otherwise, they're ambiguous. Does that make sense? But the "section" or category always precedes the numeric values, like I showed you above.
+
+"""
+
+def _clean_camelot_table(table, log) -> pd.DataFrame | None:
+    """Return a tidy DataFrame for one Camelot table or *None* if unusable.
+    """
+
+    # ---------------------- initial cleanup ----------------------
     df = table.df.copy()
     log.debug("Raw Camelot table shape: %s", df.shape)
 
-    # Drop all‑NaN columns early.
-    df = df.dropna(axis=1, how="all")
+    df = df.dropna(axis=1, how="all")  # drop empty columns
     log.debug("Shape after dropping empty cols: %s", df.shape)
 
-    # ---------------------- metadata ----------------------
+    # ---------------------- metadata row ----------------------
     metadata_row_idx: int | None = None
     metadata_line: str | None = None
     for i, row in df.iterrows():
@@ -100,7 +121,7 @@ def _clean_camelot_table(table, log) -> pd.DataFrame | None:
     # ---------------------- body rows ----------------------
     df = df.iloc[metadata_row_idx + 2 :].reset_index(drop=True)
 
-    # If first cell blank shift left for consistent 8 cols.
+    # If first cell blank, shift left for consistent 8 cols.
     if pd.isna(df.iloc[0, 0]) or str(df.iloc[0, 0]).strip() == "":
         df = df.iloc[:, 1:]
 
@@ -111,15 +132,27 @@ def _clean_camelot_table(table, log) -> pd.DataFrame | None:
     df = df.iloc[:, :8]
     df.columns = FINAL_COLUMNS[:8]
 
-    # ---------------------- row‑level cleanup ----------------------
-    df["key"] = df["key"].astype(str).str.replace(r"\s*\n\s*", " ", regex=True).str.strip()
+    # ---------------------- section detection ----------------------
+    df["key"] = (
+        df["key"].astype(str)
+        .str.replace(r"\s*\n\s*", " ", regex=True)
+        .str.strip()
+    )
 
+    # A section row has dots in every numeric column.
+    mask_section_row = df[_NUMERIC_COLS].applymap(lambda x: str(x).strip() == ".").all(axis=1)
+
+    # Store the section name then forward‑fill.
+    df["section"] = None
+    df.loc[mask_section_row, "section"] = df.loc[mask_section_row, "key"]
+    df["section"] = df["section"].ffill()
+
+    # ---------------------- drop non‑data rows ----------------------
     mask_blank_key = df["key"].isna() | (df["key"].str.strip() == "")
     mask_notes = df["key"].str.contains(r"^Notes?:", case=False, na=False)
-    mask_all_dots = df[_NUMERIC_COLS].applymap(lambda x: str(x).strip() == ".").all(axis=1)
+    mask_all_dots = mask_section_row  # same condition
 
     df = df[~(mask_blank_key | mask_notes | mask_all_dots)].copy()
-
     if df.empty:
         log.warning("All rows removed after cleanup – skipping table")
         return None
@@ -129,12 +162,26 @@ def _clean_camelot_table(table, log) -> pd.DataFrame | None:
     df[_NUMERIC_COLS] = df[_NUMERIC_COLS].apply(lambda col: pd.to_numeric(col, errors="coerce"))
 
     # ---------------------- slugs & metadata ----------------------
-    df["slug"] = df["key"].apply(lambda k: f"{table_slug}-{slugify(str(k), lowercase=True, replacements=[['%', 'pct']])}")
+    def _build_slug(row):
+        parts = [table_slug]
+        if row.section:  # always include section for disambiguation
+            parts.extend([
+                '',
+                slugify(str(row.section), lowercase=True, replacements=[["%", "pct"]]),
+                ''
+            ])
+        parts.append(
+            slugify(str(row.key), lowercase=True, replacements=[["%", "pct"]])
+        )
+        return "-".join(parts)
+
+    df["slug"] = df.apply(_build_slug, axis=1)
     df["department"] = dept_name
     df["table name"] = raw_table_name
 
     log.debug("Final tidy table shape: %s", df.shape)
     return df
+
 
 # ----------------------------------------------------------------------------
 # Ops
@@ -156,7 +203,7 @@ _CFG = {
 def calculate_page_ranges(context):  
     pdf_file = context.resources.data_dir_report_pdfs.get_path() / context.op_config["pdf_filename"]
     total_pages = len(PdfReader(pdf_file).pages)
-    total_pages = min(total_pages, 100)
+    total_pages = min(total_pages, 40)
 
     for i in range(1, total_pages + 1, PAGE_CHUNK_SIZE):
         page_range = f"{i}-{min(i + PAGE_CHUNK_SIZE - 1, total_pages)}"

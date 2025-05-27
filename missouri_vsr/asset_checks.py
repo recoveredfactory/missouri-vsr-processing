@@ -16,9 +16,25 @@ EXPECTED_COLUMNS = [
     "slug",
     "department",
     "table name",
+    "section"
 ]
 
 NUMERIC_COLS = EXPECTED_COLUMNS[1:8]  # Just the race-specific numbers
+
+# Row-level sanity checks – plug trusted rows here for regression tests.
+ROW_SANITY_CHECKS: list[dict] = [
+    {
+        "slug": "stops--all-stops--resident-stops",
+        "department": "Lake Winnebago Police Dept",
+        "Total": 109,
+        "White": 105,
+        "Black": 1,
+        "Hispanic": 0,
+        "Native American": 0,
+        "Asian": 5,
+        "Other": 3,
+    }
+]
 
 # Schema check for extracted pdf data – ensure *exact* match with `EXPECTED_COLUMNS`.
 @asset_check(asset=extract_pdf_data)
@@ -68,15 +84,6 @@ def check_numeric_columns_parse(df: pd.DataFrame) -> AssetCheckResult:
         },
     )
 
-# Row-level sanity checks – plug trusted rows here for regression tests.
-ROW_SANITY_CHECKS: list[dict] = [
-    {
-        "slug": "stops-resident-stops",
-        "department": "Andrew County Sheriff's Dept",
-        "White": 634,
-    } 
-]
-
 def _make_row_sanity_check(asset, check: dict, idx: int) -> AssetCheckSpec:
     """Return an `asset_check` enforcing that *one* row matches `check`."""
 
@@ -112,7 +119,6 @@ def _make_row_sanity_check(asset, check: dict, idx: int) -> AssetCheckSpec:
         )
 
     return _check
-
 
 # Dynamically materialise any row-level checks defined above.
 row_sanity_checks = [
