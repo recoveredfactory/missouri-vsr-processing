@@ -23,17 +23,66 @@ NUMERIC_COLS = EXPECTED_COLUMNS[1:8]  # Just the race-specific numbers
 
 # Row-level sanity checks – plug trusted rows here for regression tests.
 ROW_SANITY_CHECKS: list[dict] = [
+    # First a random one
     {
-        "slug": "stops--all-stops--resident-stops",
+        "slug": "stops-resident-stops",
         "department": "Lake Winnebago Police Dept",
         "Total": 109,
         "White": 105,
         "Black": 1,
         "Hispanic": 0,
         "Native American": 0,
-        "Asian": 5,
+        "Asian": 0,
         "Other": 3,
-    }
+    },
+    # Now a big important dept
+    {
+        "slug": "rates--totals--all-stops",
+        "department": "St Louis City Police Dept",
+        "Total": 27742,
+        "White": 10077,
+        "Black": 16424,
+        "Hispanic": 551,
+        "Native American": 50,
+        "Asian": 241,
+        "Other": 399,
+    },
+    # Now values that can be decimal numbers (again with St. Louis City)
+    {
+        "slug": "rates--rates--stop-rate",
+        "department": "St Louis City Police Dept",
+        "Total": 11.18,
+        "White": 8.44,
+        "Black": 16.01,
+        "Hispanic": 5.92,
+        "Native American": 9.75,
+        "Asian": 2.56,
+        "Other": 3.15,
+    },
+    # A dept with an apostrophe in the name AND missing values
+    {
+        "slug": "rates--rates--search-rate",
+        "department": "Benton County Sheriff's Dept",
+        "Total": 20.47,
+        "White": 20.08,
+        "Black": 25,
+        "Hispanic": 33.33,
+        "Native American": None,
+        "Asian": None,
+        "Other": None,
+    },
+    # That same department has zeros for some rates as well
+    {
+        "slug": "rates--rates--stop-rate",
+        "department": "Benton County Sheriff's Dept",
+        "Total": 3.09,
+        "White": 3.17,
+        "Black": 11.85,
+        "Hispanic": 2.73,
+        "Native American": 0,
+        "Asian": 0,
+        "Other": 0,
+    },
 ]
 
 # Schema check for extracted pdf data – ensure *exact* match with `EXPECTED_COLUMNS`.
