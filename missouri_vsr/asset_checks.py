@@ -167,7 +167,14 @@ def _make_row_sanity_check(asset, check: dict, idx: int) -> AssetCheckSpec:
         for key, val in check.items():
             if key in ("slug", "department"):
                 continue
+
             actual_val = row.iloc[0][key]
+
+            # Treat both None and NaN as equivalent
+            if pd.isna(actual_val) and val is None:
+                continue
+
+            # Otherwise, check for (fairly) strict equality
             if actual_val != val:
                 mismatches[key] = {"expected": val, "actual": actual_val}
 
