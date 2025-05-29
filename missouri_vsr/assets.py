@@ -87,6 +87,48 @@ def _normalize_text(text: str) -> str:
 # Table‑level cleanup
 # ----------------------------------------------------------------------------
 
+def normalize_row_tokens(row: list[str], log) -> list[str]:
+    """
+    Fix known structural issues with rows extracted from Camelot tables.
+
+    This function assumes that the final output must match:
+        ["key", "Total", "White", "Black", "Hispanic", "Native American", "Asian", "Other"]
+
+    If it detects that "Native American" has been split into two separate tokens,
+    it will merge them and return a cleaned list of exactly 8 items.
+
+    If the row is malformed in a way we can't fix deterministically, it tries to truncate or pad.
+    """
+    row = [str(cell).strip() for cell in row if str(cell).strip() != ""]
+
+    if len(row) == 9:
+        for i in range(len(row) - 1):
+            if row[i] == "Native" and row[i + 1] == "American":
+                fixed = row[:i] + ["Native American"] + row[i + 2:]
+                log.debug("Merged 'Native' + 'American' into single column: %s", fixed)
+                row = fixed
+                break
+
+    elif len(row) == 10:
+        for i in range(len(row) - 2):
+            if row[i] == "Native" and row[i + 1] == "American":
+                fixed = row[:i] + ["Native American"] + row[i + 2:]
+                if len(fixed) > 8:
+                    fixed = fixed[:8]
+                log.debug("Fixed row with extra column by merging 'Native American': %s", fixed)
+                row = fixed
+                break
+
+    if len(row) > 8:
+        log.warning("Row too long (%d cols): %s. Truncating.", len(row), row)
+        return row[:8]
+    elif len(row) < 8:
+        log.warning("Row too short (%d cols): %s. Padding with empty strings.", len(row), row)
+        return row + [""] * (8 - len(row))
+
+    return row
+
+
 def _clean_camelot_table(table, log) -> pd.DataFrame | None:
     """Return a tidy :class:`~pandas.DataFrame` for one Camelot table.
 
@@ -125,8 +167,7 @@ def _clean_camelot_table(table, log) -> pd.DataFrame | None:
         log.warning("Could not parse metadata line: %s", metadata_line)
         return None
 
-    _tbl_num, raw_table_name, raw_dept = (
-        m.group(1),
+    raw_table_name, raw_dept = (
         m.group(2).strip(),
         m.group(3).strip(),
     )
@@ -150,8 +191,14 @@ def _clean_camelot_table(table, log) -> pd.DataFrame | None:
         log.warning("Unexpected column count %d – skipping table", df.shape[1])
         return None
 
-    df = df.iloc[:, :8]
-    df.columns = FINAL_COLUMNS[:8]
+    # Try to fix malformed rows using knowledge of table structure before trusting column values
+    normalized_rows = []
+    for _, row in df.iterrows():
+        normalized = normalize_row_tokens(list(row), log)
+        normalized_rows.append(normalized)
+
+    df = pd.DataFrame(normalized_rows, columns=FINAL_COLUMNS[:8])
+
 
     # ---------------------- section detection ----------------------
     # Normalise the *key* column once so we can safely compare values.
@@ -240,7 +287,7 @@ _CFG = {
 def calculate_page_ranges(context):  
     pdf_file = context.resources.data_dir_report_pdfs.get_path() / context.op_config["pdf_filename"]
     total_pages = len(PdfReader(pdf_file).pages)
-    total_pages = min(total_pages, 100)
+    total_pages = min(total_pages, 1800)
 
     for i in range(1, total_pages + 1, PAGE_CHUNK_SIZE):
         page_range = f"{i}-{min(i + PAGE_CHUNK_SIZE - 1, total_pages)}"

@@ -34,19 +34,19 @@ ROW_SANITY_CHECKS: list[dict] = [
         "Native American": 0,
         "Asian": 2,
         "Other": 1,
-    }
+    },
     # A random one
-    # {
-    #     "slug": "stops--all-stops--resident-stops",
-    #     "department": "Lake Winnebago Police Dept",
-    #     "Total": 109,
-    #     "White": 105,
-    #     "Black": 1,
-    #     "Hispanic": 0,
-    #     "Native American": 0,
-    #     "Asian": 0,
-    #     "Other": 3,
-    # },
+    {
+        "slug": "stops--all-stops--resident-stops",
+        "department": "Lake Winnebago Police Dept",
+        "Total": 109,
+        "White": 105,
+        "Black": 1,
+        "Hispanic": 0,
+        "Native American": 0,
+        "Asian": 0,
+        "Other": 3,
+    },
     # Now a big important dept
     {
         "slug": "rates--totals--all-stops",
@@ -72,29 +72,29 @@ ROW_SANITY_CHECKS: list[dict] = [
         "Other": 3.15,
     },
     # A dept with an apostrophe in the name AND missing values
-    # {
-    #     "slug": "rates--rates--search-rate",
-    #     "department": "Benton County Sheriff's Dept",
-    #     "Total": 20.47,
-    #     "White": 20.08,
-    #     "Black": 25,
-    #     "Hispanic": 33.33,
-    #     "Native American": None,
-    #     "Asian": None,
-    #     "Other": None,
-    # },
+    {
+        "slug": "rates--rates--search-rate",
+        "department": "Benton County Sheriff's Dept",
+        "Total": 20.47,
+        "White": 20.08,
+        "Black": 25,
+        "Hispanic": 33.33,
+        "Native American": None,
+        "Asian": None,
+        "Other": None,
+    },
     # That same department has zeros for some rates as well
-    # {
-    #     "slug": "rates--rates--stop-rate",
-    #     "department": "Benton County Sheriff's Dept",
-    #     "Total": 3.09,
-    #     "White": 3.17,
-    #     "Black": 11.85,
-    #     "Hispanic": 2.73,
-    #     "Native American": 0,
-    #     "Asian": 0,
-    #     "Other": 0,
-    # },
+    {
+        "slug": "rates--rates--stop-rate",
+        "department": "Benton County Sheriff's Dept",
+        "Total": 3.09,
+        "White": 3.17,
+        "Black": 11.85,
+        "Hispanic": 2.73,
+        "Native American": 0,
+        "Asian": 0,
+        "Other": 0,
+    },
 ]
 
 # Schema check for extracted pdf data – ensure *exact* match with `EXPECTED_COLUMNS`.
