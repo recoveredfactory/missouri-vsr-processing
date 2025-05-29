@@ -244,12 +244,8 @@ def concat_and_write_json(context, chunks: List[pd.DataFrame]) -> pd.DataFrame:
     return combined
 
 
-# ----------------------------------------------------------------------------
-# Asset (graph‑backed)
-# ----------------------------------------------------------------------------
-
 @graph_asset(
-    description="Extract tabular data from the VSR PDF via dynamic mapping.",
+    description="Extract tabular data from a Vehicle Stops Report PDF (graph-backed to allow for Dagster-native paralellization).",
 )
 def extract_pdf_data():
     ranges = calculate_page_ranges()
