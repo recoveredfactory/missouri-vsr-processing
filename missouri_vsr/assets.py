@@ -177,6 +177,10 @@ def _clean_camelot_table(table, log) -> pd.DataFrame | None:
         raw_table_name, slugify(raw_table_name, lowercase=True)
     )
 
+    if table_slug is "stops":
+        log.debug("Raw table")
+        log.debug(df.head(50))
+
     log.info("Parsed meta → table '%s' / dept '%s'", raw_table_name, dept_name)
 
     # ---------------------- body rows ----------------------
@@ -186,6 +190,10 @@ def _clean_camelot_table(table, log) -> pd.DataFrame | None:
     # have the expected 8 columns.
     if pd.isna(df.iloc[0, 0]) or str(df.iloc[0, 0]).strip() == "":
         df = df.iloc[:, 1:]
+
+    if table_slug is "stops":
+        log.debug("Cleaned up table")
+        log.debug(df.head(50))
 
     if df.shape[1] < 8:
         log.warning("Unexpected column count %d – skipping table", df.shape[1])
@@ -199,11 +207,14 @@ def _clean_camelot_table(table, log) -> pd.DataFrame | None:
 
     df = pd.DataFrame(normalized_rows, columns=FINAL_COLUMNS[:8])
 
+    if table_slug is "stops":
+        log.debug("Final cleaned up table before section detection")
+        log.debug(df.head(50))
 
     # ---------------------- section detection ----------------------
     # Normalise the *key* column once so we can safely compare values.
     df["key"] = (
-        df["key"].astype(str).str.replace(r"\s*\n\s*", " ", regex=True).str.strip()
+        df["key"].astype(str).str.replace(r"\s*\n\s*", " ", regex=True).str.strip().apply(_normalize_text)
     )
 
     # Lookup the list of expected section names for this table.  If the
@@ -211,19 +222,21 @@ def _clean_camelot_table(table, log) -> pd.DataFrame | None:
     table_sections = TABLE_SECTIONS.get(table_slug, [])
     section_lookup = {s.lower(): s for s in table_sections}
 
-    mask_section_row = df["key"].str.lower().map(section_lookup.__contains__).fillna(False)
+    mask_section_row = df["key"].map(section_lookup.__contains__).fillna(False)
 
     # Store the *canonical* section name (from our lookup) then ffill so
     # that every body row is tagged with the section it belongs to.
     df["section"] = None
-    df.loc[mask_section_row, "section"] = (
-        df.loc[mask_section_row, "key"].str.lower().map(section_lookup)
-    )
+    df.loc[mask_section_row, "section"] = df.loc[mask_section_row, "key"].map(section_lookup)
     df["section"] = df["section"].ffill()
 
     # ---------------------- drop non‑data rows ----------------------
     mask_blank_key = df["key"].isna() | (df["key"].str.strip() == "")
     mask_notes = df["key"].str.contains(r"^Notes?:", case=False, na=False)
+
+    if table_slug is "stops":
+        log.debug("Rows before dropping blanks/notes/section headers")
+        log.debug(df.head(50))
 
     # *Only* drop the rows we just identified as section headers (they
     # are purely metadata) plus blanks/notes.  Unlike the old logic we
@@ -287,7 +300,7 @@ _CFG = {
 def calculate_page_ranges(context):  
     pdf_file = context.resources.data_dir_report_pdfs.get_path() / context.op_config["pdf_filename"]
     total_pages = len(PdfReader(pdf_file).pages)
-    total_pages = min(total_pages, 1800)
+    total_pages = min(total_pages, 40)
 
     for i in range(1, total_pages + 1, PAGE_CHUNK_SIZE):
         page_range = f"{i}-{min(i + PAGE_CHUNK_SIZE - 1, total_pages)}"
