@@ -214,7 +214,11 @@ def _clean_camelot_table(table, log) -> pd.DataFrame | None:
     # ---------------------- section detection ----------------------
     # Normalise the *key* column once so we can safely compare values.
     df["key"] = (
-        df["key"].astype(str).str.replace(r"\s*\n\s*", " ", regex=True).str.strip().apply(_normalize_text)
+        df["key"].astype(str)
+            .str.replace(r"\s*\n\s*", " ", regex=True)
+            .str.strip()
+            .str.lower()
+            .apply(_normalize_text)
     )
 
     # Lookup the list of expected section names for this table.  If the
@@ -300,7 +304,7 @@ _CFG = {
 def calculate_page_ranges(context):  
     pdf_file = context.resources.data_dir_report_pdfs.get_path() / context.op_config["pdf_filename"]
     total_pages = len(PdfReader(pdf_file).pages)
-    total_pages = min(total_pages, 40)
+    total_pages = min(total_pages, 25)
 
     for i in range(1, total_pages + 1, PAGE_CHUNK_SIZE):
         page_range = f"{i}-{min(i + PAGE_CHUNK_SIZE - 1, total_pages)}"
