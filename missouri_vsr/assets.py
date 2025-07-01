@@ -87,47 +87,32 @@ def _normalize_text(text: str) -> str:
 # Table‑level cleanup
 # ----------------------------------------------------------------------------
 
-def normalize_row_tokens(row: list[str], log) -> list[str]:
-    """
-    Fix known structural issues with rows extracted from Camelot tables.
+_NUM_RE = re.compile(r"^\d[\d,\.]*$")  # accepts “.” later
 
-    This function assumes that the final output must match:
-        ["key", "Total", "White", "Black", "Hispanic", "Native American", "Asian", "Other"]
+def _is_numeric(tok: str) -> bool:
+    tok = tok.strip()
+    return tok == "." or bool(re.match(r"^\d[\d,\.]*$", tok))
 
-    If it detects that "Native American" has been split into two separate tokens,
-    it will merge them and return a cleaned list of exactly 8 items.
+def normalize_row_tokens(row: list[str], dept_name: str, table_slug: str, log) -> list[str]:
+    log.debug("Raw row tokens: %s / %s %s", list(row), table_slug, dept_name)
+    
+    row = [str(c).strip() for c in row if str(c).strip()]
 
-    If the row is malformed in a way we can't fix deterministically, it tries to truncate or pad.
-    """
-    row = [str(cell).strip() for cell in row if str(cell).strip() != ""]
+    # Pull out the last 7 numeric-looking tokens
+    numeric = []
+    while row and len(numeric) < 7 and _is_numeric(row[-1]):
+        numeric.insert(0, row.pop())          # build in normal order
+    if len(numeric) < 7:
+        log.warning("Found only %d numeric cols: %s", len(numeric), numeric)
+        numeric = [""] * (7 - len(numeric)) + numeric
+    elif len(numeric) > 7:
+        log.debug("Extra numeric cols %s – keeping right-most 7", numeric[:-7])
+        numeric = numeric[-7:]
 
-    if len(row) == 9:
-        for i in range(len(row) - 1):
-            if row[i] == "Native" and row[i + 1] == "American":
-                fixed = row[:i] + ["Native American"] + row[i + 2:]
-                log.debug("Merged 'Native' + 'American' into single column: %s", fixed)
-                row = fixed
-                break
-
-    elif len(row) == 10:
-        for i in range(len(row) - 2):
-            if row[i] == "Native" and row[i + 1] == "American":
-                fixed = row[:i] + ["Native American"] + row[i + 2:]
-                if len(fixed) > 8:
-                    fixed = fixed[:8]
-                log.debug("Fixed row with extra column by merging 'Native American': %s", fixed)
-                row = fixed
-                break
-
-    if len(row) > 8:
-        log.warning("Row too long (%d cols): %s. Truncating.", len(row), row)
-        return row[:8]
-    elif len(row) < 8:
-        log.warning("Row too short (%d cols): %s. Padding with empty strings.", len(row), row)
-        return row + [""] * (8 - len(row))
-
-    return row
-
+    key = " ".join(row).strip()
+    if not key:
+        key = "(blank key)"
+    return [key] + numeric
 
 def _clean_camelot_table(table, log) -> pd.DataFrame | None:
     """Return a tidy :class:`~pandas.DataFrame` for one Camelot table.
@@ -177,9 +162,8 @@ def _clean_camelot_table(table, log) -> pd.DataFrame | None:
         raw_table_name, slugify(raw_table_name, lowercase=True)
     )
 
-    if table_slug is "stops":
-        log.debug("Raw table")
-        log.debug(df.head(50))
+    if table_slug == "stops":
+        log.debug("Raw table for stops in %s:\n%s", dept_name, df.head(100).to_string())
 
     log.info("Parsed meta → table '%s' / dept '%s'", raw_table_name, dept_name)
 
@@ -191,19 +175,13 @@ def _clean_camelot_table(table, log) -> pd.DataFrame | None:
     if pd.isna(df.iloc[0, 0]) or str(df.iloc[0, 0]).strip() == "":
         df = df.iloc[:, 1:]
 
-    if table_slug is "stops":
-        log.debug("Cleaned up table")
-        log.debug(df.head(50))
-
-    if df.shape[1] < 8:
-        log.warning("Unexpected column count %d – skipping table", df.shape[1])
-        return None
+    if table_slug == "stops":
+        log.debug("Cleaned up table for stops in %s:\n%s", dept_name, df.head(100).to_string())
 
     # Try to fix malformed rows using knowledge of table structure before trusting column values
     normalized_rows = []
     for _, row in df.iterrows():
-        normalized = normalize_row_tokens(list(row), log)
-        normalized_rows.append(normalized)
+        normalized_rows.append(normalize_row_tokens(list(row), dept_name, table_slug, log))
 
     df = pd.DataFrame(normalized_rows, columns=FINAL_COLUMNS[:8])
 
@@ -320,7 +298,15 @@ def parse_page_range(context, page_range: str) -> pd.DataFrame:
     pdf_file = context.resources.data_dir_report_pdfs.get_path() / context.op_config["pdf_filename"]
 
     try:
-        tables = camelot.read_pdf(pdf_file, pages=page_range, flavor="stream")
+        # tables = camelot.read_pdf(pdf_file, pages=page_range, flavor="stream", edge_tol=500, row_tol=10)
+        tables = camelot.read_pdf(
+            pdf_file,
+            pages=page_range,
+            flavor="stream",
+            edge_tol=50,
+            row_tol=0
+        )
+
     except Exception as exc:
         context.log.error("Camelot failed on %s: %s", page_range, exc)
         return pd.DataFrame()
