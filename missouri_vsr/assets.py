@@ -145,11 +145,13 @@ def _clean_camelot_table(table, log) -> pd.DataFrame | None:
             break
     if metadata_row_idx is None:
         log.warning("Missing metadata row – skipping table")
+        log.debug("Missing metadata row / Raw table:\n%s", df.to_string())
         return None
 
     m = re.search(r"Table\s*(\d+):\s*(.*?)\s*for\s*(.+)", metadata_line)
     if not m:
         log.warning("Could not parse metadata line: %s", metadata_line)
+        log.debug("Could not parse meta data line / Raw table:\n%s", df.to_string())
         return None
 
     raw_table_name, raw_dept = (
@@ -185,7 +187,7 @@ def _clean_camelot_table(table, log) -> pd.DataFrame | None:
 
     df = pd.DataFrame(normalized_rows, columns=FINAL_COLUMNS[:8])
 
-    if table_slug is "stops":
+    if table_slug == "stops":
         log.debug("Final cleaned up table before section detection")
         log.debug(df.head(50))
 
@@ -216,7 +218,7 @@ def _clean_camelot_table(table, log) -> pd.DataFrame | None:
     mask_blank_key = df["key"].isna() | (df["key"].str.strip() == "")
     mask_notes = df["key"].str.contains(r"^Notes?:", case=False, na=False)
 
-    if table_slug is "stops":
+    if table_slug == "stops":
         log.debug("Rows before dropping blanks/notes/section headers")
         log.debug(df.head(50))
 
