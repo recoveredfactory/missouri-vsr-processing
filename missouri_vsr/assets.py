@@ -13,7 +13,9 @@ from slugify import slugify
 
 from dagster import (
     AssetIn,
+    AssetOut,
     AssetKey,
+    In,
     Out,
     DynamicOut,
     DynamicOutput,
@@ -21,7 +23,6 @@ from dagster import (
     graph_asset,
     multi_asset,
     op,
-    AssetOut,
 )
 
 # ------------------------------------------------------------------------------
@@ -296,3 +297,38 @@ def make_extract_asset(year: int):
 # Instantiate one extract asset per year
 for yr in YEAR_URLS:
     globals()[f"extract_pdf_data_{yr}"] = make_extract_asset(yr)
+
+# ------------------------------------------------------------------------------
+# Combine all extracted DataFrame assets into one JSON and DataFrame
+# ------------------------------------------------------------------------------
+@op(
+    ins={f"extract_pdf_data_{year}": In(pd.DataFrame) for year in YEAR_URLS},
+    out=Out(pd.DataFrame),
+    required_resource_keys={"data_dir_processed"},
+)
+def combine_reports(context, **extracted_reports: dict[str, pd.DataFrame]) -> pd.DataFrame:
+    """Concatenate all extract_pdf_data_* assets into a single DataFrame and write combined JSON."""
+    # Merge all DataFrames
+    dfs = [df for df in extracted_reports.values() if not df.empty]
+    if not dfs:
+        raise ValueError("No extracted tables found to combine.")
+    combined = pd.concat(dfs, ignore_index=True)
+
+    # Write combined JSON
+    processed_dir = Path(context.resources.data_dir_processed.get_path())
+    out_file = processed_dir / "all_combined_output.json"
+    combined.to_json(out_file, orient="records", default_handler=str)
+    context.log.info("Wrote combined JSON: %d rows → %s", len(combined), out_file)
+    return combined
+
+@graph_asset(
+    name="combine_all_reports",
+    group_name="vsr_processed",
+    ins={
+        f"extract_pdf_data_{year}": AssetIn(key=AssetKey(f"extract_pdf_data_{year}"))
+        for year in YEAR_URLS
+    },
+    description="Combine all per-year extract_pdf_data_* assets into a single JSON and DataFrame."
+)
+def combine_all_reports(**extracted_reports: pd.DataFrame) -> pd.DataFrame:
+    return combine_reports(**extracted_reports)

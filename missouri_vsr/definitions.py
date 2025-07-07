@@ -3,7 +3,7 @@ import os
 
 from dagster import Definitions, load_assets_from_modules
 from missouri_vsr import assets
-# from missouri_vsr.asset_checks import asset_checks
+from missouri_vsr.asset_checks import asset_checks
 from missouri_vsr.resources import (
     AirtableBaseResource, 
     S3Resource,
@@ -21,7 +21,7 @@ assets_loaded = load_assets_from_modules([assets])
 
 defs = Definitions(
     assets=assets_loaded,
-    # asset_checks=asset_checks,
+    asset_checks=asset_checks,
     resources={
         "data_dir_source": LocalDirectoryResource(path=str(DATA_DIR_SOURCE)),
         "data_dir_report_pdfs": LocalDirectoryResource(path=str(DATA_DIR_REPORT_PDFS)),
