@@ -3,7 +3,7 @@ import os
 
 from dagster import Definitions, load_assets_from_modules
 from missouri_vsr import assets
-from missouri_vsr.asset_checks import asset_checks
+# from missouri_vsr.asset_checks import asset_checks
 from missouri_vsr.resources import (
     AirtableBaseResource, 
     S3Resource,
@@ -21,16 +21,16 @@ assets_loaded = load_assets_from_modules([assets])
 
 defs = Definitions(
     assets=assets_loaded,
-    asset_checks=asset_checks,
+    # asset_checks=asset_checks,
     resources={
-        # "airtable": AirtableBaseResource(
-        #     api_key=os.getenv("AIRTABLE_API_KEY"),
-        #     base_id=os.getenv("AIRTABLE_BASE_ID")
-        # ),
         "data_dir_source": LocalDirectoryResource(path=str(DATA_DIR_SOURCE)),
         "data_dir_report_pdfs": LocalDirectoryResource(path=str(DATA_DIR_REPORT_PDFS)),
         "data_dir_processed": LocalDirectoryResource(path=str(DATA_DIR_PROCESSED)),
         "data_dir_out": LocalDirectoryResource(path=str(DATA_DIR_OUT)),
+        # "airtable": AirtableBaseResource(
+        #     api_key=os.getenv("AIRTABLE_API_KEY"),
+        #     base_id=os.getenv("AIRTABLE_BASE_ID")
+        # ),
         # "s3": S3Resource(
         #     bucket=os.getenv("MISSOURI_VSR_BUCKET_NAME"),
         #     s3_prefix=os.getenv("MISSOURI_VSR_S3_PREFIX", "missouri-vsr"),

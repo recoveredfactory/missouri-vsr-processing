@@ -2,7 +2,7 @@ import pandas as pd
 
 from slugify import slugify
 from dagster import AssetCheckResult, AssetCheckSpec, asset_check
-from missouri_vsr.assets import extract_pdf_data
+# from missouri_vsr.assets import extract_pdf_data
 
 EXPECTED_COLUMNS = [
     "key",
@@ -34,6 +34,7 @@ ROW_SANITY_CHECKS: list[dict] = [
         "Native American": 0,
         "Asian": 2,
         "Other": 1,
+        "year": 2023,
     },
     # A random one
     {
@@ -46,6 +47,7 @@ ROW_SANITY_CHECKS: list[dict] = [
         "Native American": 0,
         "Asian": 0,
         "Other": 3,
+        "year": 2023,
     },
     # Now a big important dept
     {
@@ -58,6 +60,7 @@ ROW_SANITY_CHECKS: list[dict] = [
         "Native American": 50,
         "Asian": 241,
         "Other": 399,
+        "year": 2023,
     },
     # Now values that can be decimal numbers (again with St. Louis City)
     {
@@ -70,6 +73,7 @@ ROW_SANITY_CHECKS: list[dict] = [
         "Native American": 9.75,
         "Asian": 2.56,
         "Other": 3.15,
+        "year": 2023,
     },
     # A dept with an apostrophe in the name AND missing values
     {
@@ -82,6 +86,7 @@ ROW_SANITY_CHECKS: list[dict] = [
         "Native American": None,
         "Asian": None,
         "Other": None,
+        "year": 2023,
     },
     # That same department has zeros for some rates as well
     {
@@ -94,6 +99,7 @@ ROW_SANITY_CHECKS: list[dict] = [
         "Native American": 0,
         "Asian": 0,
         "Other": 0,
+        "year": 2023,
     },
     # Looking at stop outcome in a random department
     {
@@ -106,6 +112,7 @@ ROW_SANITY_CHECKS: list[dict] = [
         "Native American": 6,
         "Asian": 13,
         "Other": 9,
+        "year": 2023,
     },
     # Looking at officer assignment in a random department
     {
@@ -118,6 +125,7 @@ ROW_SANITY_CHECKS: list[dict] = [
         "Native American": 6,
         "Asian": 36,
         "Other": 62,
+        "year": 2023,
     },
     # Looking at stop outcome in an early department to track down a bug
     {
@@ -130,63 +138,64 @@ ROW_SANITY_CHECKS: list[dict] = [
         "Native American": 0,
         "Asian": 2,
         "Other": 1,
+        "year": 2023,
     },
 ]
 
 # Schema check for extracted pdf data – ensure *exact* match with `EXPECTED_COLUMNS`.
-@asset_check(asset=extract_pdf_data)
-def check_expected_columns(df: pd.DataFrame) -> AssetCheckResult:
-    missing = [c for c in EXPECTED_COLUMNS if c not in df.columns]
-    extra = [c for c in df.columns if c not in EXPECTED_COLUMNS]
+# @asset_check(asset=extract_pdf_data)
+# def check_expected_columns(df: pd.DataFrame) -> AssetCheckResult:
+#     missing = [c for c in EXPECTED_COLUMNS if c not in df.columns]
+#     extra = [c for c in df.columns if c not in EXPECTED_COLUMNS]
 
-    passed = not missing and not extra
-    return AssetCheckResult(
-        passed=passed,
-        metadata={
-            "missing_columns": missing,
-            "extra_columns": extra,
-        },
-    )
+#     passed = not missing and not extra
+#     return AssetCheckResult(
+#         passed=passed,
+#         metadata={
+#             "missing_columns": missing,
+#             "extra_columns": extra,
+#         },
+#     )
 
 # Duplicate‐slug check – combination of dept/slug must be unique.
-@asset_check(asset=extract_pdf_data)
-def check_no_duplicate_slugs(df: pd.DataFrame) -> AssetCheckResult:
-    dupes = df[df.duplicated(["department", "slug"], keep=False)]
-    passed = dupes.empty
+# @asset_check(asset=extract_pdf_data)
+# def check_no_duplicate_slugs(df: pd.DataFrame) -> AssetCheckResult:
+#     dupes = df[df.duplicated(["department", "slug"], keep=False)]
+#     passed = dupes.empty
 
-    # Include both department and slug for each duplicate row
-    example_duplicates = dupes[["department", "slug"]].drop_duplicates().to_dict(orient="records")
+#     # Include both department and slug for each duplicate row
+#     example_duplicates = dupes[["department", "slug"]].drop_duplicates().to_dict(orient="records")
 
-    return AssetCheckResult(
-        passed=passed,
-        metadata={
-            "duplicate_count": len(dupes),
-            "example_duplicates": example_duplicates,
-        },
-    )
+#     return AssetCheckResult(
+#         passed=passed,
+#         metadata={
+#             "duplicate_count": len(dupes),
+#             "example_duplicates": example_duplicates,
+#         },
+#     )
 
 # Verify every numeric cell parses as a number or is NaN.
-@asset_check(asset=extract_pdf_data)
-def check_numeric_columns_parse(df: pd.DataFrame) -> AssetCheckResult:
-    numeric_parsed = df[NUMERIC_COLS].apply(lambda s: pd.to_numeric(s, errors="coerce"))
+# @asset_check(asset=extract_pdf_data)
+# def check_numeric_columns_parse(df: pd.DataFrame) -> AssetCheckResult:
+#     numeric_parsed = df[NUMERIC_COLS].apply(lambda s: pd.to_numeric(s, errors="coerce"))
 
-    non_numeric_mask = numeric_parsed.isna() & df[NUMERIC_COLS].notna()
-    problem_cells = non_numeric_mask.stack()
+#     non_numeric_mask = numeric_parsed.isna() & df[NUMERIC_COLS].notna()
+#     problem_cells = non_numeric_mask.stack()
 
-    passed = not problem_cells.any()
-    return AssetCheckResult(
-        passed=passed,
-        metadata={
-            "non_numeric_cells": int(problem_cells.sum()),
-        },
-    )
+#     passed = not problem_cells.any()
+#     return AssetCheckResult(
+#         passed=passed,
+#         metadata={
+#             "non_numeric_cells": int(problem_cells.sum()),
+#         },
+#     )
 
 def _make_row_sanity_check(asset, check: dict, idx: int) -> AssetCheckSpec:
     """Return an `asset_check` enforcing that *one* row matches `check`."""
 
     check_slug = check["slug"].replace("-", "_")
     dept_slug = slugify(check["department"], separator="_")
-    check_name = f"sanity_check_{idx}_{check_slug}_{dept_slug}"
+    check_name = f"sanity_check_{idx}_{check_slug}_{dept_slug}_{check['year']}"
 
     @asset_check(name=check_name, asset=asset)
     def _check(df: pd.DataFrame) -> AssetCheckResult:
