@@ -128,7 +128,7 @@ TABLE_SECTIONS: dict[str, list[str]] = {
 def _normalize_text(text: str) -> str:
     """Strip ligatures & smart quotes to plain ASCII."""
     text = unicodedata.normalize("NFKC", text)
-    return text.replace("ﬀ", "ff").replace("’", "'")
+    return text.replace("ﬀ", "ff").replace("’", "'").replace(".", "")
 
 _NUM_RE = re.compile(r"^\d[\d,\.]*$")
 
