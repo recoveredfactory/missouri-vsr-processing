@@ -1,7 +1,8 @@
 import pandas as pd
+import numpy as np
 
 from slugify import slugify
-from dagster import AssetCheckResult, AssetCheckSpec, asset_check
+from dagster import AssetCheckResult, AssetCheckSpec, MetadataValue, asset_check
 from missouri_vsr.assets import combine_all_reports
 
 EXPECTED_COLUMNS = [
@@ -50,7 +51,19 @@ ROW_SANITY_CHECKS: list[dict] = [
         "Other": 3,
         "year": 2023,
     },
-    # Now a big important dept
+    # Now a big important dept, with multiple years of data in a key variable
+    {
+        "slug": "rates--totals--all-stops",
+        "department": "St Louis City Police Dept",
+        "Total": 23717,
+        "White": 8909,
+        "Black": 13655,
+        "Hispanic": 645,
+        "Native American": 32,
+        "Asian": 202,
+        "Other": 274,
+        "year": 2024,
+    },
     {
         "slug": "rates--totals--all-stops",
         "department": "St Louis City Police Dept",
@@ -63,6 +76,19 @@ ROW_SANITY_CHECKS: list[dict] = [
         "Other": 399,
         "year": 2023,
     },
+    {
+        "slug": "rates--totals--all-stops",
+        "department": "St Louis City Police Dept",
+        "Total": 32586,
+        "White": 12161,
+        "Black": 18841,
+        "Hispanic": 621,
+        "Native American": 38,
+        "Asian": 309,
+        "Other": 616,
+        "year": 2022,
+    },
+
     # Now values that can be decimal numbers (again with St. Louis City)
     {
         "slug": "rates--rates--stop-rate",
@@ -191,6 +217,21 @@ def check_numeric_columns_parse(df: pd.DataFrame) -> AssetCheckResult:
         },
     )
 
+
+def _convert_types(obj):
+    if isinstance(obj, np.integer):
+        return int(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    elif isinstance(obj, np.bool_):
+        return bool(obj)
+    elif isinstance(obj, dict):
+        return {k: _convert_types(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [_convert_types(item) for item in obj]
+    else:
+        return obj
+
 def _make_row_sanity_check(asset, check: dict, idx: int) -> AssetCheckSpec:
     """Return an `asset_check` enforcing that *one* row matches `check`."""
 
@@ -201,15 +242,15 @@ def _make_row_sanity_check(asset, check: dict, idx: int) -> AssetCheckSpec:
     @asset_check(name=check_name, asset=asset)
     def _check(df: pd.DataFrame) -> AssetCheckResult:
         # Ensure both conditions are applied correctly with parentheses
-        row = df[(df["slug"] == check["slug"]) & (df["department"] == check["department"])]
+        row = df[(df["slug"] == check["slug"]) & (df["department"] == check["department"]) & (df["year"] == check["year"])]
         if row.empty:
             return AssetCheckResult(
                 passed=False,
-                metadata={"reason": f"{check['slug']} + {check['department']} not found"},
+                metadata={"reason": f"{check['slug']} + {check['department']} + {check['year']} not found"},
             )
 
         # Check all additional fields in the dict (besides slug/department)
-        mismatches = {}
+        mismatches = []
         for key, val in check.items():
             if key in ("slug", "department"):
                 continue
@@ -222,13 +263,15 @@ def _make_row_sanity_check(asset, check: dict, idx: int) -> AssetCheckSpec:
 
             # Otherwise, check for (fairly) strict equality
             if actual_val != val:
-                mismatches[key] = {"expected": val, "actual": actual_val}
+                mismatches.append({"field": key, "expected": val, "actual": actual_val})
+
+        mismatches = _convert_types(mismatches)
 
         return AssetCheckResult(
             passed=not mismatches,
             metadata={
                 "checked_fields": [k for k in check.keys() if k not in ("slug", "department")],
-                "mismatches": mismatches,
+                "mismatches": MetadataValue.json(mismatches),
             },
         )
 
