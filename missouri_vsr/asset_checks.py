@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import csv
 
 from slugify import slugify
 from dagster import AssetCheckResult, AssetCheckSpec, MetadataValue, asset_check
@@ -14,160 +15,33 @@ EXPECTED_COLUMNS = [
     "Native American",
     "Asian",
     "Other",
+    "year",
     "slug",
     "department",
     "table name",
     "section",
-    "year",
 ]
 
-NUMERIC_COLS = EXPECTED_COLUMNS[1:8]  # Just the race-specific numbers
+NUMERIC_COLS = EXPECTED_COLUMNS[1:9]  # Just the race-specific numbers
 
-# Row-level sanity checks – plug trusted rows here for regression tests.
-ROW_SANITY_CHECKS: list[dict] = [
-    # The first one
-    {
-        "slug": "rates--totals--all-stops",
-        "department": "Adair County Sheriff's Dept",
-        "Total": 317,
-        "White": 281,
-        "Black": 25,
-        "Hispanic": 8,
-        "Native American": 0,
-        "Asian": 2,
-        "Other": 1,
-        "year": 2023,
-    },
-    # A random one
-    {
-        "slug": "stops--all-stops--resident-stops",
-        "department": "Lake Winnebago Police Dept",
-        "Total": 109,
-        "White": 105,
-        "Black": 1,
-        "Hispanic": 0,
-        "Native American": 0,
-        "Asian": 0,
-        "Other": 3,
-        "year": 2023,
-    },
-    # Now a big important dept, with multiple years of data in a key variable
-    {
-        "slug": "rates--totals--all-stops",
-        "department": "St Louis City Police Dept",
-        "Total": 23717,
-        "White": 8909,
-        "Black": 13655,
-        "Hispanic": 645,
-        "Native American": 32,
-        "Asian": 202,
-        "Other": 274,
-        "year": 2024,
-    },
-    {
-        "slug": "rates--totals--all-stops",
-        "department": "St Louis City Police Dept",
-        "Total": 27742,
-        "White": 10077,
-        "Black": 16424,
-        "Hispanic": 551,
-        "Native American": 50,
-        "Asian": 241,
-        "Other": 399,
-        "year": 2023,
-    },
-    {
-        "slug": "rates--totals--all-stops",
-        "department": "St Louis City Police Dept",
-        "Total": 32586,
-        "White": 12161,
-        "Black": 18841,
-        "Hispanic": 621,
-        "Native American": 38,
-        "Asian": 309,
-        "Other": 616,
-        "year": 2022,
-    },
+def _coerce_row(raw: dict) -> dict:
+    """
+    Convert the string values coming from csv.DictReader to the
+    types used in the DataFrame so comparisons line up.
+    """
+    out = {}
+    for k, v in raw.items():
+        if v == "":            # empty cell → treat as missing
+            out[k] = None
+        elif k in NUMERIC_COLS:
+            # keep integers as int, everything else as float
+            out[k] = int(v) if v.isdigit() else float(v)
+        else:
+            out[k] = v
+    return out
 
-    # Now values that can be decimal numbers (again with St. Louis City)
-    {
-        "slug": "rates--rates--stop-rate",
-        "department": "St Louis City Police Dept",
-        "Total": 11.18,
-        "White": 8.44,
-        "Black": 16.01,
-        "Hispanic": 5.92,
-        "Native American": 9.75,
-        "Asian": 2.56,
-        "Other": 3.15,
-        "year": 2023,
-    },
-    # A dept with an apostrophe in the name AND missing values
-    {
-        "slug": "rates--rates--search-rate",
-        "department": "Benton County Sheriff's Dept",
-        "Total": 20.47,
-        "White": 20.08,
-        "Black": 25,
-        "Hispanic": 33.33,
-        "Native American": None,
-        "Asian": None,
-        "Other": None,
-        "year": 2023,
-    },
-    # That same department has zeros for some rates as well
-    {
-        "slug": "rates--rates--stop-rate",
-        "department": "Benton County Sheriff's Dept",
-        "Total": 3.09,
-        "White": 3.17,
-        "Black": 11.85,
-        "Hispanic": 2.73,
-        "Native American": 0,
-        "Asian": 0,
-        "Other": 0,
-        "year": 2023,
-    },
-    # Looking at stop outcome in a random department
-    {
-        "slug": "stops--stop-outcome--warning",
-        "department": "St James Police Dept",
-        "Total": 1540,
-        "White": 1402,
-        "Black": 76,
-        "Hispanic": 34,
-        "Native American": 6,
-        "Asian": 13,
-        "Other": 9,
-        "year": 2023,
-    },
-    # Looking at officer assignment in a random department
-    {
-        "slug": "stops--officer-assignment--general-parol",
-        "department": "St Joseph Police Dept",
-        "Total": 7264,
-        "White": 5762,
-        "Black": 949,
-        "Hispanic": 449,
-        "Native American": 6,
-        "Asian": 36,
-        "Other": 62,
-        "year": 2023,
-    },
-    # Looking at stop outcome in an early department to track down a bug
-    {
-        "slug": "stops--officer-assignment--general-parol",
-        "department": "Adair County Sheriff's Dept",
-        "Total": 256,
-        "White": 226,
-        "Black": 19,
-        "Hispanic": 8,
-        "Native American": 0,
-        "Asian": 2,
-        "Other": 1,
-        "year": 2023,
-    },
-]
+with open("data_checks/row_sanity_checks.csv") as f:
+    ROW_SANITY_CHECKS = [_coerce_row(r) for r in csv.DictReader(f)]
 
 # Schema check for extracted pdf data – ensure *exact* match with `EXPECTED_COLUMNS`.
 @asset_check(asset=combine_all_reports)

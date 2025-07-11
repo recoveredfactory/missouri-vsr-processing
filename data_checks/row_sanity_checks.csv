@@ -1,0 +1,19 @@
+slug,department,Total,White,Black,Hispanic,Native American,Asian,Other,year
+rates--totals--all-stops,Adair County Sheriff's Dept,317,281,25,8,0,2,1,2023
+stops--all-stops--resident-stops,Lake Winnebago Police Dept,109,105,1,0,0,0,3,2023
+rates--totals--all-stops,St Louis City Police Dept,23717,8909,13655,645,32,202,274,2024
+rates--totals--all-stops,St Louis City Police Dept,27742,10077,16424,551,50,241,399,2023
+rates--totals--all-stops,St Louis City Police Dept,32586,12161,18841,621,38,309,616,2022
+rates--rates--stop-rate,St Louis City Police Dept,11.18,8.44,16.01,5.92,9.75,2.56,3.15,2023
+rates--rates--search-rate,Benton County Sheriff's Dept,20.47,20.08,25,33.33,,,,2023
+rates--rates--stop-rate,Benton County Sheriff's Dept,3.09,3.17,11.85,2.73,0,0,0,2023
+stops--stop-outcome--warning,St James Police Dept,1540,1402,76,34,6,13,9,2023
+stops--officer-assignment--general-parol,St Joseph Police Dept,7264,5762,949,449,6,36,62,2023
+stops--officer-assignment--general-parol,Adair County Sheriff's Dept,256,226,19,8,0,2,1,2023
+rates--totals--all-stops,Ash Grove Police Dept,431,419,7,3,0,1,1,2022
+search--probable-cause--consent,Audrain County Sheriff's Dept,95,85,9,1,0,0,0,2022
+search--probable-cause--incident-to-arrest,Randolph County Sheriff's Dept,18,11,6,1,0,0,0,2024
+search--what-searched--driver,Randolph County Sheriff's Dept,10,8,2,0,0,0,0,2024
+search--what-searched--car-property,Randolph County Sheriff's Dept,33,30,3,0,0,0,0,2024
+search--contraband-found--drugs-alcohol,Audrain County Sheriff's Dept,72,64,8,,,,,2024
+search--arrest-charge--dwi-bac,Barry County Sheriff's Dept,20,15,0,4,,1,,2024
