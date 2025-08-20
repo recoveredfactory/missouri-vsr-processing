@@ -253,6 +253,16 @@ def parse_page_range(context, pdf_path: str, page_range: str) -> pd.DataFrame:
     year_match = re.search(r"(\d{4})", Path(pdf_path).name)
     year = int(year_match.group(1)) if year_match else None
 
+    # --- DEBUG DUMP ---
+    # debug_dir = Path('debug') / f"{year}"
+    # debug_dir.mkdir(parents=True, exist_ok=True)
+    # for idx, table in enumerate(tables):
+    #     for kind in ['grid', 'contour', 'text']:
+    #         img_path = debug_dir / f"{page_range.replace('-', '_')}_tbl{idx}_{kind}.png"
+    #         # Camelot can save directly via filename=…
+    #         camelot.plot(table, kind=kind, filename=str(img_path))
+    #         context.log.info("Wrote debug image %s", img_path)  # you’ll see this in the run log
+
     frames = [
         cleaned
         for t in tables
