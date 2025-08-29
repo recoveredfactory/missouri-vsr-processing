@@ -27,7 +27,7 @@ def parse_pdf_to_df(pdf_path: str, pages: str | None = None, *, log: logging.Log
             flavor="stream",
             edge_tol=50,
             row_tol=0,
-            strip_text="|.\n",
+            strip_text="\n",
         )
     except Exception as exc:
         raise RuntimeError(f"Camelot failed reading {p} pages={pages}: {exc}") from exc
@@ -96,4 +96,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

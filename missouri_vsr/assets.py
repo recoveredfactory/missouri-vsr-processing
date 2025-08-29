@@ -169,7 +169,9 @@ _NUM_RE = re.compile(r"^\d[\d,\.]*$")
 
 def _is_numeric(tok: str) -> bool:
     tok = tok.strip()
-    return tok == "." or bool(_NUM_RE.match(tok))
+    # Treat only real numbers (with optional commas/decimals) as numeric.
+    # Dot leaders like "." are NOT considered numeric to avoid false positives.
+    return bool(_NUM_RE.match(tok))
 
 def normalize_row_tokens(row: list[str], dept_name: str, table_slug: str, log) -> list[str]:
     log.debug("Raw row tokens: %s / %s %s", list(row), table_slug, dept_name)
@@ -335,7 +337,7 @@ def parse_page_range(context, pdf_path: str, page_range: str) -> pd.DataFrame:
             flavor="stream",
             edge_tol=50,
             row_tol=0,
-            strip_text="|.\n",
+            strip_text="\n",
         )
     except Exception as exc:
         context.log.error("Camelot failed on %s: %s", page_range, exc)
