@@ -136,7 +136,7 @@ USE_EXAMPLES = os.getenv("VSR_USE_EXAMPLES", "").strip().lower() in {"1", "true"
 
 # Map years to local example PDFs (keep light-weight for dev/testing)
 EXAMPLE_PDFS: dict[int, Path] = {
-    2024: Path("data/src/examples/Example-Alma-VSRreport2024.pdf"),
+    2024: Path("data/src/examples/Example-StL-VSReport2024.pdf"),
 }
 TABLE_SECTIONS: dict[str, list[str]] = {
     "rates": ["Population", "Totals", "Rates"],
@@ -165,7 +165,8 @@ def _normalize_text(text: str) -> str:
     text = unicodedata.normalize("NFKC", text)
     return text.replace("ﬀ", "ff").replace("’", "'").replace(".", "")
 
-_NUM_RE = re.compile(r"^\d[\d,\.]*$")
+_NUM_RE = re.compile(r"^\d[\d,\.]*%?$")
+_DOTS_RE = re.compile(r"^[\.·]{2,}$")
 
 def _is_numeric(tok: str) -> bool:
     tok = tok.strip()
@@ -181,17 +182,71 @@ def normalize_row_tokens(row: list[str], dept_name: str, table_slug: str, log) -
     log.debug("Raw row tokens: %s / %s %s", list(row), table_slug, dept_name)
     row = [str(c).strip() for c in row if str(c).strip()]
 
-    numeric: list[str] = []
-    while row and len(numeric) < 7 and _is_numeric(row[-1]):
-        numeric.insert(0, row.pop())
+    # Merge split decimals before numeric sniffing (e.g., '2 . 89' → '2.89', '. 27' → '0.27')
+    merged: list[str] = []
+    i = 0
+    while i < len(row):
+        tok = row[i]
+        if tok == '.' and i + 1 < len(row) and row[i + 1].isdigit():
+            merged.append(f"0.{row[i + 1]}")
+            i += 2
+            continue
+        if i + 2 < len(row) and row[i + 1] == '.' and row[i].isdigit() and row[i + 2].isdigit():
+            merged.append(f"{row[i]}.{row[i + 2]}")
+            i += 3
+            continue
+        merged.append(tok)
+        i += 1
+    # Remove dot-leader filler tokens (.., ..., ···) after merging
+    row = [t for t in merged if not _DOTS_RE.match(t)]
+
+    # Pick the rightmost 7 numeric tokens from the row; everything else is key
+    numeric_positions = [idx for idx, tok in enumerate(row) if _is_numeric(tok)]
+    picked_positions = numeric_positions[-7:]
+    numeric = [row[idx] for idx in picked_positions]
+
+    # Build key from non-picked tokens, preserving original order
+    picked_set = set(picked_positions)
+    key_tokens = [tok for idx, tok in enumerate(row) if idx not in picked_set]
+
     if len(numeric) < 7:
         log.warning("Found only %d numeric cols: %s", len(numeric), numeric)
-        numeric = [""] * (7 - len(numeric)) + numeric
+        # Pad on the RIGHT so present values align to early columns (Total, White, …)
+        numeric = numeric + [""] * (7 - len(numeric))
     elif len(numeric) > 7:
         log.debug("Extra numeric cols %s – keeping rightmost 7", numeric[:-7])
         numeric = numeric[-7:]
 
-    key = " ".join(row).strip() or "(blank key)"
+    key = " ".join(key_tokens).strip() or "(blank key)"
+
+    # Generic salvage for rows that imply rates/percentages but lost decimals in PDF text
+    key_l = key.lower()
+    if ("rate" in key_l) or ("%" in key_l):
+        fixed: list[str] = []
+        is_residents = "residents" in key_l
+        for s in numeric:
+            if not s:
+                fixed.append("")
+                continue
+            raw = s.replace(",", "")
+            if raw.endswith('%'):
+                raw = raw[:-1]
+            if "." in raw or raw == "0":
+                fixed.append(raw)
+                continue
+            if raw.isdigit() and raw != "100":
+                if len(raw) == 4 and '%' in key_l:
+                    fixed.append(str(int(raw) / 100.0))
+                elif len(raw) == 3:
+                    fixed.append(str(int(raw) / 100.0))
+                elif len(raw) == 2:
+                    fixed.append(str(int(raw) / (100.0 if is_residents else 10.0)))
+                else:
+                    fixed.append(raw)
+            else:
+                fixed.append(raw)
+        numeric = fixed
+
     return [key] + numeric
 
 
