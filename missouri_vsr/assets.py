@@ -201,10 +201,21 @@ def normalize_row_tokens(row: list[str], dept_name: str, table_slug: str, log) -
     # Remove dot-leader filler tokens (.., ..., ···) after merging
     row = [t for t in merged if not _DOTS_RE.match(t)]
 
+    # Normalise tokens for numeric detection only (keep original tokens for key)
+    def _norm_num_token(t: str) -> str:
+        s = t.strip()
+        # Fix common OCR-ish confusions
+        if s.lower() == 'o':
+            s = '0'
+        # Strip trailing paired punctuation that can cling to numbers
+        s = s.rstrip(')]')
+        return s
+    row_num = [_norm_num_token(t) for t in row]
+
     # Pick the rightmost 7 numeric tokens from the row; everything else is key
-    numeric_positions = [idx for idx, tok in enumerate(row) if _is_numeric(tok)]
+    numeric_positions = [idx for idx, tok in enumerate(row_num) if _is_numeric(tok)]
     picked_positions = numeric_positions[-7:]
-    numeric = [row[idx] for idx in picked_positions]
+    numeric = [row_num[idx] for idx in picked_positions]
 
     # Build key from non-picked tokens, preserving original order
     picked_set = set(picked_positions)
