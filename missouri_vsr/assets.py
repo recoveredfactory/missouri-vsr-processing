@@ -4,7 +4,7 @@ import os
 import re
 import unicodedata
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Iterable, Tuple
 
 import camelot
 import pandas as pd
@@ -173,6 +173,36 @@ def _is_numeric(tok: str) -> bool:
     # Dot leaders like "." are NOT considered numeric to avoid false positives.
     return bool(_NUM_RE.match(tok))
 
+# More permissive numeric detection used for cell-based clustering (allows %)
+_CELL_NUM_RE = re.compile(r"^\d[\d,]*\.?\d*%?$")
+
+def _cell_is_numeric(tok: str) -> bool:
+    return bool(_CELL_NUM_RE.match(tok.strip()))
+
+def _clean_numeric_str(tok: str) -> str:
+    t = tok.strip().replace(",", "")
+    if t.endswith("%"):
+        t = t[:-1]
+    return t
+
+def _kmeans_1d(xs: List[float], k: int, max_iter: int = 30) -> List[float]:
+    xs = sorted(xs)
+    if not xs:
+        return []
+    k = max(1, min(k, len(xs)))
+    # init centers at quantiles
+    centers = [xs[int(i * (len(xs) - 1) / (k - 1))] for i in range(k)] if k > 1 else [xs[len(xs)//2]]
+    for _ in range(max_iter):
+        buckets: List[List[float]] = [[] for _ in range(k)]
+        for x in xs:
+            idx = min(range(k), key=lambda i: abs(x - centers[i]))
+            buckets[idx].append(x)
+        new_centers = [sum(b)/len(b) if b else c for b, c in zip(buckets, centers)]
+        if all(abs(a-b) < 1e-3 for a, b in zip(new_centers, centers)):
+            break
+        centers = new_centers
+    return sorted(centers)
+
 def normalize_row_tokens(row: list[str], dept_name: str, table_slug: str, log) -> list[str]:
     log.debug("Raw row tokens: %s / %s %s", list(row), table_slug, dept_name)
     row = [str(c).strip() for c in row if str(c).strip()]
@@ -221,46 +251,62 @@ def _clean_camelot_table(table, log, *, year: int) -> pd.DataFrame | None:
     if pd.isna(df.iloc[0, 0]) or str(df.iloc[0, 0]).strip() == "":
         df = df.iloc[:, 1:]
 
-    # Compute left-indent per original Camelot row using cell x-coordinates.
-    # We will classify rows into section (flush-left) vs metric (indented).
+    # Build rows from Camelot cells using x-position clustering for numeric columns
     cell_rows = table.cells
-    # Align cell rows to the sliced df rows by skipping the same number of header rows
     start_row_idx = int(metadata_row_idx) + 2
     aligned_cell_rows = cell_rows[start_row_idx : start_row_idx + len(df)]
 
-    def row_left_x(cells_row) -> float | None:
-        xs: list[float] = []
-        for cell in cells_row:
-            txt = str(cell.text).strip()
-            if txt:
-                xs.append(float(cell.x1))
-        return min(xs) if xs else None
-
-    lefts: list[float] = []
+    # 1) Collect x centers for numeric tokens to learn 7 numeric columns
+    x_positions: List[float] = []
     for r in aligned_cell_rows:
-        x = row_left_x(r)
-        lefts.append(x if x is not None else float("inf"))
+        for cell in r:
+            text = str(cell.text).strip()
+            if _cell_is_numeric(text):
+                xc = (float(cell.x1) + float(cell.x2)) / 2.0
+                x_positions.append(xc)
 
-    # Determine a threshold separating two clusters (flush-left vs indented)
-    finite_lefts = sorted(x for x in lefts if x != float("inf"))
-    if len(set(finite_lefts)) >= 2:
-        # Split on largest gap between consecutive sorted left positions
-        gaps = [b - a for a, b in zip(finite_lefts, finite_lefts[1:])]
-        max_gap_idx = gaps.index(max(gaps)) if gaps else 0
-        threshold = (finite_lefts[max_gap_idx] + finite_lefts[max_gap_idx + 1]) / 2.0
-    elif finite_lefts:
-        threshold = finite_lefts[0] + 1.0  # any value to push everything as section
+    col_centers = _kmeans_1d(x_positions, 7)
+    if len(col_centers) < 2:
+        log.warning("Unable to infer numeric columns; skipping table")
+        return None
+
+    # 2) For each row, build key text (non-numeric left side) and 7 numeric values by nearest center
+    built_rows: List[Tuple[str, List[str], float]] = []  # (key, numeric_strs, left_x)
+    for r in aligned_cell_rows:
+        numerics = [None] * len(col_centers)
+        key_parts: List[str] = []
+        left_x_vals: List[float] = []
+        for cell in r:
+            text = str(cell.text).strip()
+            if not text:
+                continue
+            xc = (float(cell.x1) + float(cell.x2)) / 2.0
+            if _cell_is_numeric(text):
+                # assign to nearest numeric column
+                idx = min(range(len(col_centers)), key=lambda i: abs(xc - col_centers[i]))
+                numerics[idx] = _clean_numeric_str(text)
+            else:
+                # treat as part of the key/label
+                key_parts.append(text)
+                left_x_vals.append(float(cell.x1))
+        key_text = " ".join(part for part in key_parts if part and part != ".").strip()
+        left_x = min(left_x_vals) if left_x_vals else float("inf")
+        built_rows.append((key_text, [s if s is not None else "" for s in numerics], left_x))
+
+    # 3) Determine section header rows from indent (k=2 on left_x)
+    finite_lefts = [lx for _, _, lx in built_rows if lx != float("inf")]
+    if finite_lefts:
+        centers2 = _kmeans_1d(finite_lefts, 2)
+        thresh = sum(centers2)/2 if len(centers2) == 2 else centers2[0] + 1.0
     else:
-        threshold = float("inf")
+        thresh = float("inf")
+    is_section_row = [(lx <= thresh) for _, _, lx in built_rows]
 
-    is_section_row: list[bool] = [(lx <= threshold) for lx in lefts]
-
-    # Build normalized token rows (key + 7 numeric cols)
-    normalized_rows = [
-        normalize_row_tokens(list(row), dept_name, table_slug, log)
-        for _, row in df.iterrows()
-    ]
-    df = pd.DataFrame(normalized_rows, columns=FINAL_COLUMNS[:8])
+    # 4) Assemble DataFrame
+    df = pd.DataFrame(
+        [ [k] + nums for (k, nums, _) in built_rows ],
+        columns=FINAL_COLUMNS[:8],
+    )
 
     df["key"] = (
         df["key"]
@@ -271,22 +317,13 @@ def _clean_camelot_table(table, log, *, year: int) -> pd.DataFrame | None:
         .apply(_normalize_text)
     )
 
-    # Attach sections: prefer known section labels; otherwise fallback to indent-based sniffing
-    section_lookup = {s.lower(): s for s in TABLE_SECTIONS.get(table_slug, [])}
-    known_section_mask = df["key"].map(section_lookup.__contains__).fillna(False)
-
+    # Attach sections using indent-based detection (generic; no hardcoded labels)
     df["section"] = None
-    if known_section_mask.any():
-        # Use only known section names for ffill grouping
-        df.loc[known_section_mask, "section"] = df.loc[known_section_mask, "key"].map(section_lookup)
-        section_header_mask = known_section_mask
-    else:
-        # Fallback: use indent-based detection for headers
-        for i, is_section in enumerate(is_section_row):
-            if is_section:
-                df.loc[i, "section"] = df.loc[i, "key"].title()
-        section_header_mask = pd.Series(is_section_row, index=df.index)
-
+    for i, is_section in enumerate(is_section_row):
+        if is_section:
+            df.loc[i, "section"] = df.loc[i, "key"].strip()
+    section_header_mask = pd.Series(is_section_row, index=df.index)
+    
     df["section"] = df["section"].ffill()
 
     # Remove blank rows, notes, and the section-header rows themselves
@@ -297,13 +334,11 @@ def _clean_camelot_table(table, log, *, year: int) -> pd.DataFrame | None:
         log.warning("All rows removed after cleanup – skipping table")
         return None
 
-    df[NUMERIC_COLS] = (
-        df[NUMERIC_COLS]
-        .replace(".", pd.NA)
-        .apply(lambda col: pd.to_numeric(col, errors="coerce"))
-    )
+    # Convert numerics (strip % handled earlier). Keep NaN for blanks.
+    for col in NUMERIC_COLS:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    # Drop rows that contain no numeric data at all (filters out disclaimers/footnotes)
+    # Drop rows that contain no numeric data at all (filters leftovers)
     mask_all_na_numeric = df[NUMERIC_COLS].isna().all(axis=1)
     if mask_all_na_numeric.any():
         log.debug("Dropping %d rows with no numeric values", int(mask_all_na_numeric.sum()))
