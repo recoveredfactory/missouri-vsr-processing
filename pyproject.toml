@@ -19,6 +19,9 @@ dependencies = [
     "openpyxl>=3.1.5",
 ]
 
+[project.scripts]
+vsr-parse = "missouri_vsr.cli:main"
+
 [tool.dagster]
 module_name = "missouri_vsr.definitions"
 code_location_name = "missouri_vsr"
