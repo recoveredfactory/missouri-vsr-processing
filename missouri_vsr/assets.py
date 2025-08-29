@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 import unicodedata
 from pathlib import Path
@@ -54,10 +55,35 @@ def download_reports(context):
 
     out_dir = Path(context.resources.data_dir_report_pdfs.get_path())
 
+    if USE_EXAMPLES:
+        context.log.info("VSR_USE_EXAMPLES=1 → using local example PDFs; skipping downloads")
+        # Restrict selection to years for which we have examples
+        available = {str(y) for y in EXAMPLE_PDFS.keys()}
+        if selected - available:
+            context.log.warning(
+                "Examples available only for %s; will skip %s",
+                sorted(available),
+                sorted(selected - available),
+            )
+        selected = selected & available
+
     for year, url in YEAR_URLS.items():
         name = str(year)
         if name not in selected:
             context.log.debug("Skipping %s (not selected)", name)
+            continue
+
+        # In example mode, just yield the example file path
+        if USE_EXAMPLES and year in EXAMPLE_PDFS:
+            example_path = EXAMPLE_PDFS[year]
+            if not example_path.exists():
+                raise FileNotFoundError(f"Missing example PDF: {example_path}")
+            context.log.info("Using example PDF for %s → %s", year, example_path)
+            yield Output(
+                str(example_path),
+                output_name=name,
+                metadata={"mode": "examples", "local_path": str(example_path)},
+            )
             continue
 
         out_path = out_dir / f"VSRreport{year}.pdf"
@@ -75,7 +101,7 @@ def download_reports(context):
         yield Output(
             str(out_path),
             output_name=name,
-            metadata={"url": url, "local_path": str(out_path)},
+            metadata={"mode": "reports", "url": url, "local_path": str(out_path)},
         )
 
 # ------------------------------------------------------------------------------
@@ -102,6 +128,15 @@ TABLE_SLUG_LOOKUP = {
     "Rates by Race": "rates",
     "Number of Stops by Race": "stops",
     "Search statistics": "search",
+}
+
+# Optional toggle to use small example PDFs instead of full reports.
+# Set env var `VSR_USE_EXAMPLES=1` to enable.
+USE_EXAMPLES = os.getenv("VSR_USE_EXAMPLES", "").strip().lower() in {"1", "true", "yes", "on"}
+
+# Map years to local example PDFs (keep light-weight for dev/testing)
+EXAMPLE_PDFS: dict[int, Path] = {
+    2024: Path("data/src/examples/Example-Alma-VSRreport2024.pdf"),
 }
 TABLE_SECTIONS: dict[str, list[str]] = {
     "rates": ["Population", "Totals", "Rates"],
@@ -179,10 +214,46 @@ def _clean_camelot_table(table, log, *, year: int) -> pd.DataFrame | None:
     dept_name = _normalize_text(raw_dept)
     table_slug = TABLE_SLUG_LOOKUP.get(raw_table_name, slugify(raw_table_name, lowercase=True))
 
+    # Slice away the metadata rows ("Table N: …") and a possible blank spacer row
     df = df.iloc[metadata_row_idx + 2 :].reset_index(drop=True)
     if pd.isna(df.iloc[0, 0]) or str(df.iloc[0, 0]).strip() == "":
         df = df.iloc[:, 1:]
 
+    # Compute left-indent per original Camelot row using cell x-coordinates.
+    # We will classify rows into section (flush-left) vs metric (indented).
+    cell_rows = table.cells
+    # Align cell rows to the sliced df rows by skipping the same number of header rows
+    start_row_idx = int(metadata_row_idx) + 2
+    aligned_cell_rows = cell_rows[start_row_idx : start_row_idx + len(df)]
+
+    def row_left_x(cells_row) -> float | None:
+        xs: list[float] = []
+        for cell in cells_row:
+            txt = str(cell.text).strip()
+            if txt:
+                xs.append(float(cell.x1))
+        return min(xs) if xs else None
+
+    lefts: list[float] = []
+    for r in aligned_cell_rows:
+        x = row_left_x(r)
+        lefts.append(x if x is not None else float("inf"))
+
+    # Determine a threshold separating two clusters (flush-left vs indented)
+    finite_lefts = sorted(x for x in lefts if x != float("inf"))
+    if len(set(finite_lefts)) >= 2:
+        # Split on largest gap between consecutive sorted left positions
+        gaps = [b - a for a, b in zip(finite_lefts, finite_lefts[1:])]
+        max_gap_idx = gaps.index(max(gaps)) if gaps else 0
+        threshold = (finite_lefts[max_gap_idx] + finite_lefts[max_gap_idx + 1]) / 2.0
+    elif finite_lefts:
+        threshold = finite_lefts[0] + 1.0  # any value to push everything as section
+    else:
+        threshold = float("inf")
+
+    is_section_row: list[bool] = [(lx <= threshold) for lx in lefts]
+
+    # Build normalized token rows (key + 7 numeric cols)
     normalized_rows = [
         normalize_row_tokens(list(row), dept_name, table_slug, log)
         for _, row in df.iterrows()
@@ -198,15 +269,19 @@ def _clean_camelot_table(table, log, *, year: int) -> pd.DataFrame | None:
         .apply(_normalize_text)
     )
 
-    section_lookup = {s.lower(): s for s in TABLE_SECTIONS.get(table_slug, [])}
-    mask_section_row = df["key"].map(section_lookup.__contains__).fillna(False)
+    # Attach sections via indent sniffing; keep original-cased section label
     df["section"] = None
-    df.loc[mask_section_row, "section"] = df.loc[mask_section_row, "key"].map(section_lookup)
+    for i, is_section in enumerate(is_section_row):
+        if is_section:
+            # Use the raw (pre-lowercased) key as section label for readability
+            df.loc[i, "section"] = df.loc[i, "key"].title()
     df["section"] = df["section"].ffill()
 
+    # Remove blank rows, notes, and the section-header rows themselves
     mask_blank_key = df["key"].str.strip().eq("") | df["key"].isna()
-    mask_notes = df["key"].str.contains(r"^Notes?:", case=False, na=False)
-    df = df[~(mask_blank_key | mask_notes | mask_section_row)].copy()
+    mask_notes = df["key"].str.contains(r"^notes?\s*:\s*", case=False, na=False)
+    mask_section_header = pd.Series(is_section_row, index=df.index)
+    df = df[~(mask_blank_key | mask_notes | mask_section_header)].copy()
     if df.empty:
         log.warning("All rows removed after cleanup – skipping table")
         return None
@@ -245,7 +320,14 @@ def calculate_page_ranges(context, pdf_path: str):
 def parse_page_range(context, pdf_path: str, page_range: str) -> pd.DataFrame:
     """Extract every table on *page_range* from *pdf_path* and annotate with year."""
     try:
-        tables = camelot.read_pdf(pdf_path, pages=page_range, flavor="stream", edge_tol=50, row_tol=0)
+        tables = camelot.read_pdf(
+            pdf_path,
+            pages=page_range,
+            flavor="stream",
+            edge_tol=50,
+            row_tol=0,
+            strip_text="|.\n",
+        )
     except Exception as exc:
         context.log.error("Camelot failed on %s: %s", page_range, exc)
         return pd.DataFrame()
