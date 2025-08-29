@@ -271,19 +271,28 @@ def _clean_camelot_table(table, log, *, year: int) -> pd.DataFrame | None:
         .apply(_normalize_text)
     )
 
-    # Attach sections via indent sniffing; keep original-cased section label
+    # Attach sections: prefer known section labels; otherwise fallback to indent-based sniffing
+    section_lookup = {s.lower(): s for s in TABLE_SECTIONS.get(table_slug, [])}
+    known_section_mask = df["key"].map(section_lookup.__contains__).fillna(False)
+
     df["section"] = None
-    for i, is_section in enumerate(is_section_row):
-        if is_section:
-            # Use the raw (pre-lowercased) key as section label for readability
-            df.loc[i, "section"] = df.loc[i, "key"].title()
+    if known_section_mask.any():
+        # Use only known section names for ffill grouping
+        df.loc[known_section_mask, "section"] = df.loc[known_section_mask, "key"].map(section_lookup)
+        section_header_mask = known_section_mask
+    else:
+        # Fallback: use indent-based detection for headers
+        for i, is_section in enumerate(is_section_row):
+            if is_section:
+                df.loc[i, "section"] = df.loc[i, "key"].title()
+        section_header_mask = pd.Series(is_section_row, index=df.index)
+
     df["section"] = df["section"].ffill()
 
     # Remove blank rows, notes, and the section-header rows themselves
     mask_blank_key = df["key"].str.strip().eq("") | df["key"].isna()
     mask_notes = df["key"].str.contains(r"^notes?\s*:\s*", case=False, na=False)
-    mask_section_header = pd.Series(is_section_row, index=df.index)
-    df = df[~(mask_blank_key | mask_notes | mask_section_header)].copy()
+    df = df[~(mask_blank_key | mask_notes | section_header_mask)].copy()
     if df.empty:
         log.warning("All rows removed after cleanup – skipping table")
         return None
