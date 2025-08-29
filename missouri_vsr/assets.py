@@ -4,7 +4,7 @@ import os
 import re
 import unicodedata
 from pathlib import Path
-from typing import Dict, List, Iterable, Tuple
+from typing import Dict, List
 
 import camelot
 import pandas as pd
@@ -173,35 +173,9 @@ def _is_numeric(tok: str) -> bool:
     # Dot leaders like "." are NOT considered numeric to avoid false positives.
     return bool(_NUM_RE.match(tok))
 
-# More permissive numeric detection used for cell-based clustering (allows %)
-_CELL_NUM_RE = re.compile(r"^\d[\d,]*\.?\d*%?$")
-
-def _cell_is_numeric(tok: str) -> bool:
-    return bool(_CELL_NUM_RE.match(tok.strip()))
-
 def _clean_numeric_str(tok: str) -> str:
     t = tok.strip().replace(",", "")
-    if t.endswith("%"):
-        t = t[:-1]
-    return t
-
-def _kmeans_1d(xs: List[float], k: int, max_iter: int = 30) -> List[float]:
-    xs = sorted(xs)
-    if not xs:
-        return []
-    k = max(1, min(k, len(xs)))
-    # init centers at quantiles
-    centers = [xs[int(i * (len(xs) - 1) / (k - 1))] for i in range(k)] if k > 1 else [xs[len(xs)//2]]
-    for _ in range(max_iter):
-        buckets: List[List[float]] = [[] for _ in range(k)]
-        for x in xs:
-            idx = min(range(k), key=lambda i: abs(x - centers[i]))
-            buckets[idx].append(x)
-        new_centers = [sum(b)/len(b) if b else c for b, c in zip(buckets, centers)]
-        if all(abs(a-b) < 1e-3 for a, b in zip(new_centers, centers)):
-            break
-        centers = new_centers
-    return sorted(centers)
+    return t[:-1] if t.endswith("%") else t
 
 def normalize_row_tokens(row: list[str], dept_name: str, table_slug: str, log) -> list[str]:
     log.debug("Raw row tokens: %s / %s %s", list(row), table_slug, dept_name)
@@ -251,62 +225,18 @@ def _clean_camelot_table(table, log, *, year: int) -> pd.DataFrame | None:
     if pd.isna(df.iloc[0, 0]) or str(df.iloc[0, 0]).strip() == "":
         df = df.iloc[:, 1:]
 
-    # Build rows from Camelot cells using x-position clustering for numeric columns
-    cell_rows = table.cells
-    start_row_idx = int(metadata_row_idx) + 2
-    aligned_cell_rows = cell_rows[start_row_idx : start_row_idx + len(df)]
-
-    # 1) Collect x centers for numeric tokens to learn 7 numeric columns
-    x_positions: List[float] = []
-    for r in aligned_cell_rows:
-        for cell in r:
-            text = str(cell.text).strip()
-            if _cell_is_numeric(text):
-                xc = (float(cell.x1) + float(cell.x2)) / 2.0
-                x_positions.append(xc)
-
-    col_centers = _kmeans_1d(x_positions, 7)
-    if len(col_centers) < 2:
-        log.warning("Unable to infer numeric columns; skipping table")
-        return None
-
-    # 2) For each row, build key text (non-numeric left side) and 7 numeric values by nearest center
-    built_rows: List[Tuple[str, List[str], float]] = []  # (key, numeric_strs, left_x)
-    for r in aligned_cell_rows:
-        numerics = [None] * len(col_centers)
-        key_parts: List[str] = []
-        left_x_vals: List[float] = []
-        for cell in r:
-            text = str(cell.text).strip()
-            if not text:
-                continue
-            xc = (float(cell.x1) + float(cell.x2)) / 2.0
-            if _cell_is_numeric(text):
-                # assign to nearest numeric column
-                idx = min(range(len(col_centers)), key=lambda i: abs(xc - col_centers[i]))
-                numerics[idx] = _clean_numeric_str(text)
-            else:
-                # treat as part of the key/label
-                key_parts.append(text)
-                left_x_vals.append(float(cell.x1))
-        key_text = " ".join(part for part in key_parts if part and part != ".").strip()
-        left_x = min(left_x_vals) if left_x_vals else float("inf")
-        built_rows.append((key_text, [s if s is not None else "" for s in numerics], left_x))
-
-    # 3) Determine section header rows from indent (k=2 on left_x)
-    finite_lefts = [lx for _, _, lx in built_rows if lx != float("inf")]
-    if finite_lefts:
-        centers2 = _kmeans_1d(finite_lefts, 2)
-        thresh = sum(centers2)/2 if len(centers2) == 2 else centers2[0] + 1.0
-    else:
-        thresh = float("inf")
-    is_section_row = [(lx <= thresh) for _, _, lx in built_rows]
-
-    # 4) Assemble DataFrame
-    df = pd.DataFrame(
-        [ [k] + nums for (k, nums, _) in built_rows ],
-        columns=FINAL_COLUMNS[:8],
-    )
+    # Build normalized token rows from text-only df; keep a flag for numeric presence.
+    has_numeric_flags: List[bool] = []
+    normalized_rows: List[List[str]] = []
+    for _, row in df.iterrows():
+        toks = [str(c).strip() for c in row if str(c).strip()]
+        has_numeric = any(_is_numeric(t) for t in toks)
+        has_numeric_flags.append(has_numeric)
+        normalized_rows.append(
+            normalize_row_tokens(list(toks), dept_name, table_slug, log)
+        )
+    is_section_row = [not b for b in has_numeric_flags]
+    df = pd.DataFrame(normalized_rows, columns=FINAL_COLUMNS[:8])
 
     df["key"] = (
         df["key"]
@@ -317,7 +247,7 @@ def _clean_camelot_table(table, log, *, year: int) -> pd.DataFrame | None:
         .apply(_normalize_text)
     )
 
-    # Attach sections using indent-based detection (generic; no hardcoded labels)
+    # Attach sections: generic rule → rows without numbers are section headers, then ffill
     df["section"] = None
     for i, is_section in enumerate(is_section_row):
         if is_section:
@@ -334,9 +264,9 @@ def _clean_camelot_table(table, log, *, year: int) -> pd.DataFrame | None:
         log.warning("All rows removed after cleanup – skipping table")
         return None
 
-    # Convert numerics (strip % handled earlier). Keep NaN for blanks.
+    # Convert numerics. Keep NaN for blanks.
     for col in NUMERIC_COLS:
-        df[col] = pd.to_numeric(df[col], errors="coerce")
+        df[col] = pd.to_numeric(df[col].map(_clean_numeric_str), errors="coerce")
 
     # Drop rows that contain no numeric data at all (filters leftovers)
     mask_all_na_numeric = df[NUMERIC_COLS].isna().all(axis=1)
