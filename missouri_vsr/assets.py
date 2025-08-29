@@ -292,6 +292,15 @@ def _clean_camelot_table(table, log, *, year: int) -> pd.DataFrame | None:
         .apply(lambda col: pd.to_numeric(col, errors="coerce"))
     )
 
+    # Drop rows that contain no numeric data at all (filters out disclaimers/footnotes)
+    mask_all_na_numeric = df[NUMERIC_COLS].isna().all(axis=1)
+    if mask_all_na_numeric.any():
+        log.debug("Dropping %d rows with no numeric values", int(mask_all_na_numeric.sum()))
+    df = df[~mask_all_na_numeric].copy()
+    if df.empty:
+        log.warning("Only non-numeric rows found – skipping table")
+        return None
+
     def _build_slug(row: pd.Series) -> str:
         parts: list[str] = [table_slug]
         if row.section:
