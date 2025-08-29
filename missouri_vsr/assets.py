@@ -165,7 +165,8 @@ def _normalize_text(text: str) -> str:
     text = unicodedata.normalize("NFKC", text)
     return text.replace("ﬀ", "ff").replace("’", "'").replace(".", "")
 
-_NUM_RE = re.compile(r"^\d[\d,\.]*%?$")
+# Accept numbers like 10, 10.5, 1,234.56, and leading-dot decimals like .27, with optional trailing %
+_NUM_RE = re.compile(r"^(?:\d[\d,]*\.?\d*|\.\d+)%?$")
 _DOTS_RE = re.compile(r"^[\.·]{2,}$")
 
 def _is_numeric(tok: str) -> bool:
