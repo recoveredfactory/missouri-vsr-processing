@@ -188,11 +188,18 @@ def normalize_row_tokens(row: list[str], dept_name: str, table_slug: str, log) -
     i = 0
     while i < len(row):
         tok = row[i]
-        if tok == '.' and i + 1 < len(row) and row[i + 1].isdigit():
+        # Only merge when the right-hand numeric token has at least 2 digits to avoid fusing '0 . 0'
+        if tok == '.' and i + 1 < len(row) and row[i + 1].isdigit() and len(row[i + 1]) >= 2:
             merged.append(f"0.{row[i + 1]}")
             i += 2
             continue
-        if i + 2 < len(row) and row[i + 1] == '.' and row[i].isdigit() and row[i + 2].isdigit():
+        if (
+            i + 2 < len(row)
+            and row[i + 1] == '.'
+            and row[i].isdigit()
+            and row[i + 2].isdigit()
+            and len(row[i + 2]) >= 2
+        ):
             merged.append(f"{row[i]}.{row[i + 2]}")
             i += 3
             continue
