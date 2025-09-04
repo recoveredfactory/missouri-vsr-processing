@@ -55,36 +55,14 @@ def download_reports(context):
 
     out_dir = Path(context.resources.data_dir_report_pdfs.get_path())
 
-    if USE_EXAMPLES:
-        context.log.info("VSR_USE_EXAMPLES=1 → using local example PDFs; skipping downloads")
-        # Restrict selection to years for which we have examples
-        available = {str(y) for y in EXAMPLE_PDFS.keys()}
-        if selected - available:
-            context.log.warning(
-                "Examples available only for %s; will skip %s",
-                sorted(available),
-                sorted(selected - available),
-            )
-        selected = selected & available
-
     for year, url in YEAR_URLS.items():
         name = str(year)
         if name not in selected:
             context.log.debug("Skipping %s (not selected)", name)
             continue
 
-        # In example mode, just yield the example file path
-        if USE_EXAMPLES and year in EXAMPLE_PDFS:
-            example_path = EXAMPLE_PDFS[year]
-            if not example_path.exists():
-                raise FileNotFoundError(f"Missing example PDF: {example_path}")
-            context.log.info("Using example PDF for %s → %s", year, example_path)
-            yield Output(
-                str(example_path),
-                output_name=name,
-                metadata={"mode": "examples", "local_path": str(example_path)},
-            )
-            continue
+        # If the file already exists locally, re-use it and skip the download
+        # Otherwise, download to the reports directory.
 
         out_path = out_dir / f"VSRreport{year}.pdf"
 
@@ -129,36 +107,6 @@ TABLE_SLUG_LOOKUP = {
     "Number of Stops by Race": "stops",
     "Search statistics": "search",
 }
-
-# Optional toggle to use small example PDFs instead of full reports.
-# Set env var `VSR_USE_EXAMPLES=1` to enable.
-USE_EXAMPLES = os.getenv("VSR_USE_EXAMPLES", "").strip().lower() in {"1", "true", "yes", "on"}
-
-# Map years to local example PDFs (keep light-weight for dev/testing)
-EXAMPLE_PDFS: dict[int, Path] = {
-    2024: Path("data/src/examples/Example-StL-VSReport2024.pdf"),
-}
-TABLE_SECTIONS: dict[str, list[str]] = {
-    "rates": ["Population", "Totals", "Rates"],
-    "stops": [
-        "All Stops",
-        "Reason for Stop",
-        "Stop Outcome",
-        "Citation/warning violation",
-        "Arrest violation",
-        "Officer Assignment",
-        "Location of Stop",
-        "Driver Gender",
-        "Driver Age",
-    ],
-    "search": [
-        "Probable cause",
-        "What searched",
-        "Search duration",
-        "Contraband found",
-    ],
-}
-
 
 def _normalize_text(text: str) -> str:
     """Strip ligatures & smart quotes to plain ASCII."""
