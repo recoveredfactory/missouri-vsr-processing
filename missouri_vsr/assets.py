@@ -30,9 +30,9 @@ from dagster import (
 # Configure the years you want Dagster to ingest
 # ------------------------------------------------------------------------------
 YEAR_URLS: Dict[int, str] = {
-    2024: "https://ago.mo.gov/wp-content/uploads/2024-VSR-Agency-Specific-Reports.pdf",
+    # 2024: "https://ago.mo.gov/wp-content/uploads/2024-VSR-Agency-Specific-Reports.pdf",
     2023: "https://ago.mo.gov/wp-content/uploads/VSRreport2023.pdf",
-    2022: "https://ago.mo.gov/wp-content/uploads/vsrreport2022.pdf",
+    # 2022: "https://ago.mo.gov/wp-content/uploads/vsrreport2022.pdf",
 }
 
 # ------------------------------------------------------------------------------
@@ -247,7 +247,22 @@ def _clean_camelot_table(table, log, *, year: int) -> pd.DataFrame | None:
     if pd.isna(df.iloc[0, 0]) or str(df.iloc[0, 0]).strip() == "":
         df = df.iloc[:, 1:]
 
-    # Build normalized token rows from text-only df; keep a flag for numeric presence.
+    # Detect indentation per original Camelot row using cell x-coordinates
+    # Align Camelot cells to the sliced DataFrame rows
+    start_row_idx = int(metadata_row_idx) + 2
+    aligned_cell_rows = table.cells[start_row_idx : start_row_idx + len(df)]
+
+    left_x: list[float] = []
+    for r in aligned_cell_rows:
+        xs = [float(c.x1) for c in r if str(c.text).strip()]
+        left_x.append(min(xs) if xs else float("inf"))
+    finite_lefts = [x for x in left_x if x != float("inf")]
+    min_left = min(finite_lefts) if finite_lefts else float("inf")
+    # Treat rows as indented if their left edge is meaningfully to the right
+    indent_threshold = 1.5  # PDF coordinate units; small but effective
+    is_indented_row = [(lx - min_left) > indent_threshold for lx in left_x]
+
+    # Build normalized token rows from text-only df; keep a flag for numeric presence
     has_numeric_flags: List[bool] = []
     normalized_rows: List[List[str]] = []
     for _, row in df.iterrows():
@@ -257,7 +272,6 @@ def _clean_camelot_table(table, log, *, year: int) -> pd.DataFrame | None:
         normalized_rows.append(
             normalize_row_tokens(list(toks), dept_name, table_slug, log)
         )
-    is_section_row = [not b for b in has_numeric_flags]
     df = pd.DataFrame(normalized_rows, columns=FINAL_COLUMNS[:8])
 
     df["key"] = (
@@ -269,12 +283,15 @@ def _clean_camelot_table(table, log, *, year: int) -> pd.DataFrame | None:
         .apply(_normalize_text)
     )
 
-    # Attach sections: generic rule → rows without numbers are section headers, then ffill
+    # Attach sections: rows without numbers AND without indentation are section headers, then ffill
     df["section"] = None
-    for i, is_section in enumerate(is_section_row):
-        if is_section:
+    header_mask_list: list[bool] = [
+        (not has_numeric_flags[i]) and (not is_indented_row[i]) for i in range(len(df))
+    ]
+    for i, is_header in enumerate(header_mask_list):
+        if is_header:
             df.loc[i, "section"] = df.loc[i, "key"].strip()
-    section_header_mask = pd.Series(is_section_row, index=df.index)
+    section_header_mask = pd.Series(header_mask_list, index=df.index)
     
     df["section"] = df["section"].ffill()
 
