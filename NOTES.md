@@ -38,3 +38,6 @@ How to run with examples:
 - Materialize `download_reports` output for 2024 and the downstream `extract_pdf_data_2024`.
 - The pipeline will skip downloads and read the example PDF directly.
 
+# Pages to extract for 2023 fast sample
+
+10-13,114-117,1734-1737,1722-1725,1726-1728
