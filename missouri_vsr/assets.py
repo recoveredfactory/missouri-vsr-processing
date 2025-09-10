@@ -167,8 +167,13 @@ def normalize_row_tokens(row: list[str], dept_name: str, table_slug: str, log) -
         return s
     row_num = [_norm_num_token(t) for t in row]
 
-    # Pick the rightmost 7 numeric tokens from the row; everything else is key
-    numeric_positions = [idx for idx, tok in enumerate(row_num) if _is_numeric(tok)]
+    # Pick the rightmost 7 slots that are numeric OR a lone '.' placeholder
+    # Treat a single '.' as an explicit missing slot to preserve column alignment.
+    numeric_positions = [
+        idx
+        for idx, tok in enumerate(row_num)
+        if _is_numeric(tok) or tok == "."
+    ]
     picked_positions = numeric_positions[-7:]
     numeric = [row_num[idx] for idx in picked_positions]
 
@@ -186,11 +191,16 @@ def normalize_row_tokens(row: list[str], dept_name: str, table_slug: str, log) -
 
     key = " ".join(key_tokens).strip() or "(blank key)"
 
+    # Convert any '.' placeholders into explicit blanks before numeric salvage
+    numeric = ["" if v == "." else v for v in numeric]
+
     # Generic salvage for rows that imply rates/percentages but lost decimals in PDF text
     key_l = key.lower()
     if ("rate" in key_l) or ("%" in key_l):
         fixed: list[str] = []
         is_residents = "residents" in key_l
+        # Heuristic triggers: if any 3-digit integers present, assume tenths/hundredths were dropped.
+        has_3digit = any((s and s.isdigit() and len(s) == 3) for s in numeric)
         for s in numeric:
             if not s:
                 fixed.append("")
@@ -202,12 +212,17 @@ def normalize_row_tokens(row: list[str], dept_name: str, table_slug: str, log) -
                 fixed.append(raw)
                 continue
             if raw.isdigit() and raw != "100":
-                if len(raw) == 4 and '%' in key_l:
+                n = len(raw)
+                if n == 4 and '%' in key_l:
                     fixed.append(str(int(raw) / 100.0))
-                elif len(raw) == 3:
+                elif n == 3 and has_3digit:
                     fixed.append(str(int(raw) / 100.0))
-                elif len(raw) == 2:
-                    fixed.append(str(int(raw) / (100.0 if is_residents else 10.0)))
+                elif n == 2 and has_3digit:
+                    # scale tenths if we detected a 3-digit in this row
+                    fixed.append(str(int(raw) / 10.0))
+                elif n == 2 and is_residents:
+                    # residents rows often represent hundredths
+                    fixed.append(str(int(raw) / 100.0))
                 else:
                     fixed.append(raw)
             else:
