@@ -357,7 +357,7 @@ def parse_page_range(context, pdf_path: str, page_range: str) -> pd.DataFrame:
     ]
     return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
 
-@op(out=Out(pd.DataFrame), required_resource_keys={"data_dir_processed"})
+@op(out=Out(pd.DataFrame), required_resource_keys={"data_dir_processed", "s3"})
 def concat_and_write_parquet(context, chunks: List[pd.DataFrame], pdf_path: str) -> pd.DataFrame:
     """Merge page chunks, write Parquet, return combined DataFrame."""
     non_empty = [c for c in chunks if not c.empty]
@@ -372,43 +372,20 @@ def concat_and_write_parquet(context, chunks: List[pd.DataFrame], pdf_path: str)
     combined.to_parquet(out_parquet, index=False, engine="pyarrow")
     context.log.info("Wrote %d rows (Parquet) → %s", len(combined), out_parquet)
 
+    # Attach local path and optional S3 metadata to the asset materialization
     meta = {"local_path": str(out_parquet)}
-    # Optional S3 upload via Dagster resource 's3' (preferred) or env fallback
     try:
-        # Try resource first
         s3_res = getattr(context.resources, "s3", None)
-        bucket = prefix = expires = client = None
-        if s3_res is not None:
-            # Support both object-like and dict-like
-            bucket = getattr(s3_res, "bucket", None) or (s3_res.get("bucket") if isinstance(s3_res, dict) else None)
-            prefix = getattr(s3_res, "prefix", None) or (s3_res.get("prefix") if isinstance(s3_res, dict) else None)
-            expires = getattr(s3_res, "presign_expires", None) or (s3_res.get("presign_expires") if isinstance(s3_res, dict) else None)
-            client = getattr(s3_res, "client", None) or (s3_res.get("client") if isinstance(s3_res, dict) else None)
-
-        if not bucket:
-            # Fallback to env only if resource not provided
-            bucket = os.getenv("VSR_S3_BUCKET", "").strip() or None
-            prefix = (os.getenv("VSR_S3_PREFIX", "vsr/") or "vsr/") if bucket else None
-            expires = int(os.getenv("VSR_S3_PRESIGN_EXPIRES", "86400")) if bucket else None
-
-        if bucket:
-            if client is None:
-                import boto3
-                client = boto3.client("s3")
-            key = f"{(prefix or 'vsr/').lstrip('/')}{year}/combined_output_{year}.parquet"
-            client.upload_file(str(out_parquet), bucket, key, ExtraArgs={"ContentType": "application/vnd.apache.parquet"})
+        if s3_res is not None and hasattr(s3_res, "upload_file"):
+            bucket = getattr(s3_res, "bucket", None)
+            s3_prefix = getattr(s3_res, "s3_prefix", "") or ""
+            key_prefix = (s3_prefix.strip("/") + "/" if s3_prefix else "") + "missouri-vsr/"
+            key = f"{key_prefix}{year}/combined_output_{year}.parquet"
+            presigned = s3_res.upload_file(str(out_parquet), key)
             uri = f"s3://{bucket}/{key}"
-            meta["s3_uri"] = uri
-            # Try to presign via the same client
-            try:
-                presigned = client.generate_presigned_url(
-                    ClientMethod="get_object",
-                    Params={"Bucket": bucket, "Key": key},
-                    ExpiresIn=int(expires or 86400),
-                )
-                meta["presigned_url"] = presigned
-            except Exception:
-                pass
+            meta.update({"s3_uri": uri})
+            if presigned:
+                meta.update({"presigned_url": presigned})
             context.log.info("Uploaded per-year Parquet to %s", uri)
     except Exception as e:
         context.log.warning("S3 upload skipped/failed: %s", e)
@@ -417,6 +394,7 @@ def concat_and_write_parquet(context, chunks: List[pd.DataFrame], pdf_path: str)
         context.add_output_metadata(meta)
     except Exception:
         pass
+
     return combined
 
 # ------------------------------------------------------------------------------
@@ -447,7 +425,7 @@ for yr in YEAR_URLS:
 @op(
     ins={f"extract_pdf_data_{year}": In(pd.DataFrame) for year in YEAR_URLS},
     out=Out(pd.DataFrame),
-    required_resource_keys={"data_dir_processed"},
+    required_resource_keys={"data_dir_processed", "s3"},
 )
 def combine_reports(context, **extracted_reports: dict[str, pd.DataFrame]) -> pd.DataFrame:
     """Concatenate all extract_pdf_data_* assets into a single DataFrame and write combined Parquet."""
@@ -463,39 +441,20 @@ def combine_reports(context, **extracted_reports: dict[str, pd.DataFrame]) -> pd
     combined.to_parquet(out_file, index=False, engine="pyarrow")
     context.log.info("Wrote combined Parquet: %d rows → %s", len(combined), out_file)
 
+    # Attach local path and optional S3 metadata
     meta = {"local_path": str(out_file)}
-    # Optional S3 upload via Dagster resource 's3' (preferred) or env fallback
     try:
         s3_res = getattr(context.resources, "s3", None)
-        bucket = prefix = expires = client = None
-        if s3_res is not None:
-            bucket = getattr(s3_res, "bucket", None) or (s3_res.get("bucket") if isinstance(s3_res, dict) else None)
-            prefix = getattr(s3_res, "prefix", None) or (s3_res.get("prefix") if isinstance(s3_res, dict) else None)
-            expires = getattr(s3_res, "presign_expires", None) or (s3_res.get("presign_expires") if isinstance(s3_res, dict) else None)
-            client = getattr(s3_res, "client", None) or (s3_res.get("client") if isinstance(s3_res, dict) else None)
-
-        if not bucket:
-            bucket = os.getenv("VSR_S3_BUCKET", "").strip() or None
-            prefix = (os.getenv("VSR_S3_PREFIX", "vsr/") or "vsr/") if bucket else None
-            expires = int(os.getenv("VSR_S3_PRESIGN_EXPIRES", "86400")) if bucket else None
-
-        if bucket:
-            if client is None:
-                import boto3
-                client = boto3.client("s3")
-            key = f"{(prefix or 'vsr/').lstrip('/')}combined/all_combined_output.parquet"
-            client.upload_file(str(out_file), bucket, key, ExtraArgs={"ContentType": "application/vnd.apache.parquet"})
+        if s3_res is not None and hasattr(s3_res, "upload_file"):
+            bucket = getattr(s3_res, "bucket", None)
+            s3_prefix = getattr(s3_res, "s3_prefix", "") or ""
+            key_prefix = (s3_prefix.strip("/") + "/" if s3_prefix else "") + "missouri-vsr/"
+            key = f"{key_prefix}combined/all_combined_output.parquet"
+            presigned = s3_res.upload_file(str(out_file), key)
             uri = f"s3://{bucket}/{key}"
-            meta["s3_uri"] = uri
-            try:
-                presigned = client.generate_presigned_url(
-                    ClientMethod="get_object",
-                    Params={"Bucket": bucket, "Key": key},
-                    ExpiresIn=int(expires or 86400),
-                )
-                meta["presigned_url"] = presigned
-            except Exception:
-                pass
+            meta.update({"s3_uri": uri})
+            if presigned:
+                meta.update({"presigned_url": presigned})
             context.log.info("Uploaded combined Parquet to %s", uri)
     except Exception as e:
         context.log.warning("S3 upload skipped/failed: %s", e)
@@ -504,6 +463,7 @@ def combine_reports(context, **extracted_reports: dict[str, pd.DataFrame]) -> pd
         context.add_output_metadata(meta)
     except Exception:
         pass
+
     return combined
 
 @graph_asset(
