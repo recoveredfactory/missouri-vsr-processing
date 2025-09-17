@@ -191,43 +191,9 @@ def normalize_row_tokens(row: list[str], dept_name: str, table_slug: str, log) -
 
     key = " ".join(key_tokens).strip() or "(blank key)"
 
-    # Convert any '.' placeholders into explicit blanks before numeric salvage
+    # Convert any '.' placeholders into explicit blanks and leave numeric tokens as-is.
+    # Light touch: do not scale integers heuristically (preserve source values for auditing).
     numeric = ["" if v == "." else v for v in numeric]
-
-    # Generic salvage for rows that imply rates/percentages but lost decimals in PDF text
-    key_l = key.lower()
-    if ("rate" in key_l) or ("%" in key_l):
-        fixed: list[str] = []
-        is_residents = "residents" in key_l
-        # Heuristic triggers: if any 3-digit integers present, assume tenths/hundredths were dropped.
-        has_3digit = any((s and s.isdigit() and len(s) == 3) for s in numeric)
-        for s in numeric:
-            if not s:
-                fixed.append("")
-                continue
-            raw = s.replace(",", "")
-            if raw.endswith('%'):
-                raw = raw[:-1]
-            if "." in raw or raw == "0":
-                fixed.append(raw)
-                continue
-            if raw.isdigit() and raw != "100":
-                n = len(raw)
-                if n == 4 and '%' in key_l:
-                    fixed.append(str(int(raw) / 100.0))
-                elif n == 3 and has_3digit:
-                    fixed.append(str(int(raw) / 100.0))
-                elif n == 2 and has_3digit:
-                    # scale tenths if we detected a 3-digit in this row
-                    fixed.append(str(int(raw) / 10.0))
-                elif n == 2 and is_residents:
-                    # residents rows often represent hundredths
-                    fixed.append(str(int(raw) / 100.0))
-                else:
-                    fixed.append(raw)
-            else:
-                fixed.append(raw)
-        numeric = fixed
 
     return [key] + numeric
 
