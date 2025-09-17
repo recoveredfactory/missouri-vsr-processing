@@ -358,8 +358,8 @@ def parse_page_range(context, pdf_path: str, page_range: str) -> pd.DataFrame:
     return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
 
 @op(out=Out(pd.DataFrame), required_resource_keys={"data_dir_processed"})
-def concat_and_write_json(context, chunks: List[pd.DataFrame], pdf_path: str) -> pd.DataFrame:
-    """Merge page chunks, write JSON, return combined DataFrame."""
+def concat_and_write_parquet(context, chunks: List[pd.DataFrame], pdf_path: str) -> pd.DataFrame:
+    """Merge page chunks, write Parquet, return combined DataFrame."""
     non_empty = [c for c in chunks if not c.empty]
     if not non_empty:
         raise ValueError("No tables were extracted from the PDF.")
@@ -368,9 +368,13 @@ def concat_and_write_json(context, chunks: List[pd.DataFrame], pdf_path: str) ->
     year_match = re.search(r"(\d{4})", Path(pdf_path).name)
     year = year_match.group(1) if year_match else "unknown"
 
-    out_json = context.resources.data_dir_processed.get_path() / f"combined_output_{year}.json"
-    combined.to_json(out_json, index=False, orient="records", default_handler=str)
-    context.log.info("Wrote %d rows → %s", len(combined), out_json)
+    out_parquet = context.resources.data_dir_processed.get_path() / f"combined_output_{year}.parquet"
+    combined.to_parquet(out_parquet, index=False, engine="pyarrow")
+    context.log.info("Wrote %d rows (Parquet) → %s", len(combined), out_parquet)
+    try:
+        context.add_output_metadata({"local_path": str(out_parquet)})
+    except Exception:
+        pass
     return combined
 
 # ------------------------------------------------------------------------------
@@ -386,7 +390,7 @@ def make_extract_asset(year: int):
     def extract_for_year(pdf_path: str) -> pd.DataFrame:
         page_ranges = calculate_page_ranges(pdf_path)
         processed = page_ranges.map(lambda pr: parse_page_range(pdf_path, pr))
-        return concat_and_write_json(processed.collect(), pdf_path)
+        return concat_and_write_parquet(processed.collect(), pdf_path)
 
     extract_for_year.__name__ = f"extract_pdf_data_{year}"
     return extract_for_year
@@ -404,18 +408,22 @@ for yr in YEAR_URLS:
     required_resource_keys={"data_dir_processed"},
 )
 def combine_reports(context, **extracted_reports: dict[str, pd.DataFrame]) -> pd.DataFrame:
-    """Concatenate all extract_pdf_data_* assets into a single DataFrame and write combined JSON."""
+    """Concatenate all extract_pdf_data_* assets into a single DataFrame and write combined Parquet."""
     # Merge all DataFrames
     dfs = [df for df in extracted_reports.values() if not df.empty]
     if not dfs:
         raise ValueError("No extracted tables found to combine.")
     combined = pd.concat(dfs, ignore_index=True)
 
-    # Write combined JSON
+    # Write combined Parquet
     processed_dir = Path(context.resources.data_dir_processed.get_path())
-    out_file = processed_dir / "all_combined_output.json"
-    combined.to_json(out_file, orient="records", default_handler=str)
-    context.log.info("Wrote combined JSON: %d rows → %s", len(combined), out_file)
+    out_file = processed_dir / "all_combined_output.parquet"
+    combined.to_parquet(out_file, index=False, engine="pyarrow")
+    context.log.info("Wrote combined Parquet: %d rows → %s", len(combined), out_file)
+    try:
+        context.add_output_metadata({"local_path": str(out_file)})
+    except Exception:
+        pass
     return combined
 
 @graph_asset(

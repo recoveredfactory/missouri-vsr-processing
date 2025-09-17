@@ -11,7 +11,7 @@ import pandas as pd
 from .assets import _clean_camelot_table
 
 
-def parse_pdf_to_df(pdf_path: str, pages: str | None = None, *, log: logging.Logger | None = None) -> pd.DataFrame:
+def parse_pdf_to_df(pdf_path: str, pages: str | None = None, *, log: logging.Logger | None = None, plot_tables: bool = False) -> pd.DataFrame:
     log = log or logging.getLogger("vsr_cli")
     p = Path(pdf_path)
     if not p.exists():
@@ -36,6 +36,18 @@ def parse_pdf_to_df(pdf_path: str, pages: str | None = None, *, log: logging.Log
     year = int(year_match.group(1)) if year_match else None
 
     frames: list[pd.DataFrame] = []
+    if plot_tables:
+        dbg_dir = Path("debug") / p.stem
+        dbg_dir.mkdir(parents=True, exist_ok=True)
+        for idx, t in enumerate(tables):
+            for kind in ["grid", "contour", "text"]:
+                img_path = dbg_dir / f"{pages or 'all'}_tbl{idx}_{kind}.png"
+                try:
+                    camelot.plot(t, kind=kind, filename=str(img_path))
+                    log.info("Wrote debug image %s", img_path)
+                except Exception as e:
+                    log.warning("Plot failed for table %s kind %s: %s", idx, kind, e)
+
     for t in tables:
         cleaned = _clean_camelot_table(t, log, year=year)
         if cleaned is not None and not cleaned.empty:
@@ -68,12 +80,17 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Enable verbose logging",
     )
+    parser.add_argument(
+        "--plot-tables",
+        action="store_true",
+        help="Save Camelot debug plots for each table (grid/contour/text) to ./debug/",
+    )
 
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO)
     log = logging.getLogger("vsr_cli")
 
-    df = parse_pdf_to_df(args.pdf, pages=args.pages, log=log)
+    df = parse_pdf_to_df(args.pdf, pages=args.pages, log=log, plot_tables=args.plot_tables)
     if df.empty:
         log.warning("No tables extracted.")
         return 2
