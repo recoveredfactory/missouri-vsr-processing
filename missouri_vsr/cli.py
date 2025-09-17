@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 
 import camelot
+import matplotlib.pyplot as plt
 import pandas as pd
 
 from .assets import _clean_camelot_table
@@ -43,7 +44,10 @@ def parse_pdf_to_df(pdf_path: str, pages: str | None = None, *, log: logging.Log
             for kind in ["grid", "contour", "text"]:
                 img_path = dbg_dir / f"{pages or 'all'}_tbl{idx}_{kind}.png"
                 try:
-                    camelot.plot(t, kind=kind, filename=str(img_path))
+                    ax = camelot.plot(t, kind=kind)
+                    fig = ax.get_figure()
+                    fig.savefig(img_path, dpi=200, bbox_inches="tight")
+                    plt.close(fig)
                     log.info("Wrote debug image %s", img_path)
                 except Exception as e:
                     log.warning("Plot failed for table %s kind %s: %s", idx, kind, e)
