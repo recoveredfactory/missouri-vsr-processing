@@ -357,7 +357,7 @@ def parse_page_range(context, pdf_path: str, page_range: str) -> pd.DataFrame:
     ]
     return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
 
-@op(out=Out(pd.DataFrame), required_resource_keys={"data_dir_processed", "s3"})
+@op(out=Out(pd.DataFrame), required_resource_keys={"data_dir_processed"})
 def concat_and_write_parquet(context, chunks: List[pd.DataFrame], pdf_path: str) -> pd.DataFrame:
     """Merge page chunks, write Parquet, return combined DataFrame."""
     non_empty = [c for c in chunks if not c.empty]
@@ -446,6 +446,7 @@ def combine_reports(context, **extracted_reports: dict[str, pd.DataFrame]) -> pd
     try:
         s3_res = getattr(context.resources, "s3", None)
         if s3_res is not None and hasattr(s3_res, "upload_file"):
+            context.log.info("S3 resource detected; uploading combined Parquet…")
             bucket = getattr(s3_res, "bucket", None)
             s3_prefix = getattr(s3_res, "s3_prefix", "") or ""
             key_prefix = (s3_prefix.strip("/") + "/" if s3_prefix else "") + "missouri-vsr/"
