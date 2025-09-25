@@ -41,13 +41,13 @@ class S3Resource(ConfigurableResource):
       - presigned_expiration: Expiration (in seconds) for generated pre-signed URLs.
       - temp_dir: (Optional) A temporary directory path; if not provided, the system temp directory is used.
     """
-    bucket: str
+    bucket: typing.Optional[str] = None
     s3_prefix: str = ""
     presigned_expiration: int = 3600
     temp_dir: str = None
 
     def __post_init__(self):
-        self.s3_client = boto3.client("s3")
+        # Avoid persisting boto3 clients on the resource instance (pydantic models are frozen).
         if self.temp_dir is None:
             self.temp_dir = tempfile.gettempdir()
 
@@ -81,10 +81,12 @@ class S3Resource(ConfigurableResource):
                     "ContentEncoding": "gzip"
                 })
 
+            # Create a client per call to avoid frozen-instance mutation
+            s3 = boto3.client("s3")
             # Upload the file to S3
-            self.s3_client.upload_file(tmp_path, self.bucket, s3_key, ExtraArgs=extra_args)
+            s3.upload_file(tmp_path, self.bucket, s3_key, ExtraArgs=extra_args)
             # Generate a pre-signed URL
-            presigned_url = self.s3_client.generate_presigned_url(
+            presigned_url = s3.generate_presigned_url(
                 "get_object",
                 Params={"Bucket": self.bucket, "Key": s3_key},
                 ExpiresIn=self.presigned_expiration

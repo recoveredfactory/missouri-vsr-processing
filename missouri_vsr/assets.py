@@ -30,9 +30,11 @@ from dagster import (
 # Configure the years you want Dagster to ingest
 # ------------------------------------------------------------------------------
 YEAR_URLS: Dict[int, str] = {
-    # 2024: "https://ago.mo.gov/wp-content/uploads/2024-VSR-Agency-Specific-Reports.pdf",
+    2024: "https://ago.mo.gov/wp-content/uploads/2024-VSR-Agency-Specific-Reports.pdf",
     2023: "https://ago.mo.gov/wp-content/uploads/VSRreport2023.pdf",
-    # 2022: "https://ago.mo.gov/wp-content/uploads/vsrreport2022.pdf",
+    2022: "https://ago.mo.gov/wp-content/uploads/vsrreport2022.pdf",
+    2021: "https://ago.mo.gov/wp-content/uploads/2021-VSR-Agency-Specific-Report.pdf",
+    2020: "https://ago.mo.gov/wp-content/uploads/2020-VSR-Agency-Specific-Report.pdf",
 }
 
 # ------------------------------------------------------------------------------
@@ -88,7 +90,7 @@ def download_reports(context):
 PAGE_CHUNK_SIZE = 5  # tune as needed
 
 FINAL_COLUMNS = [
-    "key",
+    "Key",
     "Total",
     "White",
     "Black",
@@ -96,9 +98,9 @@ FINAL_COLUMNS = [
     "Native American",
     "Asian",
     "Other",
-    "department",
-    "table name",
-    "section",
+    "Department",
+    "Table name",
+    "Measurement",
 ]
 NUMERIC_COLS = FINAL_COLUMNS[1:8]
 
@@ -255,8 +257,8 @@ def _clean_camelot_table(table, log, *, year: int) -> pd.DataFrame | None:
         )
     df = pd.DataFrame(normalized_rows, columns=FINAL_COLUMNS[:8])
 
-    df["key"] = (
-        df["key"]
+    df["Key"] = (
+        df["Key"]
         .astype(str)
         .str.replace(r"\s*\n\s*", " ", regex=True)
         .str.strip()
@@ -265,20 +267,20 @@ def _clean_camelot_table(table, log, *, year: int) -> pd.DataFrame | None:
     )
 
     # Attach sections: rows without numbers AND without indentation are section headers, then ffill
-    df["section"] = None
+    df["Measurement"] = None
     header_mask_list: list[bool] = [
         (not has_numeric_flags[i]) and (not is_indented_row[i]) for i in range(len(df))
     ]
     for i, is_header in enumerate(header_mask_list):
         if is_header:
-            df.loc[i, "section"] = df.loc[i, "key"].strip()
+            df.loc[i, "Measurement"] = df.loc[i, "Key"].strip()
     section_header_mask = pd.Series(header_mask_list, index=df.index)
-    
-    df["section"] = df["section"].ffill()
+
+    df["Measurement"] = df["Measurement"].ffill()
 
     # Remove blank rows, notes, and the section-header rows themselves
-    mask_blank_key = df["key"].str.strip().eq("") | df["key"].isna()
-    mask_notes = df["key"].str.contains(r"^notes?\s*:\s*", case=False, na=False)
+    mask_blank_key = df["Key"].str.strip().eq("") | df["Key"].isna()
+    mask_notes = df["Key"].str.contains(r"^notes?\s*:\s*", case=False, na=False)
     df = df[~(mask_blank_key | mask_notes | section_header_mask)].copy()
     if df.empty:
         log.warning("All rows removed after cleanup – skipping table")
@@ -299,14 +301,14 @@ def _clean_camelot_table(table, log, *, year: int) -> pd.DataFrame | None:
 
     def _build_slug(row: pd.Series) -> str:
         parts: list[str] = [table_slug]
-        if row.section:
-            parts.extend(["", slugify(str(row.section), lowercase=True, replacements=[["%", "pct"]]), ""])
-        parts.append(slugify(str(row.key), lowercase=True, replacements=[["%", "pct"]]))
+        if row.Measurement:
+            parts.extend(["", slugify(str(row.Measurement), lowercase=True, replacements=[["%", "pct"]]), ""])
+        parts.append(slugify(str(row.Key), lowercase=True, replacements=[["%", "pct"]]))
         return "-".join(parts)
 
     df["slug"] = df.apply(_build_slug, axis=1)
-    df["department"] = dept_name
-    df["table name"] = raw_table_name
+    df["Department"] = dept_name
+    df["Table name"] = raw_table_name
     df["year"] = year
     return df
 
@@ -445,20 +447,42 @@ def combine_reports(context, **extracted_reports: dict[str, pd.DataFrame]) -> pd
     meta = {"local_path": str(out_file)}
     try:
         s3_res = getattr(context.resources, "s3", None)
-        if s3_res is not None and hasattr(s3_res, "upload_file"):
-            context.log.info("S3 resource detected; uploading combined Parquet…")
+        if s3_res is not None:
+            context.log.info("S3 configured; uploading combined Parquet…")
             bucket = getattr(s3_res, "bucket", None)
             s3_prefix = getattr(s3_res, "s3_prefix", "") or ""
-            key_prefix = (s3_prefix.strip("/") + "/" if s3_prefix else "") + "missouri-vsr/"
+            prefix_clean = s3_prefix.strip("/")
+            key_prefix = f"{prefix_clean}/" if prefix_clean else ""
             key = f"{key_prefix}combined/all_combined_output.parquet"
-            presigned = s3_res.upload_file(str(out_file), key)
-            uri = f"s3://{bucket}/{key}"
-            meta.update({"s3_uri": uri})
-            if presigned:
-                meta.update({"presigned_url": presigned})
-            context.log.info("Uploaded combined Parquet to %s", uri)
+            if not bucket:
+                context.log.debug("S3 resource present but no bucket configured; skipping upload")
+            else:
+                import boto3
+                client = boto3.client("s3")
+                try:
+                    client.upload_file(str(out_file), bucket, key, ExtraArgs={"ContentType": "application/vnd.apache.parquet"})
+                except Exception as e:
+                    context.log.exception("S3 upload failed for combined Parquet: %s", e)
+                    meta["s3_upload_error"] = str(e)
+                uri = f"s3://{bucket}/{key}"
+                meta["s3_uri"] = uri
+                try:
+                    expires = int(getattr(s3_res, "presigned_expiration", 86400))
+                    presigned = client.generate_presigned_url(
+                        ClientMethod="get_object",
+                        Params={"Bucket": bucket, "Key": key},
+                        ExpiresIn=expires,
+                    )
+                    meta["presigned_url"] = presigned
+                    context.log.info("Generated presigned URL for combined Parquet")
+                except Exception as e:
+                    context.log.exception("Presign failed for combined Parquet: %s", e)
+                    meta["s3_presign_error"] = str(e)
+                context.log.info("Combined Parquet available at %s", uri)
+        else:
+            context.log.debug("No S3 resource configured; skipping S3 upload for combined Parquet")
     except Exception as e:
-        context.log.warning("S3 upload skipped/failed: %s", e)
+        context.log.exception("S3 handling encountered an exception for combined Parquet: %s", e)
 
     try:
         context.add_output_metadata(meta)
@@ -478,3 +502,34 @@ def combine_reports(context, **extracted_reports: dict[str, pd.DataFrame]) -> pd
 )
 def combine_all_reports(**extracted_reports: pd.DataFrame) -> pd.DataFrame:
     return combine_reports(**extracted_reports)
+
+# ------------------------------------------------------------------------------
+# Agency list (from Excel) → Parquet asset
+# ------------------------------------------------------------------------------
+@op(out=Out(pd.DataFrame), required_resource_keys={"data_dir_source", "data_dir_processed"})
+def load_agency_list(context) -> pd.DataFrame:
+    """Load the agencies Excel source into a DataFrame (no join yet)."""
+    src_dir = Path(context.resources.data_dir_source.get_path())
+    xlsx = src_dir / "2025-05-05-post-law-enforcement-agencies-list.xlsx"
+    if not xlsx.exists():
+        raise FileNotFoundError(f"Missing agencies Excel: {xlsx}")
+    df = pd.read_excel(xlsx, engine="openpyxl")
+    # Best-effort standardization: strip whitespace in potential name columns
+    for col in df.columns:
+        if df[col].dtype == object:
+            df[col] = df[col].astype(str).str.strip()
+
+    # Write a Parquet copy for downstream (e.g., DuckDB/Observable)
+    out_dir = Path(context.resources.data_dir_processed.get_path())
+    out_path = out_dir / "agency_list.parquet"
+    df.to_parquet(out_path, index=False, engine="pyarrow")
+    context.log.info("Wrote agency list Parquet → %s (%d rows)", out_path, len(df))
+    try:
+        context.add_output_metadata({"local_path": str(out_path)})
+    except Exception:
+        pass
+    return df
+
+@graph_asset(name="agency_list", group_name="vsr_reference")
+def agency_list_asset() -> pd.DataFrame:
+    return load_agency_list()
