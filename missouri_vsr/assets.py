@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import os
+import json
 import re
 import unicodedata
 from pathlib import Path
@@ -103,6 +103,7 @@ FINAL_COLUMNS = [
     "Measurement",
 ]
 NUMERIC_COLS = FINAL_COLUMNS[1:8]
+PIVOT_VALUE_COLUMNS = NUMERIC_COLS
 
 TABLE_SLUG_LOOKUP = {
     "Rates by Race": "rates",
@@ -502,6 +503,130 @@ def combine_reports(context, **extracted_reports: dict[str, pd.DataFrame]) -> pd
 )
 def combine_all_reports(**extracted_reports: pd.DataFrame) -> pd.DataFrame:
     return combine_reports(**extracted_reports)
+
+# ------------------------------------------------------------------------------
+# Pivoted outputs & per-agency JSON exports
+# ------------------------------------------------------------------------------
+@op(out=Out(pd.DataFrame))
+def pivot_reports_by_slug_op(context, combined: pd.DataFrame) -> pd.DataFrame:
+    """Pivot combined report data so each Agency+Year row contains slug-based columns."""
+    if combined.empty:
+        context.log.warning("Combined report DataFrame is empty; returning empty pivot result.")
+        return pd.DataFrame(columns=["Department", "year"])
+
+    required_cols = {"Department", "year", "slug"}
+    missing = required_cols - set(combined.columns)
+    if missing:
+        raise ValueError(f"Cannot pivot – missing columns: {sorted(missing)}")
+
+    value_cols = [c for c in PIVOT_VALUE_COLUMNS if c in combined.columns]
+    if not value_cols:
+        raise ValueError("Cannot pivot – no numeric value columns were found.")
+
+    base = combined[["Department", "year", "slug", *value_cols]].copy()
+    dup_mask = base.duplicated(subset=["Department", "year", "slug"], keep=False)
+    if dup_mask.any():
+        dupe_preview = (
+            base.loc[dup_mask, ["Department", "year", "slug"]]
+            .drop_duplicates()
+            .head(5)
+            .to_dict(orient="records")
+        )
+        context.log.warning(
+            "Found %d duplicate slug rows after grouping; keeping first occurrence. Examples: %s",
+            dup_mask.sum(),
+            dupe_preview,
+        )
+
+    pivoted = base.pivot_table(
+        index=["Department", "year"],
+        columns="slug",
+        values=value_cols,
+        aggfunc="first",
+    )
+
+    if pivoted.empty:
+        return pivoted.reset_index()
+
+    if isinstance(pivoted.columns, pd.MultiIndex):
+        pivoted = pivoted.sort_index(axis=1, level=0, sort_remaining=True)
+        pivoted.columns = pivoted.columns.swaplevel(0, 1)
+        pivoted.columns = [
+            f"{slug}__{metric}"
+            for slug, metric in pivoted.columns
+        ]
+    else:
+        pivoted.columns = [str(c) for c in pivoted.columns]
+
+    pivoted = pivoted.reset_index()
+    pivoted["year"] = pivoted["year"].astype("Int64", copy=False)
+    return pivoted
+
+
+@graph_asset(
+    name="pivot_reports_by_slug",
+    group_name="vsr_processed",
+    ins={"combine_all_reports": AssetIn(key=AssetKey("combine_all_reports"))},
+    description="Pivot combined report data so each agency/year row has slug-derived columns.",
+)
+def pivot_reports_by_slug(combine_all_reports: pd.DataFrame) -> pd.DataFrame:
+    return pivot_reports_by_slug_op(combine_all_reports)
+
+
+@op(out=Out(list), required_resource_keys={"data_dir_out"})
+def write_agency_year_json(context, pivoted: pd.DataFrame) -> List[str]:
+    """Write one JSON file per agency containing rows for each year."""
+    if pivoted.empty:
+        context.log.warning("Pivoted DataFrame empty; no JSON outputs created.")
+        return []
+
+    out_root = Path(context.resources.data_dir_out.get_path()) / "agency_year"
+    out_root.mkdir(parents=True, exist_ok=True)
+
+    output_paths: List[str] = []
+    for department, group in pivoted.groupby("Department"):
+        records: List[dict] = []
+        for _, row in group.sort_values("year").iterrows():
+            row_payload: dict = {}
+            year_val = row.get("year")
+            if pd.notna(year_val):
+                row_payload["year"] = int(year_val)
+            else:
+                row_payload["year"] = None
+
+            for col, value in row.items():
+                if col in {"Department", "year"}:
+                    continue
+                if pd.isna(value):
+                    continue
+                if "__" not in col:
+                    row_payload[col] = value
+                    continue
+                slug, metric = col.split("__", 1)
+                slug_bucket = row_payload.setdefault(slug, {})
+                slug_bucket[metric] = value
+            records.append(row_payload)
+
+        agency_slug = slugify(str(department), lowercase=True)
+        if not agency_slug:
+            agency_slug = "agency"
+        out_path = out_root / f"{agency_slug}.json"
+        payload = {"agency": department, "rows": records}
+        out_path.write_text(json.dumps(payload, indent=2))
+        output_paths.append(str(out_path))
+        context.log.info("Wrote %d year rows for %s → %s", len(records), department, out_path)
+
+    return output_paths
+
+
+@graph_asset(
+    name="agency_year_json_exports",
+    group_name="vsr_processed",
+    ins={"pivot_reports_by_slug": AssetIn(key=AssetKey("pivot_reports_by_slug"))},
+    description="Generate per-agency JSON files containing year-by-year slug data.",
+)
+def agency_year_json_exports(pivot_reports_by_slug: pd.DataFrame) -> List[str]:
+    return write_agency_year_json(pivot_reports_by_slug)
 
 # ------------------------------------------------------------------------------
 # Agency list (from Excel) → Parquet asset
