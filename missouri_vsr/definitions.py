@@ -1,14 +1,8 @@
 # definitions.py
-import os
-
 from dagster import Definitions, load_assets_from_modules
 from missouri_vsr import assets
 from missouri_vsr.asset_checks import asset_checks
-from missouri_vsr.resources import (
-    AirtableBaseResource, 
-    S3Resource,
-    LocalDirectoryResource
-)
+from missouri_vsr.resources import LocalDirectoryResource, S3Resource
 from pathlib import Path
 
 DATA_DIR_SOURCE=Path("data/src")
@@ -27,5 +21,6 @@ defs = Definitions(
         "data_dir_report_pdfs": LocalDirectoryResource(path=str(DATA_DIR_REPORT_PDFS)),
         "data_dir_processed": LocalDirectoryResource(path=str(DATA_DIR_PROCESSED)),
         "data_dir_out": LocalDirectoryResource(path=str(DATA_DIR_OUT)),
+        "s3": S3Resource.configure_at_launch(),
     },
 )

@@ -41,3 +41,18 @@ How to run with examples:
 # Pages to extract for 2023 fast sample
 
 10-13,114-117,1734-1737,1722-1725,1726-1728
+
+# Run config for s3
+
+resources:
+  data_dir_report_pdfs:
+      config:
+        path: data/src/reports
+  data_dir_processed:
+      config:
+        path: data/processed
+  s3:
+      config:
+        bucket: tmp-gfx-public-data
+        s3_prefix: missouri-vsr/
+        presigned_expiration: 7776000

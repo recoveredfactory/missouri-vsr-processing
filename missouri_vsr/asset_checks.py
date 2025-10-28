@@ -7,7 +7,7 @@ from dagster import AssetCheckResult, AssetCheckSpec, MetadataValue, asset_check
 from missouri_vsr.assets import combine_all_reports
 
 EXPECTED_COLUMNS = [
-    "key",
+    "Key",
     "Total",
     "White",
     "Black",
@@ -17,9 +17,9 @@ EXPECTED_COLUMNS = [
     "Other",
     "year",
     "slug",
-    "department",
-    "table name",
-    "section",
+    "Department",
+    "Table name",
+    "Measurement",
 ]
 
 NUMERIC_COLS = EXPECTED_COLUMNS[1:9]  # Just the race-specific numbers
@@ -40,8 +40,18 @@ def _coerce_row(raw: dict) -> dict:
             out[k] = v
     return out
 
+RENAME_CHECK_FIELDS = {
+    "key": "Key",
+    "department": "Department",
+    "table name": "Table name",
+    "section": "Measurement",
+}
+
+def _rename_check_fields(d: dict) -> dict:
+    return {RENAME_CHECK_FIELDS.get(k, k): v for k, v in d.items()}
+
 with open("data_checks/row_sanity_checks.csv") as f:
-    ROW_SANITY_CHECKS = [_coerce_row(r) for r in csv.DictReader(f)]
+    ROW_SANITY_CHECKS = [_rename_check_fields(_coerce_row(r)) for r in csv.DictReader(f)]
 
 # Schema check for extracted pdf data – ensure *exact* match with `EXPECTED_COLUMNS`.
 @asset_check(asset=combine_all_reports)
@@ -61,11 +71,11 @@ def check_expected_columns(df: pd.DataFrame) -> AssetCheckResult:
 # Duplicate‐slug check – combination of dept/slug/year must be unique.
 @asset_check(asset=combine_all_reports)
 def check_no_duplicate_slugs(df: pd.DataFrame) -> AssetCheckResult:
-    dupes = df[df.duplicated(["department", "slug", "year"], keep=False)]
+    dupes = df[df.duplicated(["Department", "slug", "year"], keep=False)]
     passed = dupes.empty
 
     # Include both department and slug for each duplicate row
-    example_duplicates = dupes[["department", "slug", "year"]].drop_duplicates().to_dict(orient="records")
+    example_duplicates = dupes[["Department", "slug", "year"]].drop_duplicates().to_dict(orient="records")
 
     return AssetCheckResult(
         passed=passed,
@@ -110,23 +120,23 @@ def _make_row_sanity_check(asset, check: dict, idx: int) -> AssetCheckSpec:
     """Return an `asset_check` enforcing that *one* row matches `check`."""
 
     check_slug = check["slug"].replace("-", "_")
-    dept_slug = slugify(check["department"], separator="_")
+    dept_slug = slugify(check["Department"], separator="_")
     check_name = f"sanity_check_{idx}_{check_slug}_{dept_slug}_{check['year']}"
 
     @asset_check(name=check_name, asset=asset)
     def _check(df: pd.DataFrame) -> AssetCheckResult:
         # Ensure both conditions are applied correctly with parentheses
-        row = df[(df["slug"] == check["slug"]) & (df["department"] == check["department"]) & (df["year"] == check["year"])]
+        row = df[(df["slug"] == check["slug"]) & (df["Department"] == check["Department"]) & (df["year"] == check["year"])]
         if row.empty:
             return AssetCheckResult(
                 passed=False,
-                metadata={"reason": f"{check['slug']} + {check['department']} + {check['year']} not found"},
+                metadata={"reason": f"{check['slug']} + {check['Department']} + {check['year']} not found"},
             )
 
         # Check all additional fields in the dict (besides slug/department)
         mismatches = []
         for key, val in check.items():
-            if key in ("slug", "department"):
+            if key in ("slug", "Department"):
                 continue
 
             actual_val = row.iloc[0][key]
@@ -144,7 +154,7 @@ def _make_row_sanity_check(asset, check: dict, idx: int) -> AssetCheckSpec:
         return AssetCheckResult(
             passed=not mismatches,
             metadata={
-                "checked_fields": [k for k in check.keys() if k not in ("slug", "department")],
+                "checked_fields": [k for k in check.keys() if k not in ("slug", "Department")],
                 "mismatches": MetadataValue.json(mismatches),
             },
         )

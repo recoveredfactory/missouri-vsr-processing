@@ -1,0 +1,4 @@
+    ops:
+      download_reports:
+        config:
+          use_examples: true

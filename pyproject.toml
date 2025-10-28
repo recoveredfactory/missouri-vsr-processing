@@ -17,6 +17,7 @@ dependencies = [
     "camelot-py>=1.0.0",
     "pypdf2>=3.0.1",
     "openpyxl>=3.1.5",
+    "pyarrow>=16.0.0",
 ]
 
 [project.scripts]
