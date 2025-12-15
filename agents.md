@@ -1,0 +1,48 @@
+# Agent Guide
+
+Quick reference for future coding agents working on this Dagster pipeline that parses Missouri Vehicle Stops Report (VSR) PDFs into tidy data.
+
+## What this project does
+- Downloads per-year VSR PDFs (see `YEAR_URLS` in `missouri_vsr/assets.py`) and stores them under `data/src/reports`.
+- Extracts tables with Camelot (`extract_pdf_data_<year>` assets), normalizes rows into `Key`, race counts/rates, department, table name, and measurement.
+- Combines per-year Parquet outputs (`data/processed/combined_output_<year>.parquet`) into a master Parquet + DataFrame (`combine_all_reports`), then pivots by slug and emits per-agency JSON under `data/out/agency_year`.
+- `data/src/2025-05-05-post-law-enforcement-agencies-list.xlsx` is agency metadata to join via a crosswalk (not the final reference table yet); the `agency_list` asset loads it and writes `data/processed/agency_list.parquet` for downstream joins. Crosswalk work is pending; don't overfit to current columns.
+
+## Repo layout (essentials)
+- `missouri_vsr/assets.py`: Assets and parsing logic (Camelot stream flavor, indent-based section detection, numeric alignment).
+- `missouri_vsr/definitions.py`: Dagster `Definitions`; registers assets and resources.
+- `missouri_vsr/resources.py`: S3, Airtable, Google Drive resources.
+- `run_configs/*.yaml`: Example Dagster run configs (e.g., S3 bucket/prefix, WSL low-memory).
+- `data/`: Local inputs/outputs (reports, processed parquet, JSON exports).
+
+## Setup and execution
+- Python 3.12+, `uv` for env mgmt (`uv sync`).
+- Create `.env` (loaded by Dagster) for credentials:
+  - AWS: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION` (or `AWS_REGION`), plus `MISSOURI_VSR_BUCKET_NAME`, `MISSOURI_VSR_S3_PREFIX` for S3 uploads.
+  - Optional: `DAGSTER_HOME` to persist Dagster instance locally.
+  - Optional resources: Airtable and Google service account vars if used.
+- Run Dagster UI: `uv run dagster dev`.
+- CLI materialization: `uv run dagster asset materialize --select <asset_or_query> -m missouri_vsr.definitions`.
+
+## Operational notes
+- Tunable env: `VSR_PAGE_CHUNK_SIZE` (default 5) controls PDF page chunking for Camelot.
+- Outputs may upload to S3 if the `s3` resource is configured or env vars are present; presigned URLs default to 45 days (`presigned_expiration`).
+- Uses `slug` for pivoting; slugs encode table + metric hierarchy (e.g., `stops--citation-warning-violation--moving`). Per-agency JSON nests slug metrics (e.g., `rates__Stop rate`).
+- Keep an eye on PDF parsing heuristics (indent detection for section/metric rows, right-to-left numeric sniffing); adjust in `_clean_camelot_table` and `normalize_row_tokens` if tables shift.
+- Data directories are configured via resources: `data_dir_source`, `data_dir_report_pdfs`, `data_dir_processed`, `data_dir_out` (see `definitions.py`).
+
+## Data checks (csv-driven queue)
+- `data_checks/row_sanity_checks.csv` drives dynamic row-level asset checks. Each row becomes a check against `combine_all_reports`, matching on `slug`, `Department`, and `year`, then asserting provided numeric/metadata fields. Blank cells mean “don’t check / allow missing.”
+- Add more checks by appending rows to that CSV; columns are coerced to numbers where applicable, with slight field renames (`section`→`Measurement`, etc. in `asset_checks.py`).
+- Other checks in `asset_checks.py`: schema columns match, no duplicate `Department`+`slug`+`year`, and numeric columns parse.
+
+## Dev runs
+- Default dev workflow typically materializes everything, but you can select subsets in Dagster (e.g., a single `download_reports` output or one `extract_pdf_data_<year>` asset) and tune `VSR_PAGE_CHUNK_SIZE` to process smaller page chunks.
+- `download_reports` honors `context.selected_output_names` to choose specific years even though `YEAR_URLS` is hard-coded; use asset selection in Dagster UI/CLI to leverage this.
+- You can override PDF inputs by pointing the `data_dir_report_pdfs` resource at a directory containing example PDFs (e.g., a trimmed 2023 sample) instead of downloading from `YEAR_URLS`.
+- Bundled sample: `data/src/examples/VSRreport2023.pdf` (pages 1694–1745). Run with `run_configs/example_2023_sample.yaml` and `--select extract_pdf_data_2023` to stay on the sample.
+
+## Open questions for the human
+- Should we document or check in sample/example PDFs for quick regression runs, or always hit the live AGO URLs?
+- Is there a preferred minimal asset selection to run during development (e.g., a single year) and a standard run config we should default to in commands?
+- Any additional external resources (Airtable/Drive) we expect to wire in soon that should be captured here?

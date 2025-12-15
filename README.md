@@ -32,11 +32,21 @@ uv sync
 
 ### Environment variables 
 
-The project relies on environment variables for Airtable, Google Drive, and S3 configurations. Create a `.env` file in the project root with the following keys and your values:
+The project relies on environment variables for Airtable, Google Drive, and S3 configurations. Create a `.env` file in the project root (it’s gitignored) with your values; Dagster loads it on startup. Typical entries:
 
 ```ini
-MISSOURI_VSR_BUCKET_NAME=<your-s3-bucket>
+AWS_ACCESS_KEY_ID=<your-access-key-id>
+AWS_SECRET_ACCESS_KEY=<your-secret-key>
+AWS_DEFAULT_REGION=us-east-1
+MISSOURI_VSR_BUCKET_NAME=<shared-s3-bucket>
+MISSOURI_VSR_S3_PREFIX=missouri-vsr/shared/
 ```
+
+`AWS_*` are the standard boto3 variables. `MISSOURI_VSR_BUCKET_NAME` and `MISSOURI_VSR_S3_PREFIX` tell the Dagster S3 resource which bucket to write to and what “directory” (key prefix) to place outputs under; the resource will pick these up automatically from the environment. You can also load `run_configs/s3_shared_bucket.yaml` in the Dagster UI/CLI to apply the bucket/prefix when materializing assets.
+
+If you see an error like “The authorization mechanism you have provided is not supported. Please use AWS4-HMAC-SHA256,” ensure `AWS_DEFAULT_REGION` (or `AWS_REGION`) is set to the bucket’s region; the S3 client is forced to use SigV4.
+
+Presigned URLs default to 45 days; override via `presigned_expiration` in the S3 resource config (see `run_configs/s3_shared_bucket.yaml`).
 
 If you work at The Marshall Project, these credentials can be found in the data team folder of TMP's 1password instance.
 
@@ -66,3 +76,10 @@ uv run dagster asset materialize --select ASSET_NAME -m missouri_vsr.definitions
 
 Dagster caches materialized assets, but they don't persist between runs of the web UI or CLI tool unless you set the `DAGSTER_HOME` environment variable in your global environment or `.env` file. See the [Dagster docs](https://docs.dagster.io/guides/deploy/dagster-instance-configuration#default-local-behavior) page on local behavior for more information.
 
+### Quick sample run (2023 slice)
+
+- A 50-page slice of the 2023 VSR (pages 1694–1745) lives at `data/src/examples/VSRreport2023.pdf`.
+- Use `run_configs/example_2023_sample.yaml` to point `data_dir_report_pdfs` at that examples directory and keep outputs local.
+- Materialize just the 2023 extract with:  
+  `uv run dagster asset materialize --select extract_pdf_data_2023 -m missouri_vsr.definitions -c run_configs/example_2023_sample.yaml`
+- `download_reports` will reuse the bundled PDF in `data/src/examples` and skip downloading.

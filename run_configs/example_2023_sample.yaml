@@ -1,0 +1,16 @@
+# Use the bundled 50-page slice of the 2023 VSR (pages 1694–1745) from data/src/examples.
+# Materialize with:
+# uv run dagster asset materialize --select extract_pdf_data_2023 -m missouri_vsr.definitions -c run_configs/example_2023_sample.yaml
+resources:
+  data_dir_report_pdfs:
+    config:
+      path: data/src/examples
+  data_dir_processed:
+    config:
+      path: data/processed
+  data_dir_out:
+    config:
+      path: data/out
+  data_dir_source:
+    config:
+      path: data/src
