@@ -42,6 +42,13 @@ Quick reference for future coding agents working on this Dagster pipeline that p
 - You can override PDF inputs by pointing the `data_dir_report_pdfs` resource at a directory containing example PDFs (e.g., a trimmed 2023 sample) instead of downloading from `YEAR_URLS`.
 - Bundled sample: `data/src/examples/VSRreport2023.pdf` (pages 1694–1745). Run with `run_configs/example_2023_sample.yaml` and `--select extract_pdf_data_2023` to stay on the sample.
 
+## Agency crosswalk CLI
+- Script: `python -m missouri_vsr.cli_crosswalk` (run via `uv run …`).
+- Defaults: reads agency metadata from `data/processed/agency_list.parquet` (or Excel fallback), VSR candidates from `data/processed/all_combined_output.parquet`, writes `data/src/agency_crosswalk.csv`, and optional merged join to `data/processed/agency_reference.parquet`.
+- Auto-picks a name column unless `--name-col` is set; uses fuzzy suggestions from VSR “Department” values. Auto-accepts exact normalized matches.
+- Interactive controls: pick a suggestion, `m` for more, `b` back, `s` skip, `q` save/quit. Progress autosaves crosswalk + `.state.json` for resume.
+- Crosswalk is still evolving; current spreadsheet columns are in flux—don’t overfit.
+
 ## Open questions for the human
 - Should we document or check in sample/example PDFs for quick regression runs, or always hit the live AGO URLs?
 - Is there a preferred minimal asset selection to run during development (e.g., a single year) and a standard run config we should default to in commands?

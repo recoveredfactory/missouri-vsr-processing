@@ -83,3 +83,26 @@ Dagster caches materialized assets, but they don't persist between runs of the w
 - Materialize just the 2023 extract with:  
   `uv run dagster asset materialize --select extract_pdf_data_2023 -m missouri_vsr.definitions -c run_configs/example_2023_sample.yaml`
 - `download_reports` will reuse the bundled PDF in `data/src/examples` and skip downloading.
+
+## Agency crosswalk CLI
+
+Interactive helper to map agency names from the metadata spreadsheet to canonical “Department” values seen in the VSR output.
+
+Prereqs: have `data/processed/all_combined_output.parquet` (run `combine_all_reports`) and the agency metadata (`data/src/2025-05-05-post-law-enforcement-agencies-list.xlsx` or the Parquet it produces).
+
+Run (defaults shown):
+
+```sh
+uv run python -m missouri_vsr.cli_crosswalk \
+  --source-parquet data/processed/agency_list.parquet \
+  --source-excel data/src/2025-05-05-post-law-enforcement-agencies-list.xlsx \
+  --vsr-parquet data/processed/all_combined_output.parquet \
+  --crosswalk data/src/agency_crosswalk.csv \
+  --merge-output data/processed/agency_reference.parquet
+```
+
+Behavior highlights:
+- Picks a name column automatically (agency/department/name) unless `--name-col` is provided.
+- Suggests candidate Departments (from combined VSR output) using fuzzy matching; accept, skip, back, or page for more.
+- Auto-fills exact normalized matches; writes progress on every decision to `agency_crosswalk.csv` and resume state to `.state.json`.
+- Optional merged output (`agency_reference.parquet`) joins the agency metadata with the crosswalk for downstream joins.
