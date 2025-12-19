@@ -103,6 +103,6 @@ uv run python -m missouri_vsr.cli_crosswalk \
 
 Behavior highlights:
 - Picks a name column automatically (agency/department/name) unless `--name-col` is provided.
-- Suggests candidate Departments (from combined VSR output) using fuzzy matching; accept, skip, back, or page for more.
-- Auto-fills exact normalized matches; writes progress on every decision to `agency_crosswalk.csv` and resume state to `.state.json`.
+- Suggests candidate Departments (from combined VSR output) using fuzzy matching; accept, mark “not in VSR” (`n`), skip for later (`s`), back, or page for more.
+- Auto-fills exact normalized matches; writes progress on every decision to `agency_crosswalk.csv` and resume state to `agency_crosswalk.state.json` (same directory).
 - Optional merged output (`agency_reference.parquet`) joins the agency metadata with the crosswalk for downstream joins.

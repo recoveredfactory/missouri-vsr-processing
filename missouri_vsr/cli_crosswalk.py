@@ -5,6 +5,7 @@ import csv
 import logging
 import re
 import unicodedata
+import json
 from pathlib import Path
 from typing import Iterable, List, Tuple
 
@@ -256,9 +257,10 @@ def main(argv: list[str] | None = None) -> int:
             if not to_show:
                 print("  [no more suggestions]")
                 print("  b. back (previous)")
-                print("  s. skip (leave blank)")
+                print("  n. not in VSR (mark blank)")
+                print("  s. skip for later (unresolved)")
                 print("  q. save & quit")
-                choice = input("Select b / s / q: ").strip().lower()
+                choice = input("Select b / n / s / q: ").strip().lower()
                 if choice == "q":
                     out = pd.DataFrame(out_rows)
                     _write_crosswalk(out.sort_values("Normalized"), args.crosswalk, log)
@@ -275,8 +277,8 @@ def main(argv: list[str] | None = None) -> int:
                         break
                     else:
                         continue
-                if choice == "s" or choice == "":
-                    # Skip means "mark as done"; record empty Canonical to avoid re-prompting next run
+                if choice == "n":
+                    # Mark as not in VSR – resolved with blank canonical
                     canonical = ""
                     out_rows.append({"Normalized": norm, "Raw": raw, "Canonical": canonical})
                     _write_crosswalk(pd.DataFrame(out_rows).sort_values("Normalized"), args.crosswalk, log)
@@ -287,14 +289,19 @@ def main(argv: list[str] | None = None) -> int:
                         pass
                     k += 1
                     break
+                if choice == "s" or choice == "":
+                    # Skip for later – leave unresolved in this session
+                    k += 1
+                    break
                 continue
             for i, (s, score) in enumerate(to_show, start=1):
                 print(f"  {i}. {s} ({score}) [norm: {_normalize_name(s)}]")
             print("  m. more suggestions")
             print("  b. back (previous)")
-            print("  s. skip (leave blank)")
+            print("  n. not in VSR (mark blank)")
+            print("  s. skip for later (unresolved)")
             print("  q. save & quit")
-            choice = input(f"Select [1-{len(to_show)}] / m / b / s / q: ").strip().lower()
+            choice = input(f"Select [1-{len(to_show)}] / m / b / n / s / q: ").strip().lower()
             if choice == "q":
                 # Save progress (resolved only) and write resume state
                 out = pd.DataFrame(out_rows)
@@ -323,7 +330,11 @@ def main(argv: list[str] | None = None) -> int:
                     print("No previous decision to go back to.")
                     continue
             if choice == "s" or choice == "":
-                # Skip → record empty Canonical so this row is considered resolved
+                # Skip for later – leave unresolved in this session
+                k += 1
+                break
+            if choice == "n":
+                # Mark as not in VSR – resolved with blank canonical
                 canonical = ""
             else:
                 try:

@@ -46,7 +46,7 @@ Quick reference for future coding agents working on this Dagster pipeline that p
 - Script: `python -m missouri_vsr.cli_crosswalk` (run via `uv run …`).
 - Defaults: reads agency metadata from `data/processed/agency_list.parquet` (or Excel fallback), VSR candidates from `data/processed/all_combined_output.parquet`, writes `data/src/agency_crosswalk.csv`, and optional merged join to `data/processed/agency_reference.parquet`.
 - Auto-picks a name column unless `--name-col` is set; uses fuzzy suggestions from VSR “Department” values. Auto-accepts exact normalized matches.
-- Interactive controls: pick a suggestion, `m` for more, `b` back, `s` skip, `q` save/quit. Progress autosaves crosswalk + `.state.json` for resume.
+- Interactive controls: pick a suggestion; `n` mark “not in VSR” (blank canonical); `s` skip for later (leave unresolved); `m` more; `b` back; `q` save/quit. Progress autosaves crosswalk + `.state.json` (same dir) for resume.
 - Crosswalk is still evolving; current spreadsheet columns are in flux—don’t overfit.
 
 ## Open questions for the human
