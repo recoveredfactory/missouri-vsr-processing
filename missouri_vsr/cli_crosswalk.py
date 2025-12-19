@@ -3,13 +3,24 @@ from __future__ import annotations
 import argparse
 import csv
 import logging
+import re
+import unicodedata
 from pathlib import Path
 from typing import Iterable, List, Tuple
 
 import pandas as pd
 from rapidfuzz import process, fuzz
 
-from .assets import _normalize_name
+
+def _normalize_name(text: str) -> str:
+    """Normalize agency names for comparison."""
+    if text is None:
+        return ""
+    # Basic ASCII-friendly normalization with a light synonym for "&".
+    t = unicodedata.normalize("NFKC", str(text))
+    t = t.replace("’", "'").replace("&", " and ")
+    t = re.sub(r"[^a-z0-9]+", " ", t.lower())
+    return " ".join(t.split())
 
 
 def _repo_root(start: Path | None = None) -> Path:
