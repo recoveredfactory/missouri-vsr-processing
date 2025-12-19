@@ -17,11 +17,24 @@ def _normalize_name(text: str) -> str:
     """Normalize agency names for comparison."""
     if text is None:
         return ""
-    # Basic ASCII-friendly normalization with a light synonym for "&".
+    # Basic ASCII-friendly normalization with light synonym handling.
     t = unicodedata.normalize("NFKC", str(text))
     t = t.replace("’", "'").replace("&", " and ")
-    t = re.sub(r"[^a-z0-9]+", " ", t.lower())
-    return " ".join(t.split())
+    # Remove possessive apostrophes without leaving stray spaces (Sheriff's -> Sheriffs).
+    t = re.sub(r"'s\b", "s", t, flags=re.IGNORECASE)
+    # Split on non-alphanumerics and map common synonyms.
+    synonym_map = {
+        "dept": "department",
+        "depts": "department",
+        "department": "department",
+        "office": "department",
+    }
+    tokens = []
+    for tok in re.split(r"[^a-z0-9]+", t.lower()):
+        if not tok:
+            continue
+        tokens.append(synonym_map.get(tok, tok))
+    return " ".join(tokens)
 
 
 def _repo_root(start: Path | None = None) -> Path:
