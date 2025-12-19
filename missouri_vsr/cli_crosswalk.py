@@ -194,6 +194,17 @@ def main(argv: list[str] | None = None) -> int:
             canonical = norm_map.get(r["Normalized"]) or r["Raw"]
             auto_rows.append({"Normalized": r["Normalized"], "Raw": r["Raw"], "Canonical": canonical})
         pending = pending[~auto_mask].copy()
+        # Log a brief sample of auto-matched pairs for clarity
+        sample_ct = min(5, len(auto_rows))
+        sample = [
+            {"raw": ar["Raw"], "canonical": ar["Canonical"]}
+            for ar in auto_rows[:sample_ct]
+        ]
+        log.info(
+            "Auto-matched %d rows on exact normalized names. Sample: %s",
+            len(auto_rows),
+            sample,
+        )
 
     out_rows = []
     # Preserve completed rows
@@ -206,7 +217,7 @@ def main(argv: list[str] | None = None) -> int:
     matched = len(out_rows)
     mapped = sum(1 for r in out_rows if (r.get("Canonical") not in (None, "")))
     skipped_ct = sum(1 for r in out_rows if (r.get("Canonical") == ""))
-    remaining = len(pending) - len(auto_rows)
+    remaining = len(pending)
     log.info("Progress: %d/%d resolved (mapped: %d, skipped: %d, remaining: %d)", matched, total, mapped, skipped_ct, remaining)
     # Interactive fill for remaining, with back/More support and autosave after each choice
     pend_df = pending.sort_values("Normalized").reset_index(drop=True)
