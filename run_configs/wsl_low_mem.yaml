@@ -1,0 +1,7 @@
+# Limits Dagster worker fan-out for PDF extraction (useful on WSL/low-RAM hosts).
+execution:
+  config:
+    multiprocess:
+      max_concurrent: 4  # raise to 2 if you have more headroom
+      start_method:
+        spawn: {}

@@ -14,3 +14,9 @@ resources:
   data_dir_source:
     config:
       path: data/src
+execution:
+  config:
+    multiprocess:
+      max_concurrent: 4
+      start_method:
+        spawn: {}

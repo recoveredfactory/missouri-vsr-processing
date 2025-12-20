@@ -1,0 +1,10 @@
+# Example run config for writing outputs to a shared S3 bucket/prefix.
+resources:
+  s3:
+    config:
+      bucket:
+        env: MISSOURI_VSR_BUCKET_NAME
+      # Folder within the bucket to collect all VSR outputs (e.g., missouri-vsr/shared/).
+      s3_prefix:
+        env: MISSOURI_VSR_S3_PREFIX
+      presigned_expiration: 3888000  # 45 days
