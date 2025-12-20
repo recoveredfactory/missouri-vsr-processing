@@ -13,6 +13,7 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
 from pathlib import Path
 from pyairtable import Api
+from botocore.config import Config
 
 
 class AirtableBaseResource(ConfigurableResource):
@@ -40,16 +41,40 @@ class S3Resource(ConfigurableResource):
       - s3_prefix: A key prefix that will be prepended to all uploaded files.
       - presigned_expiration: Expiration (in seconds) for generated pre-signed URLs.
       - temp_dir: (Optional) A temporary directory path; if not provided, the system temp directory is used.
+      - region: (Optional) AWS region; falls back to AWS_REGION or AWS_DEFAULT_REGION.
     """
     bucket: typing.Optional[str] = None
     s3_prefix: str = ""
-    presigned_expiration: int = 3600
+    # Default presigned URL expiration: 45 days.
+    presigned_expiration: int = 45 * 24 * 60 * 60
+    region: typing.Optional[str] = None
     temp_dir: str = None
 
     def __post_init__(self):
         # Avoid persisting boto3 clients on the resource instance (pydantic models are frozen).
         if self.temp_dir is None:
             self.temp_dir = tempfile.gettempdir()
+
+    def resolved_bucket(self) -> typing.Optional[str]:
+        """Bucket from config or env."""
+        return self.bucket or os.getenv("MISSOURI_VSR_BUCKET_NAME") or os.getenv("AWS_S3_BUCKET")
+
+    def resolved_prefix(self) -> str:
+        """Prefix from config or env (no leading/trailing slash)."""
+        prefix = self.s3_prefix or os.getenv("MISSOURI_VSR_S3_PREFIX") or ""
+        return prefix.strip("/")
+
+    def resolved_region(self) -> typing.Optional[str]:
+        """Region from config or env."""
+        return self.region or os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION")
+
+    def client(self):
+        """S3 client with signature v4 and optional region."""
+        cfg = Config(signature_version="s3v4")
+        region = self.resolved_region()
+        if region:
+            return boto3.client("s3", region_name=region, config=cfg)
+        return boto3.client("s3", config=cfg)
 
     def obfuscate_filename(self, filename: str) -> str:
         """Append a short unique identifier to the filename."""
@@ -63,6 +88,11 @@ class S3Resource(ConfigurableResource):
         If the file is text-based (ends with .json, .csv, or .txt), it is compressed with gzip before uploading.
         Returns a pre-signed URL for the uploaded file.
         """
+        bucket = self.resolved_bucket()
+        if not bucket:
+            print("S3 bucket not configured; skipping upload.")
+            return None
+
         try:
             is_text = local_path.endswith((".json", ".csv", ".txt"))
             if is_text:
@@ -82,13 +112,13 @@ class S3Resource(ConfigurableResource):
                 })
 
             # Create a client per call to avoid frozen-instance mutation
-            s3 = boto3.client("s3")
+            s3 = self.client()
             # Upload the file to S3
-            s3.upload_file(tmp_path, self.bucket, s3_key, ExtraArgs=extra_args)
+            s3.upload_file(tmp_path, bucket, s3_key, ExtraArgs=extra_args)
             # Generate a pre-signed URL
             presigned_url = s3.generate_presigned_url(
                 "get_object",
-                Params={"Bucket": self.bucket, "Key": s3_key},
+                Params={"Bucket": bucket, "Key": s3_key},
                 ExpiresIn=self.presigned_expiration
             )
             return presigned_url
