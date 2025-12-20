@@ -18,6 +18,7 @@ dependencies = [
     "pypdf2>=3.0.1",
     "openpyxl>=3.1.5",
     "pyarrow>=16.0.0",
+    "rapidfuzz>=3.14.3",
 ]
 
 [project.scripts]
@@ -39,3 +40,8 @@ include = ["missouri_vsr"]
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]
