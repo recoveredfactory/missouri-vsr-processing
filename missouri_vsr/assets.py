@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import unicodedata
 from pathlib import Path
@@ -87,7 +88,20 @@ def download_reports(context):
 # ------------------------------------------------------------------------------
 # PDF parsing helpers
 # ------------------------------------------------------------------------------
-PAGE_CHUNK_SIZE = 5  # tune as needed
+
+def _env_positive_int(name: str, default: int) -> int:
+    """Parse a positive int from env var *name*, falling back to *default*."""
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        val = int(raw)
+        return val if val > 0 else default
+    except ValueError:
+        return default
+
+
+PAGE_CHUNK_SIZE = _env_positive_int("VSR_PAGE_CHUNK_SIZE", 5)  # tune as needed
 
 FINAL_COLUMNS = [
     "Key",
@@ -449,37 +463,52 @@ def combine_reports(context, **extracted_reports: dict[str, pd.DataFrame]) -> pd
     try:
         s3_res = getattr(context.resources, "s3", None)
         if s3_res is not None:
-            context.log.info("S3 configured; uploading combined Parquet…")
-            bucket = getattr(s3_res, "bucket", None)
-            s3_prefix = getattr(s3_res, "s3_prefix", "") or ""
-            prefix_clean = s3_prefix.strip("/")
+            # Resolve bucket/prefix from resource config or env.
+            resolver_bucket = getattr(s3_res, "resolved_bucket", None)
+            bucket = resolver_bucket() if callable(resolver_bucket) else getattr(s3_res, "bucket", None)
+            if not bucket:
+                bucket = os.getenv("MISSOURI_VSR_BUCKET_NAME") or os.getenv("AWS_S3_BUCKET")
+            s3_prefix = getattr(s3_res, "resolved_prefix", None)
+            prefix_clean = s3_prefix() if callable(s3_prefix) else (getattr(s3_res, "s3_prefix", "") or "").strip("/")
+
+            if not bucket:
+                context.log.warning("S3 resource present but no bucket configured (env MISSOURI_VSR_BUCKET_NAME/AWS_S3_BUCKET). Skipping upload.")
+                meta["s3_upload_error"] = "Missing bucket configuration."
+                context.add_output_metadata(meta)
+                return combined
+
+            context.log.info("S3 configured; uploading combined Parquet… [bucket=%s, prefix=%s]", bucket, prefix_clean)
             key_prefix = f"{prefix_clean}/" if prefix_clean else ""
             key = f"{key_prefix}combined/all_combined_output.parquet"
-            if not bucket:
-                context.log.debug("S3 resource present but no bucket configured; skipping upload")
+            import boto3
+            from botocore.config import Config
+            cfg = Config(signature_version="s3v4")
+            region = getattr(s3_res, "resolved_region", lambda: None)()
+            if region:
+                client = boto3.client("s3", region_name=region, config=cfg)
             else:
-                import boto3
-                client = boto3.client("s3")
-                try:
-                    client.upload_file(str(out_file), bucket, key, ExtraArgs={"ContentType": "application/vnd.apache.parquet"})
-                except Exception as e:
-                    context.log.exception("S3 upload failed for combined Parquet: %s", e)
-                    meta["s3_upload_error"] = str(e)
-                uri = f"s3://{bucket}/{key}"
-                meta["s3_uri"] = uri
-                try:
-                    expires = int(getattr(s3_res, "presigned_expiration", 86400))
-                    presigned = client.generate_presigned_url(
-                        ClientMethod="get_object",
-                        Params={"Bucket": bucket, "Key": key},
-                        ExpiresIn=expires,
-                    )
-                    meta["presigned_url"] = presigned
-                    context.log.info("Generated presigned URL for combined Parquet")
-                except Exception as e:
-                    context.log.exception("Presign failed for combined Parquet: %s", e)
-                    meta["s3_presign_error"] = str(e)
-                context.log.info("Combined Parquet available at %s", uri)
+                client = boto3.client("s3", config=cfg)
+            try:
+                client.upload_file(str(out_file), bucket, key, ExtraArgs={"ContentType": "application/vnd.apache.parquet"})
+            except Exception as e:
+                context.log.exception("S3 upload failed for combined Parquet: %s", e)
+                meta["s3_upload_error"] = str(e)
+            uri = f"s3://{bucket}/{key}"
+            meta["s3_uri"] = uri
+            try:
+                # Default to 45 days if not configured.
+                expires = int(getattr(s3_res, "presigned_expiration", 45 * 24 * 60 * 60))
+                presigned = client.generate_presigned_url(
+                    ClientMethod="get_object",
+                    Params={"Bucket": bucket, "Key": key},
+                    ExpiresIn=expires,
+                )
+                meta["presigned_url"] = presigned
+                context.log.info("Generated presigned URL for combined Parquet")
+            except Exception as e:
+                context.log.exception("Presign failed for combined Parquet: %s", e)
+                meta["s3_presign_error"] = str(e)
+            context.log.info("Combined Parquet available at %s", uri)
         else:
             context.log.debug("No S3 resource configured; skipping S3 upload for combined Parquet")
     except Exception as e:
@@ -507,6 +536,164 @@ def combine_all_reports(**extracted_reports: pd.DataFrame) -> pd.DataFrame:
 # ------------------------------------------------------------------------------
 # Pivoted outputs & per-agency JSON exports
 # ------------------------------------------------------------------------------
+MSHP_DEPARTMENT_NAME = "Missouri State Highway Patrol"
+
+
+def _build_rank_percentile_frame(
+    base: pd.DataFrame,
+    metric_df: pd.DataFrame,
+    value_cols: List[str],
+    suffix: str,
+) -> pd.DataFrame:
+    frame = base[["Department", "year", "slug"]].copy()
+    frame["slug"] = frame["slug"].astype(str) + suffix
+    for col in value_cols:
+        frame[col] = metric_df[col]
+    for col in base.columns:
+        if col not in frame.columns:
+            frame[col] = pd.NA
+    return frame[base.columns]
+
+
+def _rank_and_percentile(
+    base: pd.DataFrame,
+    value_cols: List[str],
+    *,
+    exclude_mask: pd.Series | None = None,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    if exclude_mask is not None:
+        working = base.loc[~exclude_mask]
+    else:
+        working = base
+
+    if working.empty:
+        blank = pd.DataFrame(index=base.index, columns=value_cols, dtype="float")
+        return blank.copy(), blank.copy()
+
+    grouped = working.groupby(["year", "slug"])[value_cols]
+    rank_df = grouped.rank(method="dense", ascending=False)
+    percentile_df = grouped.rank(method="max", ascending=True, pct=True) * 100
+
+    if exclude_mask is None:
+        return rank_df, percentile_df
+
+    rank_full = pd.DataFrame(index=base.index, columns=value_cols, dtype="float")
+    percentile_full = pd.DataFrame(index=base.index, columns=value_cols, dtype="float")
+    rank_full.loc[working.index, :] = rank_df
+    percentile_full.loc[working.index, :] = percentile_df
+    return rank_full, percentile_full
+
+
+@op(out=Out(pd.DataFrame))
+def add_rank_percentile_rows(context, combined: pd.DataFrame) -> pd.DataFrame:
+    """Add rank/percentile rows per slug/year across agencies (with and without MSHP)."""
+    if combined.empty:
+        context.log.warning("Combined report DataFrame is empty; skipping rank/percentile.")
+        return combined
+
+    required_cols = {"Department", "year", "slug"}
+    missing = required_cols - set(combined.columns)
+    if missing:
+        raise ValueError(f"Cannot add ranks/percentiles – missing columns: {sorted(missing)}")
+
+    value_cols = [c for c in PIVOT_VALUE_COLUMNS if c in combined.columns]
+    if not value_cols:
+        raise ValueError("Cannot add ranks/percentiles – no numeric value columns were found.")
+
+    base = combined.copy()
+    dept_series = base["Department"].astype(str).str.strip()
+    mshp_mask = dept_series.eq(MSHP_DEPARTMENT_NAME)
+
+    rank_all, percentile_all = _rank_and_percentile(base, value_cols)
+    rank_no_mshp, percentile_no_mshp = _rank_and_percentile(base, value_cols, exclude_mask=mshp_mask)
+
+    derived = [
+        _build_rank_percentile_frame(base, rank_all, value_cols, "-rank"),
+        _build_rank_percentile_frame(base, percentile_all, value_cols, "-percentile"),
+        _build_rank_percentile_frame(base, rank_no_mshp, value_cols, "-rank-no-mshp"),
+        _build_rank_percentile_frame(base, percentile_no_mshp, value_cols, "-percentile-no-mshp"),
+    ]
+    augmented = pd.concat([base, *derived], ignore_index=True)
+    context.log.info(
+        "Added rank/percentile rows: %d base rows → %d total rows",
+        len(base),
+        len(augmented),
+    )
+    return augmented
+
+
+@graph_asset(
+    name="reports_with_rank_percentile",
+    group_name="vsr_processed",
+    ins={"combine_all_reports": AssetIn(key=AssetKey("combine_all_reports"))},
+    description="Add rank/percentile rows per slug/year across agencies.",
+)
+def reports_with_rank_percentile(combine_all_reports: pd.DataFrame) -> pd.DataFrame:
+    return add_rank_percentile_rows(combine_all_reports)
+
+
+@op(out=Out(pd.DataFrame), required_resource_keys={"data_dir_processed"})
+def compute_statewide_slug_baselines(context, combined: pd.DataFrame) -> pd.DataFrame:
+    """Compute statewide mean/median baselines per year/slug/metric."""
+    if combined.empty:
+        context.log.warning("Combined report DataFrame is empty; no baselines computed.")
+        return pd.DataFrame(columns=["year", "slug", "metric", "scope", "count", "mean", "median"])
+
+    required_cols = {"Department", "year", "slug"}
+    missing = required_cols - set(combined.columns)
+    if missing:
+        raise ValueError(f"Cannot compute baselines – missing columns: {sorted(missing)}")
+
+    value_cols = [c for c in PIVOT_VALUE_COLUMNS if c in combined.columns]
+    if not value_cols:
+        raise ValueError("Cannot compute baselines – no numeric value columns were found.")
+
+    base = combined[["Department", "year", "slug", *value_cols]].copy()
+    base["Department"] = base["Department"].astype(str).str.strip()
+
+    def _build_baseline(df: pd.DataFrame, scope: str) -> pd.DataFrame:
+        melted = df.melt(
+            id_vars=["year", "slug"],
+            value_vars=value_cols,
+            var_name="metric",
+            value_name="value",
+        )
+        melted = melted.dropna(subset=["value"])
+        if melted.empty:
+            return pd.DataFrame(columns=["year", "slug", "metric", "count", "mean", "median", "scope"])
+        grouped = (
+            melted.groupby(["year", "slug", "metric"])["value"]
+            .agg(count="count", mean="mean", median="median")
+            .reset_index()
+        )
+        grouped["scope"] = scope
+        return grouped
+
+    all_baselines = _build_baseline(base, "all")
+    no_mshp_baselines = _build_baseline(base.loc[base["Department"].ne(MSHP_DEPARTMENT_NAME)], "no_mshp")
+    baselines = pd.concat([all_baselines, no_mshp_baselines], ignore_index=True)
+
+    out_dir = Path(context.resources.data_dir_processed.get_path())
+    out_path = out_dir / "statewide_slug_baselines.parquet"
+    baselines.to_parquet(out_path, index=False, engine="pyarrow")
+    context.log.info("Wrote statewide baselines Parquet → %s (%d rows)", out_path, len(baselines))
+    try:
+        context.add_output_metadata({"local_path": str(out_path), "row_count": len(baselines)})
+    except Exception:
+        pass
+    return baselines
+
+
+@graph_asset(
+    name="statewide_slug_baselines",
+    group_name="vsr_processed",
+    ins={"combine_all_reports": AssetIn(key=AssetKey("combine_all_reports"))},
+    description="Compute statewide mean/median baselines per year/slug/metric.",
+)
+def statewide_slug_baselines(combine_all_reports: pd.DataFrame) -> pd.DataFrame:
+    return compute_statewide_slug_baselines(combine_all_reports)
+
+
 @op(out=Out(pd.DataFrame))
 def pivot_reports_by_slug_op(context, combined: pd.DataFrame) -> pd.DataFrame:
     """Pivot combined report data so each Agency+Year row contains slug-based columns."""
@@ -566,14 +753,50 @@ def pivot_reports_by_slug_op(context, combined: pd.DataFrame) -> pd.DataFrame:
 @graph_asset(
     name="pivot_reports_by_slug",
     group_name="vsr_processed",
-    ins={"combine_all_reports": AssetIn(key=AssetKey("combine_all_reports"))},
+    ins={"reports_with_rank_percentile": AssetIn(key=AssetKey("reports_with_rank_percentile"))},
     description="Pivot combined report data so each agency/year row has slug-derived columns.",
 )
-def pivot_reports_by_slug(combine_all_reports: pd.DataFrame) -> pd.DataFrame:
-    return pivot_reports_by_slug_op(combine_all_reports)
+def pivot_reports_by_slug(reports_with_rank_percentile: pd.DataFrame) -> pd.DataFrame:
+    return pivot_reports_by_slug_op(reports_with_rank_percentile)
 
 
-@op(out=Out(list), required_resource_keys={"data_dir_out"})
+def _is_null(value) -> bool:
+    try:
+        result = pd.isna(value)
+    except Exception:
+        return False
+    if isinstance(result, bool):
+        return result
+    try:
+        return bool(result)
+    except Exception:
+        return False
+
+
+def _json_safe_value(value):
+    if _is_null(value):
+        return None
+    if isinstance(value, pd.Timestamp):
+        return value.isoformat()
+    item = getattr(value, "item", None)
+    if callable(item):
+        try:
+            return item()
+        except Exception:
+            pass
+    return value
+
+
+def _series_to_json_dict(series: pd.Series) -> dict:
+    data = {}
+    for col, value in series.items():
+        if _is_null(value):
+            continue
+        data[col] = _json_safe_value(value)
+    return data
+
+
+@op(out=Out(list), required_resource_keys={"data_dir_out", "data_dir_processed"})
 def write_agency_year_json(context, pivoted: pd.DataFrame) -> List[str]:
     """Write one JSON file per agency containing rows for each year."""
     if pivoted.empty:
@@ -582,6 +805,52 @@ def write_agency_year_json(context, pivoted: pd.DataFrame) -> List[str]:
 
     out_root = Path(context.resources.data_dir_out.get_path()) / "agency_year"
     out_root.mkdir(parents=True, exist_ok=True)
+
+    agency_meta_lookup: dict[str, pd.Series] = {}
+    reference_path = Path(context.resources.data_dir_processed.get_path()) / "agency_reference.parquet"
+    if reference_path.exists():
+        try:
+            reference_df = pd.read_parquet(reference_path)
+            join_col = next(
+                (c for c in ["Canonical", "Department", "Agency", "Name"] if c in reference_df.columns),
+                None,
+            )
+            if not join_col:
+                context.log.warning(
+                    "agency_reference.parquet missing expected join column (Canonical/Department/Agency/Name); skipping metadata"
+                )
+            else:
+                reference_df = reference_df.copy()
+                reference_df = reference_df[pd.notna(reference_df[join_col])]
+                reference_df[join_col] = reference_df[join_col].astype(str).str.strip()
+                reference_df = reference_df[reference_df[join_col].ne("")]
+                dup_mask = reference_df.duplicated(subset=[join_col], keep=False)
+                if dup_mask.any():
+                    dupe_sample = (
+                        reference_df.loc[dup_mask, join_col]
+                        .drop_duplicates()
+                        .head(5)
+                        .tolist()
+                    )
+                    context.log.warning(
+                        "agency_reference has duplicate %s values; keeping first. Sample: %s",
+                        join_col,
+                        dupe_sample,
+                    )
+                reference_df = reference_df.drop_duplicates(subset=[join_col], keep="first")
+                agency_meta_lookup = {
+                    str(key): row
+                    for key, row in reference_df.set_index(join_col).iterrows()
+                }
+                context.log.info(
+                    "Loaded agency reference metadata for %d agencies from %s",
+                    len(agency_meta_lookup),
+                    reference_path,
+                )
+        except Exception as e:
+            context.log.exception("Failed to load agency reference metadata: %s", e)
+    else:
+        context.log.info("agency_reference.parquet not found at %s; skipping metadata", reference_path)
 
     output_paths: List[str] = []
     for department, group in pivoted.groupby("Department"):
@@ -612,6 +881,9 @@ def write_agency_year_json(context, pivoted: pd.DataFrame) -> List[str]:
             agency_slug = "agency"
         out_path = out_root / f"{agency_slug}.json"
         payload = {"agency": department, "rows": records}
+        meta_row = agency_meta_lookup.get(str(department).strip())
+        if meta_row is not None:
+            payload["agency_metadata"] = _series_to_json_dict(meta_row)
         out_path.write_text(json.dumps(payload, indent=2))
         output_paths.append(str(out_path))
         context.log.info("Wrote %d year rows for %s → %s", len(records), department, out_path)
