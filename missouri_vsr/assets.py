@@ -43,7 +43,7 @@ YEAR_URLS: Dict[int, str] = {
 # ------------------------------------------------------------------------------
 @multi_asset(
     outs={str(year): AssetOut(metadata={"url": url}) for year, url in YEAR_URLS.items()},
-    group_name="vsr_reports",
+    group_name="reports",
     can_subset=True,
     required_resource_keys={"data_dir_report_pdfs"},
     description="Download VSR PDFs for every configured year.",
@@ -101,7 +101,16 @@ def _env_positive_int(name: str, default: int) -> int:
         return default
 
 
-PAGE_CHUNK_SIZE = _env_positive_int("VSR_PAGE_CHUNK_SIZE", 5)  # tune as needed
+def _env_csv(name: str, default: List[str]) -> List[str]:
+    """Parse a comma-separated env var into a list."""
+    raw = os.getenv(name)
+    if not raw:
+        return default
+    items = [item.strip() for item in raw.split(",") if item.strip()]
+    return items or default
+
+
+PAGE_CHUNK_SIZE = _env_positive_int("PAGE_CHUNK_SIZE", 5)  # tune as needed
 
 FINAL_COLUMNS = [
     "Key",
@@ -118,6 +127,24 @@ FINAL_COLUMNS = [
 ]
 NUMERIC_COLS = FINAL_COLUMNS[1:8]
 PIVOT_VALUE_COLUMNS = NUMERIC_COLS
+
+GEOCODIO_FIELDS = _env_csv(
+    "GEOCODIO_FIELDS",
+    [
+        "cd",
+        "stateleg",
+        "stateleg-next",
+        "census2024",
+        "census2023",
+        "census2022",
+        "census2021",
+        "census2020",
+        "acs-demographics",
+        "acs-economics",
+        "acs-social",
+        "ffiec",
+    ],
+)
 
 TABLE_SLUG_LOOKUP = {
     "Rates by Race": "rates",
@@ -420,7 +447,7 @@ def concat_and_write_parquet(context, chunks: List[pd.DataFrame], pdf_path: str)
 def make_extract_asset(year: int):
     @graph_asset(
         name=f"extract_pdf_data_{year}",
-        group_name="vsr_extract",
+        group_name="extract",
         ins={"pdf_path": AssetIn(key=AssetKey(str(year)))},
         description=f"Extract tabular data from the {year} VSR (parallelised per page range).",
     )
@@ -467,12 +494,12 @@ def combine_reports(context, **extracted_reports: dict[str, pd.DataFrame]) -> pd
             resolver_bucket = getattr(s3_res, "resolved_bucket", None)
             bucket = resolver_bucket() if callable(resolver_bucket) else getattr(s3_res, "bucket", None)
             if not bucket:
-                bucket = os.getenv("MISSOURI_VSR_BUCKET_NAME") or os.getenv("AWS_S3_BUCKET")
+                bucket = os.getenv("MISSOURI_BUCKET_NAME") or os.getenv("AWS_S3_BUCKET")
             s3_prefix = getattr(s3_res, "resolved_prefix", None)
             prefix_clean = s3_prefix() if callable(s3_prefix) else (getattr(s3_res, "s3_prefix", "") or "").strip("/")
 
             if not bucket:
-                context.log.warning("S3 resource present but no bucket configured (env MISSOURI_VSR_BUCKET_NAME/AWS_S3_BUCKET). Skipping upload.")
+                context.log.warning("S3 resource present but no bucket configured (env MISSOURI_BUCKET_NAME/AWS_S3_BUCKET). Skipping upload.")
                 meta["s3_upload_error"] = "Missing bucket configuration."
                 context.add_output_metadata(meta)
                 return combined
@@ -523,7 +550,7 @@ def combine_reports(context, **extracted_reports: dict[str, pd.DataFrame]) -> pd
 
 @graph_asset(
     name="combine_all_reports",
-    group_name="vsr_processed",
+    group_name="processed",
     ins={
         f"extract_pdf_data_{year}": AssetIn(key=AssetKey(f"extract_pdf_data_{year}"))
         for year in YEAR_URLS
@@ -624,7 +651,7 @@ def add_rank_percentile_rows(context, combined: pd.DataFrame) -> pd.DataFrame:
 
 @graph_asset(
     name="reports_with_rank_percentile",
-    group_name="vsr_processed",
+    group_name="processed",
     ins={"combine_all_reports": AssetIn(key=AssetKey("combine_all_reports"))},
     description="Add rank/percentile rows per slug/year across agencies.",
 )
@@ -686,7 +713,7 @@ def compute_statewide_slug_baselines(context, combined: pd.DataFrame) -> pd.Data
 
 @graph_asset(
     name="statewide_slug_baselines",
-    group_name="vsr_processed",
+    group_name="processed",
     ins={"combine_all_reports": AssetIn(key=AssetKey("combine_all_reports"))},
     description="Compute statewide mean/median baselines per year/slug/metric.",
 )
@@ -752,7 +779,7 @@ def pivot_reports_by_slug_op(context, combined: pd.DataFrame) -> pd.DataFrame:
 
 @graph_asset(
     name="pivot_reports_by_slug",
-    group_name="vsr_processed",
+    group_name="processed",
     ins={"reports_with_rank_percentile": AssetIn(key=AssetKey("reports_with_rank_percentile"))},
     description="Pivot combined report data so each agency/year row has slug-derived columns.",
 )
@@ -893,7 +920,7 @@ def write_agency_year_json(context, pivoted: pd.DataFrame) -> List[str]:
 
 @graph_asset(
     name="agency_year_json_exports",
-    group_name="vsr_processed",
+    group_name="processed",
     ins={"pivot_reports_by_slug": AssetIn(key=AssetKey("pivot_reports_by_slug"))},
     description="Generate per-agency JSON files containing year-by-year slug data.",
 )
@@ -927,6 +954,275 @@ def load_agency_list(context) -> pd.DataFrame:
         pass
     return df
 
-@graph_asset(name="agency_list", group_name="vsr_reference")
+@graph_asset(name="agency_list", group_name="agency_reference")
 def agency_list_asset() -> pd.DataFrame:
     return load_agency_list()
+
+# ------------------------------------------------------------------------------
+# Agency list geocoding (Geocodio)
+# ------------------------------------------------------------------------------
+def _clean_geocodio_zip(value) -> str:
+    if pd.isna(value):
+        return ""
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return f"{int(value):05d}"
+    text = str(value).strip()
+    if not text:
+        return ""
+    digits = "".join(ch for ch in text if ch.isdigit())
+    if not digits:
+        return ""
+    return digits.zfill(5)[:5]
+
+
+def _clean_geocodio_text(value) -> str:
+    if pd.isna(value):
+        return ""
+    text = str(value).strip()
+    if not text or text.lower() == "nan":
+        return ""
+    return text
+
+
+def _build_geocodio_query(row: pd.Series) -> str:
+    line1 = _clean_geocodio_text(row.get("AddressLine1", ""))
+    line2 = _clean_geocodio_text(row.get("AddressLine2", ""))
+    city = _clean_geocodio_text(row.get("AddressCity", ""))
+    zip_code = _clean_geocodio_zip(row.get("AddressZip", ""))
+
+    street_parts = [p for p in [line1, line2] if p]
+    locality_parts = [p for p in [city, "MO"] if p]
+    if zip_code:
+        locality_parts.append(zip_code)
+    if not street_parts and not locality_parts:
+        return ""
+    parts = []
+    if street_parts:
+        parts.append(" ".join(street_parts))
+    if locality_parts:
+        parts.append(", ".join(locality_parts))
+    return ", ".join(parts)
+
+
+def _extract_geocodio_result(result: dict, fields: List[str]) -> dict:
+    payload = {
+        "geocodio_latitude": None,
+        "geocodio_longitude": None,
+        "geocodio_accuracy": None,
+        "geocodio_accuracy_type": None,
+        "geocodio_formatted_address": None,
+    }
+    if not result:
+        return payload
+    location = result.get("location") or {}
+    payload["geocodio_latitude"] = location.get("lat")
+    payload["geocodio_longitude"] = location.get("lng")
+    payload["geocodio_accuracy"] = result.get("accuracy")
+    payload["geocodio_accuracy_type"] = result.get("accuracy_type")
+    payload["geocodio_formatted_address"] = result.get("formatted_address")
+
+    field_map = result.get("fields") or {}
+    for field in fields:
+        col = f"geocodio_{field.replace('-', '_')}"
+        payload[col] = field_map.get(field)
+    payload["geocodio_fields"] = field_map or None
+    return payload
+
+
+def _ensure_geocodio_columns(df: pd.DataFrame, fields: List[str]) -> pd.DataFrame:
+    base_cols = [
+        "geocodio_latitude",
+        "geocodio_longitude",
+        "geocodio_accuracy",
+        "geocodio_accuracy_type",
+        "geocodio_formatted_address",
+        "geocodio_fields",
+        "geocodio_error",
+        "geocodio_query",
+    ]
+    for col in base_cols:
+        if col not in df.columns:
+            df[col] = pd.NA
+    for field in fields:
+        col = f"geocodio_{field.replace('-', '_')}"
+        if col not in df.columns:
+            df[col] = pd.NA
+    return df
+
+
+@op(out=Out(pd.DataFrame), required_resource_keys={"data_dir_processed"})
+def geocode_agency_list(context, agency_list: pd.DataFrame) -> pd.DataFrame:
+    """Geocode agency addresses and append Geocodio fields."""
+    out_dir = Path(context.resources.data_dir_processed.get_path())
+    out_path = out_dir / "agency_list_geocoded.parquet"
+
+    if agency_list.empty:
+        context.log.warning("Agency list is empty; writing empty geocoded output.")
+        agency_list = _ensure_geocodio_columns(agency_list.copy(), GEOCODIO_FIELDS)
+        agency_list.to_parquet(out_path, index=False, engine="pyarrow")
+        return agency_list
+
+    api_key = os.getenv("GEOCODIO_API_KEY")
+    if not api_key:
+        context.log.warning("GEOCODIO_API_KEY not set; returning agency list without geocoding.")
+        agency_list = _ensure_geocodio_columns(agency_list.copy(), GEOCODIO_FIELDS)
+        agency_list.to_parquet(out_path, index=False, engine="pyarrow")
+        return agency_list
+
+    try:
+        from geocodio import Geocodio
+    except ImportError as exc:
+        raise ImportError("geocodio package is required for geocoding (uv add geocodio).") from exc
+
+    geocode_queries = []
+    geocode_indices = []
+    query_col = "geocodio_query"
+    working = agency_list.copy()
+    working[query_col] = working.apply(_build_geocodio_query, axis=1)
+    for idx, query in working[query_col].items():
+        if query:
+            geocode_indices.append(idx)
+            geocode_queries.append(query)
+        else:
+            working.loc[idx, "geocodio_error"] = "missing_address"
+
+    client = Geocodio(api_key)
+    batch_size = _env_positive_int("GEOCODIO_BATCH_SIZE", 100)
+    fields = GEOCODIO_FIELDS
+
+    for start in range(0, len(geocode_queries), batch_size):
+        batch_queries = geocode_queries[start : start + batch_size]
+        batch_indices = geocode_indices[start : start + batch_size]
+        try:
+            response = client.geocode(batch_queries, fields=fields)
+        except Exception as exc:
+            context.log.exception("Geocodio batch failed (%d-%d): %s", start, start + len(batch_queries) - 1, exc)
+            for idx in batch_indices:
+                working.loc[idx, "geocodio_error"] = str(exc)
+            continue
+
+        responses = response if isinstance(response, list) else [response]
+        if len(responses) != len(batch_indices):
+            context.log.warning(
+                "Geocodio response count mismatch (expected %d, got %d).",
+                len(batch_indices),
+                len(responses),
+            )
+
+        for idx, item in zip(batch_indices, responses):
+            results = item.get("results") if isinstance(item, dict) else None
+            if not results:
+                working.loc[idx, "geocodio_error"] = (item.get("error") if isinstance(item, dict) else "no_results")
+                continue
+            payload = _extract_geocodio_result(results[0], fields)
+            for key, value in payload.items():
+                working.loc[idx, key] = value
+
+    working = _ensure_geocodio_columns(working, fields)
+    working.to_parquet(out_path, index=False, engine="pyarrow")
+    context.log.info("Wrote geocoded agency list Parquet → %s (%d rows)", out_path, len(working))
+    try:
+        context.add_output_metadata({"local_path": str(out_path), "row_count": len(working)})
+    except Exception:
+        pass
+    return working
+
+
+@graph_asset(
+    name="agency_list_geocoded",
+    group_name="agency_reference",
+    ins={"agency_list": AssetIn(key=AssetKey("agency_list"))},
+    description="Geocode agency addresses and append Geocodio fields.",
+)
+def agency_list_geocoded_asset(agency_list: pd.DataFrame) -> pd.DataFrame:
+    return geocode_agency_list(agency_list)
+
+# ------------------------------------------------------------------------------
+# Agency reference (crosswalk applied)
+# ------------------------------------------------------------------------------
+@op(out=Out(pd.DataFrame), required_resource_keys={"data_dir_source", "data_dir_processed"})
+def build_agency_reference(context, agency_list_geocoded: pd.DataFrame) -> pd.DataFrame:
+    """Join agency metadata to crosswalk and emit a canonical Department name."""
+    from missouri_vsr.cli_crosswalk import _normalize_name
+
+    crosswalk_path = Path(context.resources.data_dir_source.get_path()) / "agency_crosswalk.csv"
+    if crosswalk_path.exists():
+        crosswalk = pd.read_csv(crosswalk_path)
+        context.log.info("Loaded crosswalk CSV → %s (%d rows)", crosswalk_path, len(crosswalk))
+    else:
+        context.log.warning("Crosswalk CSV not found at %s; output will have blank Canonical.", crosswalk_path)
+        crosswalk = pd.DataFrame(columns=["Normalized", "Raw", "Canonical"])
+
+    if agency_list_geocoded.empty:
+        context.log.warning("Agency list is empty; writing empty agency reference.")
+        merged = agency_list_geocoded.copy()
+        merged["Normalized"] = pd.NA
+        merged["Canonical"] = pd.NA
+    else:
+        name_col = next(
+            (c for c in agency_list_geocoded.columns if str(c).lower() in {"department", "agency", "name"}),
+            agency_list_geocoded.columns[0],
+        )
+        context.log.info("Using agency name column for crosswalk: %s", name_col)
+        merged = agency_list_geocoded.copy()
+        merged["Normalized"] = merged[name_col].fillna("").astype(str).apply(_normalize_name)
+
+        if not crosswalk.empty:
+            crosswalk = crosswalk.copy()
+            expected_cols = {"Normalized", "Canonical"}
+            if not expected_cols.issubset(crosswalk.columns):
+                context.log.warning(
+                    "Crosswalk CSV missing expected columns %s; skipping join.",
+                    sorted(expected_cols - set(crosswalk.columns)),
+                )
+                crosswalk = pd.DataFrame(columns=["Normalized", "Raw", "Canonical"])
+            crosswalk["Normalized"] = crosswalk["Normalized"].astype(str)
+            crosswalk["Canonical"] = crosswalk["Canonical"].where(pd.notna(crosswalk["Canonical"]), "")
+            crosswalk["Canonical"] = crosswalk["Canonical"].astype(str).str.strip()
+            crosswalk = crosswalk[crosswalk["Normalized"].ne("")]
+            dup_mask = crosswalk.duplicated(subset=["Normalized"], keep=False)
+            if dup_mask.any():
+                dupe_sample = (
+                    crosswalk.loc[dup_mask, "Normalized"]
+                    .drop_duplicates()
+                    .head(5)
+                    .tolist()
+                )
+                context.log.warning(
+                    "Crosswalk has duplicate Normalized values; keeping first. Sample: %s",
+                    dupe_sample,
+                )
+            crosswalk = crosswalk.drop_duplicates(subset=["Normalized"], keep="first")
+            merged = merged.merge(crosswalk, on="Normalized", how="left", suffixes=("", "_cw"))
+
+        canonical_col = None
+        if "Canonical" in merged.columns:
+            canonical_col = "Canonical"
+        elif "Canonical_cw" in merged.columns:
+            canonical_col = "Canonical_cw"
+        if canonical_col is None:
+            merged["Canonical"] = pd.NA
+        else:
+            merged["Canonical"] = merged[canonical_col].replace({"": pd.NA, "nan": pd.NA, "NaN": pd.NA})
+
+    merged["Department"] = merged["Canonical"]
+
+    out_dir = Path(context.resources.data_dir_processed.get_path())
+    out_path = out_dir / "agency_reference.parquet"
+    merged.to_parquet(out_path, index=False, engine="pyarrow")
+    context.log.info("Wrote agency reference Parquet → %s (%d rows)", out_path, len(merged))
+    try:
+        context.add_output_metadata({"local_path": str(out_path), "row_count": len(merged)})
+    except Exception:
+        pass
+    return merged
+
+
+@graph_asset(
+    name="agency_reference",
+    group_name="processed",
+    ins={"agency_list_geocoded": AssetIn(key=AssetKey("agency_list_geocoded"))},
+    description="Join agency list metadata to the crosswalk and output canonical Department names.",
+)
+def agency_reference_asset(agency_list_geocoded: pd.DataFrame) -> pd.DataFrame:
+    return build_agency_reference(agency_list_geocoded)

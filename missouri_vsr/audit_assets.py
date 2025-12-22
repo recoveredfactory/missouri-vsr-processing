@@ -1,12 +1,10 @@
 from __future__ import annotations
-
 from pathlib import Path
+from dagster import AssetIn, AssetKey, Out, graph_asset, op
+from missouri_vsr.assets import NUMERIC_COLS
 
 import pandas as pd
 
-from dagster import AssetIn, AssetKey, Out, graph_asset, op
-
-from missouri_vsr.assets import NUMERIC_COLS
 
 
 @op(out=Out(pd.DataFrame), required_resource_keys={"data_dir_processed"})
@@ -94,7 +92,7 @@ def audit_race_sum_mismatch_total_op(context, combined: pd.DataFrame) -> pd.Data
 
 @graph_asset(
     name="audit_race_sum_mismatch_total",
-    group_name="vsr_audit",
+    group_name="audit",
     ins={"combine_all_reports": AssetIn(key=AssetKey("combine_all_reports"))},
     description="Find rows where race subtotals do not match Total for rates--totals--all-stops.",
 )

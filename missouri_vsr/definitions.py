@@ -1,6 +1,6 @@
 # definitions.py
 from dagster import Definitions, load_assets_from_modules
-from missouri_vsr import assets
+from missouri_vsr import assets, audit_assets
 from missouri_vsr.asset_checks import asset_checks
 from missouri_vsr.resources import LocalDirectoryResource, S3Resource
 from pathlib import Path
@@ -10,8 +10,8 @@ DATA_DIR_REPORT_PDFS=Path("data/src/reports")
 DATA_DIR_PROCESSED=Path("data/processed")
 DATA_DIR_OUT=Path("data/out")
 
-# Automatically load assets from the assets module (or modules).
-assets_loaded = load_assets_from_modules([assets])
+# Automatically load assets from the assets modules.
+assets_loaded = load_assets_from_modules([assets, audit_assets])
 
 defs = Definitions(
     assets=assets_loaded,
