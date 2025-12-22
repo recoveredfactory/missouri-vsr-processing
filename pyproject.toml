@@ -19,6 +19,7 @@ dependencies = [
     "openpyxl>=3.1.5",
     "pyarrow>=16.0.0",
     "rapidfuzz>=3.14.3",
+    "geocodio-library-python>=0.3.0",
 ]
 
 [project.scripts]
