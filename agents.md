@@ -43,7 +43,7 @@ Quick reference for future coding agents working on this Dagster pipeline that p
 - Bundled sample: `data/src/examples/VSRreport2023.pdf` (pages 1694–1745). Run with `run_configs/example_2023_sample.yaml` and `--select extract_pdf_data_2023` to stay on the sample.
 
 ## Agency crosswalk CLI
-- Script: `python -m missouri_vsr.cli_crosswalk` (run via `uv run …`).
+- Script: `python -m missouri_vsr.cli.crosswalk` (run via `uv run …`).
 - Defaults: reads agency metadata from `data/processed/agency_list.parquet` (or Excel fallback), VSR candidates from `data/processed/all_combined_output.parquet`, writes `data/src/agency_crosswalk.csv`, and optional merged join to `data/processed/agency_reference.parquet`.
 - Auto-picks a name column unless `--name-col` is set; uses fuzzy suggestions from VSR “Department” values. Auto-accepts exact normalized matches.
 - Interactive controls: pick a suggestion; `n` mark “not in VSR” (blank canonical); `s` skip for later (leave unresolved); `m` more; `b` back; `q` save/quit. Progress autosaves crosswalk + `.state.json` (same dir) for resume.

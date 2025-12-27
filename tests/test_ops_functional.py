@@ -2,8 +2,8 @@ import pandas as pd
 import pytest
 from dagster import build_op_context
 
-from missouri_vsr import assets
 from missouri_vsr.resources import LocalDirectoryResource
+from missouri_vsr.assets import processed
 
 
 def _sample_combined_df() -> pd.DataFrame:
@@ -37,7 +37,7 @@ def _sample_combined_df() -> pd.DataFrame:
 def test_add_rank_percentile_rows_op():
     df = _sample_combined_df()
     context = build_op_context()
-    augmented = assets.add_rank_percentile_rows(context, df)
+    augmented = processed.add_rank_percentile_rows(context, df)
 
     assert len(augmented) == len(df) * 5
 
@@ -67,7 +67,7 @@ def test_compute_statewide_baselines_op(tmp_path):
     context = build_op_context(
         resources={"data_dir_processed": LocalDirectoryResource(path=str(tmp_path))}
     )
-    baselines = assets.compute_statewide_slug_baselines(context, df)
+    baselines = processed.compute_statewide_slug_baselines(context, df)
 
     out_path = tmp_path / "statewide_slug_baselines.parquet"
     assert out_path.exists()

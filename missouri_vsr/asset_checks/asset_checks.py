@@ -1,10 +1,11 @@
-import pandas as pd
-import numpy as np
 import csv
 
+import numpy as np
+import pandas as pd
 from slugify import slugify
 from dagster import AssetCheckResult, AssetCheckSpec, MetadataValue, asset_check
-from missouri_vsr.assets import combine_all_reports
+
+from missouri_vsr.assets.reports import combine_all_reports
 
 EXPECTED_COLUMNS = [
     "Key",
@@ -24,6 +25,7 @@ EXPECTED_COLUMNS = [
 
 NUMERIC_COLS = EXPECTED_COLUMNS[1:9]  # Just the race-specific numbers
 
+
 def _coerce_row(raw: dict) -> dict:
     """
     Convert the string values coming from csv.DictReader to the
@@ -40,6 +42,7 @@ def _coerce_row(raw: dict) -> dict:
             out[k] = v
     return out
 
+
 RENAME_CHECK_FIELDS = {
     "key": "Key",
     "department": "Department",
@@ -47,11 +50,14 @@ RENAME_CHECK_FIELDS = {
     "section": "Measurement",
 }
 
+
 def _rename_check_fields(d: dict) -> dict:
     return {RENAME_CHECK_FIELDS.get(k, k): v for k, v in d.items()}
 
+
 with open("data_checks/row_sanity_checks.csv") as f:
     ROW_SANITY_CHECKS = [_rename_check_fields(_coerce_row(r)) for r in csv.DictReader(f)]
+
 
 # Schema check for extracted pdf data – ensure *exact* match with `EXPECTED_COLUMNS`.
 @asset_check(asset=combine_all_reports)
@@ -67,6 +73,7 @@ def check_expected_columns(df: pd.DataFrame) -> AssetCheckResult:
             "extra_columns": extra,
         },
     )
+
 
 # Duplicate‐slug check – combination of dept/slug/year must be unique.
 @asset_check(asset=combine_all_reports)
@@ -84,6 +91,7 @@ def check_no_duplicate_slugs(df: pd.DataFrame) -> AssetCheckResult:
             "example_duplicates": example_duplicates,
         },
     )
+
 
 # Verify every numeric cell parses as a number or is NaN.
 @asset_check(asset=combine_all_reports)
@@ -115,6 +123,7 @@ def _convert_types(obj):
         return [_convert_types(item) for item in obj]
     else:
         return obj
+
 
 def _make_row_sanity_check(asset, check: dict, idx: int) -> AssetCheckSpec:
     """Return an `asset_check` enforcing that *one* row matches `check`."""
@@ -160,6 +169,7 @@ def _make_row_sanity_check(asset, check: dict, idx: int) -> AssetCheckSpec:
         )
 
     return _check
+
 
 # Dynamically materialise any row-level checks defined above.
 row_sanity_checks = [

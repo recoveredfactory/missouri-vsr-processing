@@ -1,17 +1,16 @@
 from __future__ import annotations
 
+from pathlib import Path
+from rapidfuzz import fuzz
+from typing import List, Tuple
+
 import argparse
 import csv
+import json
 import logging
+import pandas as pd
 import re
 import unicodedata
-import json
-from pathlib import Path
-from typing import Iterable, List, Tuple
-
-import pandas as pd
-from rapidfuzz import process, fuzz
-
 
 def _normalize_name(text: str) -> str:
     """Normalize agency names for comparison."""

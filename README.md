@@ -93,7 +93,7 @@ Prereqs: have `data/processed/all_combined_output.parquet` (run `combine_all_rep
 Run (defaults shown):
 
 ```sh
-uv run python -m missouri_vsr.cli_crosswalk \
+uv run python -m missouri_vsr.cli.crosswalk \
   --source-parquet data/processed/agency_list.parquet \
   --source-excel data/src/2025-05-05-post-law-enforcement-agencies-list.xlsx \
   --vsr-parquet data/processed/all_combined_output.parquet \
@@ -106,3 +106,23 @@ Behavior highlights:
 - Suggests candidate Departments (from combined VSR output) using fuzzy matching; accept, mark “not in VSR” (`n`), skip for later (`s`), back, or page for more.
 - Auto-fills exact normalized matches; writes progress on every decision to `agency_crosswalk.csv` and resume state to `agency_crosswalk.state.json` (same directory).
 - Optional merged output (`agency_reference.parquet`) joins the agency metadata with the crosswalk for downstream joins.
+
+## Geocodio debug CLI
+
+Quickly geocode a single address and inspect the full Geocodio response. By default it requests the same fields used by the pipeline.
+
+```sh
+uv run vsr-parse geocode "705 East Walnut, Columbia, MO 65201"
+```
+
+To override fields:
+
+```sh
+uv run vsr-parse geocode "705 East Walnut, Columbia, MO 65201" --fields "cd,stateleg,acs-demographics"
+```
+
+Sample one agency per AgencyType (writes temp outputs under `data/processed/tmp_geocode`):
+
+```sh
+uv run vsr-parse geocode-sample
+```

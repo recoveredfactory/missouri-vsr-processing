@@ -20,10 +20,12 @@ dependencies = [
     "pyarrow>=16.0.0",
     "rapidfuzz>=3.14.3",
     "geocodio-library-python>=0.3.0",
+    "matplotlib>=3.10.8",
+    "httpx>=0.28.1",
 ]
 
 [project.scripts]
-vsr-parse = "missouri_vsr.cli:main"
+vsr-parse = "missouri_vsr.cli.cli:main"
 
 [tool.dagster]
 module_name = "missouri_vsr.definitions"
@@ -44,5 +46,11 @@ build-backend = "hatchling.build"
 
 [dependency-groups]
 dev = [
+    "ipdb>=0.13.13",
     "pytest>=9.0.2",
+]
+
+[tool.pytest.ini_options]
+markers = [
+    "network: tests that make live network calls",
 ]

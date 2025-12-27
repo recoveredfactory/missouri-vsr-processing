@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from missouri_vsr import assets
+from missouri_vsr.assets import processed
 
 
 def _sample_combined_df() -> pd.DataFrame:
@@ -35,10 +35,10 @@ def _sample_combined_df() -> pd.DataFrame:
 def test_rank_and_percentile_dense_and_exclusion():
     df = _sample_combined_df()
     value_cols = ["Total", "White"]
-    mshp_mask = df["Department"].eq(assets.MSHP_DEPARTMENT_NAME)
+    mshp_mask = df["Department"].eq(processed.MSHP_DEPARTMENT_NAME)
 
-    rank_all, pct_all = assets._rank_and_percentile(df, value_cols)
-    rank_no_mshp, pct_no_mshp = assets._rank_and_percentile(
+    rank_all, pct_all = processed._rank_and_percentile(df, value_cols)
+    rank_no_mshp, pct_no_mshp = processed._rank_and_percentile(
         df, value_cols, exclude_mask=mshp_mask
     )
 

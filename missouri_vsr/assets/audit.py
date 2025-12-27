@@ -1,10 +1,12 @@
 from __future__ import annotations
+
 from pathlib import Path
-from dagster import AssetIn, AssetKey, Out, graph_asset, op
-from missouri_vsr.assets import NUMERIC_COLS
 
 import pandas as pd
 
+from dagster import AssetIn, AssetKey, Out, graph_asset, op
+
+from missouri_vsr.assets.extract import NUMERIC_COLS
 
 
 @op(out=Out(pd.DataFrame), required_resource_keys={"data_dir_processed"})
