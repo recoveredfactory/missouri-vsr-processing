@@ -39,7 +39,7 @@ def test_add_rank_percentile_rows_op():
     context = build_op_context()
     augmented = processed.add_rank_percentile_rows(context, df)
 
-    assert len(augmented) == len(df) * 5
+    assert len(augmented) == len(df) * 3
 
     base_slug = "rates--totals--all-stops"
     slug_suffixes = {
@@ -47,13 +47,7 @@ def test_add_rank_percentile_rows_op():
         for slug in augmented["slug"].unique()
         if slug.startswith(base_slug)
     }
-    assert slug_suffixes == {
-        "",
-        "-rank",
-        "-percentile",
-        "-rank-no-mshp",
-        "-percentile-no-mshp",
-    }
+    assert slug_suffixes == {"", "-rank", "-percentile"}
 
     rank_row = augmented[
         (augmented["slug"] == f"{base_slug}-rank")
@@ -72,33 +66,37 @@ def test_compute_statewide_baselines_op(tmp_path):
     out_path = tmp_path / "statewide_slug_baselines.parquet"
     assert out_path.exists()
 
-    assert set(baselines["scope"]) == {"all", "no_mshp"}
-    assert len(baselines) == 4
+    assert set(baselines.columns) == {
+        "year",
+        "slug",
+        "metric",
+        "count",
+        "mean",
+        "median",
+        "count__no_mshp",
+        "mean__no_mshp",
+        "median__no_mshp",
+    }
+    assert len(baselines) == 2
 
     total_all = baselines[
-        (baselines["metric"] == "Total") & (baselines["scope"] == "all")
+        (baselines["metric"] == "Total")
     ].iloc[0]
     assert total_all["count"] == 3
     assert total_all["mean"] == pytest.approx(150.0, rel=1e-6)
     assert total_all["median"] == pytest.approx(150.0, rel=1e-6)
 
-    total_no = baselines[
-        (baselines["metric"] == "Total") & (baselines["scope"] == "no_mshp")
-    ].iloc[0]
-    assert total_no["count"] == 2
-    assert total_no["mean"] == pytest.approx(150.0, rel=1e-6)
-    assert total_no["median"] == pytest.approx(150.0, rel=1e-6)
+    assert total_all["count__no_mshp"] == 2
+    assert total_all["mean__no_mshp"] == pytest.approx(150.0, rel=1e-6)
+    assert total_all["median__no_mshp"] == pytest.approx(150.0, rel=1e-6)
 
     white_all = baselines[
-        (baselines["metric"] == "White") & (baselines["scope"] == "all")
+        (baselines["metric"] == "White")
     ].iloc[0]
     assert white_all["count"] == 3
     assert white_all["mean"] == pytest.approx(41.6666667, rel=1e-6)
     assert white_all["median"] == pytest.approx(50.0, rel=1e-6)
 
-    white_no = baselines[
-        (baselines["metric"] == "White") & (baselines["scope"] == "no_mshp")
-    ].iloc[0]
-    assert white_no["count"] == 2
-    assert white_no["mean"] == pytest.approx(50.0, rel=1e-6)
-    assert white_no["median"] == pytest.approx(50.0, rel=1e-6)
+    assert white_all["count__no_mshp"] == 2
+    assert white_all["mean__no_mshp"] == pytest.approx(50.0, rel=1e-6)
+    assert white_all["median__no_mshp"] == pytest.approx(50.0, rel=1e-6)

@@ -64,7 +64,7 @@ def _rank_and_percentile(
 
 @op(out=Out(pd.DataFrame))
 def add_rank_percentile_rows(context, combined: pd.DataFrame) -> pd.DataFrame:
-    """Add rank/percentile rows per slug/year across agencies (with and without MSHP)."""
+    """Add rank/percentile rows per slug/year across agencies."""
     if combined.empty:
         context.log.warning("Combined report DataFrame is empty; skipping rank/percentile.")
         return combined
@@ -79,17 +79,11 @@ def add_rank_percentile_rows(context, combined: pd.DataFrame) -> pd.DataFrame:
         raise ValueError("Cannot add ranks/percentiles – no numeric value columns were found.")
 
     base = combined.copy()
-    dept_series = base["Department"].astype(str).str.strip()
-    mshp_mask = dept_series.eq(MSHP_DEPARTMENT_NAME)
-
     rank_all, percentile_all = _rank_and_percentile(base, value_cols)
-    rank_no_mshp, percentile_no_mshp = _rank_and_percentile(base, value_cols, exclude_mask=mshp_mask)
 
     derived = [
         _build_rank_percentile_frame(base, rank_all, value_cols, "-rank"),
         _build_rank_percentile_frame(base, percentile_all, value_cols, "-percentile"),
-        _build_rank_percentile_frame(base, rank_no_mshp, value_cols, "-rank-no-mshp"),
-        _build_rank_percentile_frame(base, percentile_no_mshp, value_cols, "-percentile-no-mshp"),
     ]
     augmented = pd.concat([base, *derived], ignore_index=True)
     context.log.info(
@@ -113,9 +107,20 @@ def reports_with_rank_percentile(combine_all_reports: pd.DataFrame) -> pd.DataFr
 @op(out=Out(pd.DataFrame), required_resource_keys={"data_dir_processed"})
 def compute_statewide_slug_baselines(context, combined: pd.DataFrame) -> pd.DataFrame:
     """Compute statewide mean/median baselines per year/slug/metric."""
+    baseline_columns = [
+        "year",
+        "slug",
+        "metric",
+        "count",
+        "mean",
+        "median",
+        "count__no_mshp",
+        "mean__no_mshp",
+        "median__no_mshp",
+    ]
     if combined.empty:
         context.log.warning("Combined report DataFrame is empty; no baselines computed.")
-        return pd.DataFrame(columns=["year", "slug", "metric", "scope", "count", "mean", "median"])
+        return pd.DataFrame(columns=baseline_columns)
 
     required_cols = {"Department", "year", "slug"}
     missing = required_cols - set(combined.columns)
@@ -138,18 +143,33 @@ def compute_statewide_slug_baselines(context, combined: pd.DataFrame) -> pd.Data
         )
         melted = melted.dropna(subset=["value"])
         if melted.empty:
-            return pd.DataFrame(columns=["year", "slug", "metric", "count", "mean", "median", "scope"])
+            return pd.DataFrame(columns=["year", "slug", "metric", "count", "mean", "median"])
         grouped = (
             melted.groupby(["year", "slug", "metric"])["value"]
             .agg(count="count", mean="mean", median="median")
             .reset_index()
         )
-        grouped["scope"] = scope
+        if scope == "no_mshp":
+            grouped = grouped.rename(
+                columns={
+                    "count": "count__no_mshp",
+                    "mean": "mean__no_mshp",
+                    "median": "median__no_mshp",
+                }
+            )
         return grouped
 
     all_baselines = _build_baseline(base, "all")
     no_mshp_baselines = _build_baseline(base.loc[base["Department"].ne(MSHP_DEPARTMENT_NAME)], "no_mshp")
-    baselines = pd.concat([all_baselines, no_mshp_baselines], ignore_index=True)
+    if all_baselines.empty and no_mshp_baselines.empty:
+        baselines = pd.DataFrame(columns=baseline_columns)
+    else:
+        baselines = all_baselines.merge(
+            no_mshp_baselines,
+            on=["year", "slug", "metric"],
+            how="outer",
+        )
+        baselines = baselines[baseline_columns]
 
     out_dir = Path(context.resources.data_dir_processed.get_path())
     out_path = out_dir / "statewide_slug_baselines.parquet"
@@ -288,6 +308,16 @@ def _agency_slug(value) -> str:
         return "agency"
     slug = slugify(text, lowercase=True)
     return slug or "agency"
+
+
+def _json_safe_record(record: dict) -> dict:
+    cleaned = {}
+    for key, value in record.items():
+        if _is_null(value):
+            cleaned[key] = None
+        else:
+            cleaned[key] = _json_safe_value(value)
+    return cleaned
 
 
 @op(out=Out(list), required_resource_keys={"data_dir_out", "data_dir_processed"})
@@ -542,6 +572,23 @@ def write_agency_index_json(
     return str(out_path)
 
 
+@op(out=Out(str), required_resource_keys={"data_dir_out"})
+def write_statewide_baselines_json(context, baselines: pd.DataFrame) -> str:
+    """Write statewide baselines to JSON for downstream consumers."""
+    out_root = Path(context.resources.data_dir_out.get_path())
+    out_root.mkdir(parents=True, exist_ok=True)
+    out_path = out_root / "statewide_slug_baselines.json"
+
+    records = [_json_safe_record(item) for item in baselines.to_dict(orient="records")]
+    out_path.write_text(json.dumps(records, indent=2))
+    context.log.info("Wrote statewide baselines JSON → %s (%d rows)", out_path, len(records))
+    try:
+        context.add_output_metadata({"local_path": str(out_path), "row_count": len(records)})
+    except Exception:
+        pass
+    return str(out_path)
+
+
 @graph_asset(
     name="agency_year_json_exports",
     group_name="output",
@@ -572,3 +619,13 @@ def agency_index_json(
     agency_reference_geocoded: pd.DataFrame,
 ) -> str:
     return write_agency_index_json(pivot_reports_by_slug, agency_reference_geocoded)
+
+
+@graph_asset(
+    name="statewide_slug_baselines_json",
+    group_name="output",
+    ins={"statewide_slug_baselines": AssetIn(key=AssetKey("statewide_slug_baselines"))},
+    description="Generate statewide baselines JSON for downstream consumers.",
+)
+def statewide_slug_baselines_json(statewide_slug_baselines: pd.DataFrame) -> str:
+    return write_statewide_baselines_json(statewide_slug_baselines)
