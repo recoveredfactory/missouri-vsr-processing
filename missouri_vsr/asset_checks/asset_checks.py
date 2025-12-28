@@ -21,9 +21,24 @@ EXPECTED_COLUMNS = [
     "Department",
     "Table name",
     "Measurement",
+    "agency",
+    "table",
+    "table_id",
+    "section",
+    "metric",
+    "metric_id",
+    "row_id",
 ]
 
-NUMERIC_COLS = EXPECTED_COLUMNS[1:9]  # Just the race-specific numbers
+NUMERIC_COLS = [
+    "Total",
+    "White",
+    "Black",
+    "Hispanic",
+    "Native American",
+    "Asian",
+    "Other",
+]  # Just the race-specific numbers
 
 
 def _coerce_row(raw: dict) -> dict:
