@@ -2,7 +2,7 @@
 
 Process data from the [Missouri Vehicle Stops report](https://ago.mo.gov/get-help/vehicle-stops-report/) (VSR). 
 
-This project is a data pipeline implemented with Dagster. It extracts data from PDFs published by the state to create a canonical database in a tidy format. In the future, it will then join those records to additional information we have collected: a) A database of contact information for each department, b) a cross-walk of agency to county where they have jurisdiction, and c) the agency's comments on their VSR submission.
+This project is a data pipeline implemented with Dagster. It extracts data from PDFs published by the state (via `pdftotext -layout` and a text-first parser) to create a canonical database in a tidy format. In the future, it will then join those records to additional information we have collected: a) A database of contact information for each department, b) a cross-walk of agency to county where they have jurisdiction, and c) the agency's comments on their VSR submission.
 
 # Project Setup and Execution
 
@@ -12,6 +12,7 @@ Ensure you have the following installed:
 
 - Python 3.12+ 
 - [uv](https://docs.astral.sh/uv/) for dependency management (`brew install uv`)
+- Poppler (`pdftotext` must be available on `PATH`; `brew install poppler` or `apt-get install poppler-utils`)
 
 ## Installation
 
@@ -75,6 +76,10 @@ uv run dagster asset materialize --select ASSET_NAME -m missouri_vsr.definitions
 ```
 
 Dagster caches materialized assets, but they don't persist between runs of the web UI or CLI tool unless you set the `DAGSTER_HOME` environment variable in your global environment or `.env` file. See the [Dagster docs](https://docs.dagster.io/guides/deploy/dagster-instance-configuration#default-local-behavior) page on local behavior for more information.
+
+### Text extraction cache
+
+`pdftotext -layout` output is cached alongside each PDF as `*.layout.txt`. Delete those cached files to force a re-extraction.
 
 ### Quick sample run (2023 slice)
 

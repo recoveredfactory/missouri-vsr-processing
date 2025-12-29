@@ -3,15 +3,16 @@
 Quick reference for future coding agents working on this Dagster pipeline that parses Missouri Vehicle Stops Report (VSR) PDFs into tidy data.
 
 ## What this project does
-- Downloads per-year VSR PDFs (see `YEAR_URLS` in `missouri_vsr/assets.py`) and stores them under `data/src/reports`.
-- Extracts tables with Camelot (`extract_pdf_data_<year>` assets), normalizes rows into `Key`, race counts/rates, department, table name, and measurement.
+- Downloads per-year VSR PDFs (see `YEAR_URLS` in `missouri_vsr/assets/extract.py`) and stores them under `data/src/reports`.
+- Extracts tables via `pdftotext -layout` with a text-first parser (`extract_pdf_data_<year>` assets), normalizing rows into `Key`, race counts/rates, department, table name, and measurement.
 - Combines per-year Parquet outputs (`data/processed/combined_output_<year>.parquet`) into a master Parquet + DataFrame (`combine_all_reports`), then pivots by slug and emits per-agency JSON under `data/out/agency_year`.
-- `data/src/2025-05-05-post-law-enforcement-agencies-list.xlsx` is agency metadata to join via a crosswalk (not the final reference table yet); the `agency_list` asset loads it and writes `data/processed/agency_list.parquet` for downstream joins. Crosswalk work is pending; don't overfit to current columns.
+- `data/src/2025-05-05-post-law-enforcement-agencies-list.xlsx` is agency metadata to join via a crosswalk; the `agency_list` asset loads it and writes `data/processed/agency_list.parquet` for downstream joins.
 
 ## Repo layout (essentials)
-- `missouri_vsr/assets.py`: Assets and parsing logic (Camelot stream flavor, indent-based section detection, numeric alignment).
-- `missouri_vsr/definitions.py`: Dagster `Definitions`; registers assets and resources.
-- `missouri_vsr/resources.py`: S3, Airtable, Google Drive resources.
+- `missouri_vsr/assets/`: Asset modules (`extract.py`, `reports.py`, `processed.py`, `audit.py`, `agency_reference.py`).
+- `missouri_vsr/assets/extract.py`: PDF parsing logic (pdftotext layout parsing, section detection, metric slugging).
+- `missouri_vsr/definitions/definitions.py`: Dagster `Definitions`; registers assets and resources.
+- `missouri_vsr/resources/resources.py`: S3, Airtable, Google Drive resources.
 - `run_configs/*.yaml`: Example Dagster run configs (e.g., S3 bucket/prefix, WSL low-memory).
 - `data/`: Local inputs/outputs (reports, processed parquet, JSON exports).
 
@@ -25,10 +26,10 @@ Quick reference for future coding agents working on this Dagster pipeline that p
 - CLI materialization: `uv run dagster asset materialize --select <asset_or_query> -m missouri_vsr.definitions`.
 
 ## Operational notes
-- Tunable env: `VSR_PAGE_CHUNK_SIZE` (default 5) controls PDF page chunking for Camelot.
+- `pdftotext -layout` outputs are cached next to the PDFs as `*.layout.txt`; delete those files to force re-extraction.
 - Outputs may upload to S3 if the `s3` resource is configured or env vars are present; presigned URLs default to 45 days (`presigned_expiration`).
 - Uses `slug` for pivoting; slugs encode table + metric hierarchy (e.g., `stops--citation-warning-violation--moving`). Per-agency JSON nests slug metrics (e.g., `rates__Stop rate`).
-- Keep an eye on PDF parsing heuristics (indent detection for section/metric rows, right-to-left numeric sniffing); adjust in `_clean_camelot_table` and `normalize_row_tokens` if tables shift.
+- Keep an eye on PDF parsing heuristics (section detection, right-to-left numeric sniffing); adjust in `missouri_vsr/assets/extract.py` if tables shift.
 - Data directories are configured via resources: `data_dir_source`, `data_dir_report_pdfs`, `data_dir_processed`, `data_dir_out` (see `definitions.py`).
 
 ## Data checks (csv-driven queue)
