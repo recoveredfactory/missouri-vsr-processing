@@ -224,7 +224,8 @@ def _normalize_line(line: str) -> str:
 
 
 def _clean_agency_name(name: str) -> str:
-    text = name.replace(" 's", "'s").strip()
+    text = _normalize_text(name)
+    text = text.replace(" 's", "'s").strip()
     text = re.sub(r"\s+", " ", text)
     return text
 
@@ -335,8 +336,6 @@ def _parse_plain_section_header(line: str) -> str | None:
     if not normalized:
         return None
     if normalized.lower() in _KNOWN_SECTIONS:
-        return normalized
-    if normalized.istitle() and len(normalized) <= 40:
         return normalized
     return None
 

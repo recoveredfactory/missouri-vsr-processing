@@ -50,6 +50,8 @@ def _coerce_row(raw: dict) -> dict:
     for k, v in raw.items():
         if v == "":            # empty cell → treat as missing
             out[k] = None
+        elif k == "year" and v.isdigit():
+            out[k] = int(v)
         elif k in NUMERIC_COLS:
             # keep integers as int, everything else as float
             out[k] = int(v) if v.isdigit() else float(v)

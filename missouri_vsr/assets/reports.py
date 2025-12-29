@@ -87,8 +87,15 @@ def combine_reports(context, **extracted_reports: dict[str, pd.DataFrame]) -> pd
     except Exception as e:
         context.log.exception("S3 handling encountered an exception for combined Parquet: %s", e)
 
+    # Add the same row-count/uniques metadata as per-year extracts.
     try:
+        meta["row_count"] = int(len(combined))
+        if "Department" in combined.columns:
+            meta["unique_agencies"] = int(combined["Department"].nunique(dropna=True))
+        if "slug" in combined.columns:
+            meta["unique_slugs"] = int(combined["slug"].nunique(dropna=True))
         context.add_output_metadata(meta)
+        context.log.info("combine_all_reports metadata: %s", meta)
     except Exception:
         pass
 
