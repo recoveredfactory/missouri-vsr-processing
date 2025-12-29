@@ -29,6 +29,11 @@ def combine_reports(context, **extracted_reports: dict[str, pd.DataFrame]) -> pd
     if drop_cols:
         context.log.info("Dropping legacy columns from combined output: %s", drop_cols)
         combined = combined.drop(columns=drop_cols)
+    if "row_key" not in combined.columns and "slug" in combined.columns:
+        context.log.info("Renaming legacy slug column to row_key in combined output.")
+        combined = combined.rename(columns={"slug": "row_key"})
+    if "slug" in combined.columns:
+        combined = combined.drop(columns=["slug"])
 
     # Write combined Parquet
     processed_dir = Path(context.resources.data_dir_processed.get_path())
@@ -97,8 +102,8 @@ def combine_reports(context, **extracted_reports: dict[str, pd.DataFrame]) -> pd
         meta["row_count"] = int(len(combined))
         if "agency" in combined.columns:
             meta["unique_agencies"] = int(combined["agency"].nunique(dropna=True))
-        if "slug" in combined.columns:
-            meta["unique_slugs"] = int(combined["slug"].nunique(dropna=True))
+        if "row_key" in combined.columns:
+            meta["unique_row_keys"] = int(combined["row_key"].nunique(dropna=True))
         context.add_output_metadata(meta)
         context.log.info("combine_all_reports metadata: %s", meta)
     except Exception:

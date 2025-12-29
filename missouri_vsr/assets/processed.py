@@ -9,7 +9,7 @@ from slugify import slugify
 
 from dagster import AssetIn, AssetKey, Out, graph_asset, op
 
-from missouri_vsr.assets.extract import PIVOT_VALUE_COLUMNS
+from missouri_vsr.assets.extract import PIVOT_VALUE_COLUMNS, _slugify_simple
 
 # ------------------------------------------------------------------------------
 # Pivoted outputs & per-agency JSON exports
@@ -23,8 +23,8 @@ def _build_rank_percentile_frame(
     value_cols: List[str],
     suffix: str,
 ) -> pd.DataFrame:
-    frame = base[["agency", "year", "slug"]].copy()
-    frame["slug"] = frame["slug"].astype(str) + suffix
+    frame = base[["agency", "year", "row_key"]].copy()
+    frame["row_key"] = frame["row_key"].astype(str) + suffix
     for col in value_cols:
         frame[col] = metric_df[col]
     for col in base.columns:
@@ -52,8 +52,34 @@ def _build_percentage_frame(
     percentages = percentage_base[value_cols].div(total, axis=0)
     percentages = percentages.where(total > 0)
     percentage_base[value_cols] = percentages
-    percentage_base["slug"] = percentage_base["slug"].astype(str) + "-percentage"
+    percentage_base["row_key"] = percentage_base["row_key"].astype(str) + "-percentage"
     return percentage_base
+
+
+def _rebuild_row_ids(frame: pd.DataFrame) -> pd.DataFrame:
+    required = {"year", "agency", "row_key"}
+    if not required.issubset(frame.columns):
+        return frame
+
+    def _format_year(value) -> str | None:
+        if pd.isna(value):
+            return None
+        try:
+            return str(int(value))
+        except (TypeError, ValueError):
+            return str(value)
+
+    def _row_id(row: pd.Series) -> str:
+        parts = [
+            _format_year(row["year"]),
+            _slugify_simple(str(row["agency"])),
+            str(row["row_key"]),
+        ]
+        return "-".join(part for part in parts if part)
+
+    updated = frame.copy()
+    updated["row_id"] = updated.apply(_row_id, axis=1)
+    return updated
 
 
 def _rank_and_percentile(
@@ -71,7 +97,7 @@ def _rank_and_percentile(
         blank = pd.DataFrame(index=base.index, columns=value_cols, dtype="float")
         return blank.copy(), blank.copy()
 
-    grouped = working.groupby(["year", "slug"])[value_cols]
+    grouped = working.groupby(["year", "row_key"])[value_cols]
     rank_df = grouped.rank(method="dense", ascending=False)
     percentile_df = grouped.rank(method="max", ascending=True, pct=True) * 100
 
@@ -87,12 +113,12 @@ def _rank_and_percentile(
 
 @op(out=Out(pd.DataFrame))
 def add_rank_percentile_rows(context, combined: pd.DataFrame) -> pd.DataFrame:
-    """Add rank/percentile rows per slug/year across agencies."""
+    """Add rank/percentile rows per row_key/year across agencies."""
     if combined.empty:
         context.log.warning("Combined report DataFrame is empty; skipping rank/percentile.")
         return combined
 
-    required_cols = {"agency", "year", "slug"}
+    required_cols = {"agency", "year", "row_key"}
     missing = required_cols - set(combined.columns)
     if missing:
         raise ValueError(f"Cannot add ranks/percentiles – missing columns: {sorted(missing)}")
@@ -112,6 +138,7 @@ def add_rank_percentile_rows(context, combined: pd.DataFrame) -> pd.DataFrame:
         _build_rank_percentile_frame(base, percentile_all, value_cols, "-percentile"),
     ]
     augmented = pd.concat([base, *derived], ignore_index=True)
+    augmented = _rebuild_row_ids(augmented)
     context.log.info(
         "Added rank/percentile/percentage rows: %d base rows → %d total rows",
         len(base),
@@ -124,7 +151,7 @@ def add_rank_percentile_rows(context, combined: pd.DataFrame) -> pd.DataFrame:
     name="reports_with_rank_percentile",
     group_name="processed",
     ins={"combine_all_reports": AssetIn(key=AssetKey("combine_all_reports"))},
-    description="Add rank/percentile rows per slug/year across agencies.",
+    description="Add rank/percentile rows per row_key/year across agencies.",
 )
 def reports_with_rank_percentile(combine_all_reports: pd.DataFrame) -> pd.DataFrame:
     return add_rank_percentile_rows(combine_all_reports)
@@ -132,10 +159,10 @@ def reports_with_rank_percentile(combine_all_reports: pd.DataFrame) -> pd.DataFr
 
 @op(out=Out(pd.DataFrame), required_resource_keys={"data_dir_processed"})
 def compute_statewide_slug_baselines(context, combined: pd.DataFrame) -> pd.DataFrame:
-    """Compute statewide mean/median baselines per year/slug/metric."""
+    """Compute statewide mean/median baselines per year/row_key/metric."""
     baseline_columns = [
         "year",
-        "slug",
+        "row_key",
         "metric",
         "count",
         "mean",
@@ -148,7 +175,7 @@ def compute_statewide_slug_baselines(context, combined: pd.DataFrame) -> pd.Data
         context.log.warning("Combined report DataFrame is empty; no baselines computed.")
         return pd.DataFrame(columns=baseline_columns)
 
-    required_cols = {"agency", "year", "slug"}
+    required_cols = {"agency", "year", "row_key"}
     missing = required_cols - set(combined.columns)
     if missing:
         raise ValueError(f"Cannot compute baselines – missing columns: {sorted(missing)}")
@@ -157,21 +184,21 @@ def compute_statewide_slug_baselines(context, combined: pd.DataFrame) -> pd.Data
     if not value_cols:
         raise ValueError("Cannot compute baselines – no numeric value columns were found.")
 
-    base = combined[["agency", "year", "slug", *value_cols]].copy()
+    base = combined[["agency", "year", "row_key", *value_cols]].copy()
     base["agency"] = base["agency"].astype(str).str.strip()
 
     def _build_baseline(df: pd.DataFrame, scope: str) -> pd.DataFrame:
         melted = df.melt(
-            id_vars=["year", "slug"],
+            id_vars=["year", "row_key"],
             value_vars=value_cols,
             var_name="metric",
             value_name="value",
         )
         melted = melted.dropna(subset=["value"])
         if melted.empty:
-            return pd.DataFrame(columns=["year", "slug", "metric", "count", "mean", "median"])
+            return pd.DataFrame(columns=["year", "row_key", "metric", "count", "mean", "median"])
         grouped = (
-            melted.groupby(["year", "slug", "metric"])["value"]
+            melted.groupby(["year", "row_key", "metric"])["value"]
             .agg(count="count", mean="mean", median="median")
             .reset_index()
         )
@@ -192,7 +219,7 @@ def compute_statewide_slug_baselines(context, combined: pd.DataFrame) -> pd.Data
     else:
         baselines = all_baselines.merge(
             no_mshp_baselines,
-            on=["year", "slug", "metric"],
+            on=["year", "row_key", "metric"],
             how="outer",
         )
         baselines = baselines[baseline_columns]
@@ -212,7 +239,7 @@ def compute_statewide_slug_baselines(context, combined: pd.DataFrame) -> pd.Data
     name="statewide_slug_baselines",
     group_name="processed",
     ins={"combine_all_reports": AssetIn(key=AssetKey("combine_all_reports"))},
-    description="Compute statewide mean/median baselines per year/slug/metric.",
+    description="Compute statewide mean/median baselines per year/row_key/metric.",
 )
 def statewide_slug_baselines(combine_all_reports: pd.DataFrame) -> pd.DataFrame:
     return compute_statewide_slug_baselines(combine_all_reports)
@@ -220,12 +247,12 @@ def statewide_slug_baselines(combine_all_reports: pd.DataFrame) -> pd.DataFrame:
 
 @op(out=Out(pd.DataFrame))
 def pivot_reports_by_slug_op(context, combined: pd.DataFrame) -> pd.DataFrame:
-    """Pivot combined report data so each Agency+Year row contains slug-based columns."""
+    """Pivot combined report data so each Agency+Year row contains row_key-based columns."""
     if combined.empty:
         context.log.warning("Combined report DataFrame is empty; returning empty pivot result.")
         return pd.DataFrame(columns=["agency", "year"])
 
-    required_cols = {"agency", "year", "slug"}
+    required_cols = {"agency", "year", "row_key"}
     missing = required_cols - set(combined.columns)
     if missing:
         raise ValueError(f"Cannot pivot – missing columns: {sorted(missing)}")
@@ -234,24 +261,24 @@ def pivot_reports_by_slug_op(context, combined: pd.DataFrame) -> pd.DataFrame:
     if not value_cols:
         raise ValueError("Cannot pivot – no numeric value columns were found.")
 
-    base = combined[["agency", "year", "slug", *value_cols]].copy()
-    dup_mask = base.duplicated(subset=["agency", "year", "slug"], keep=False)
+    base = combined[["agency", "year", "row_key", *value_cols]].copy()
+    dup_mask = base.duplicated(subset=["agency", "year", "row_key"], keep=False)
     if dup_mask.any():
         dupe_preview = (
-            base.loc[dup_mask, ["agency", "year", "slug"]]
+            base.loc[dup_mask, ["agency", "year", "row_key"]]
             .drop_duplicates()
             .head(5)
             .to_dict(orient="records")
         )
         context.log.warning(
-            "Found %d duplicate slug rows after grouping; keeping first occurrence. Examples: %s",
+            "Found %d duplicate row_key rows after grouping; keeping first occurrence. Examples: %s",
             dup_mask.sum(),
             dupe_preview,
         )
 
     pivoted = base.pivot_table(
         index=["agency", "year"],
-        columns="slug",
+        columns="row_key",
         values=value_cols,
         aggfunc="first",
     )
@@ -263,8 +290,8 @@ def pivot_reports_by_slug_op(context, combined: pd.DataFrame) -> pd.DataFrame:
         pivoted = pivoted.sort_index(axis=1, level=0, sort_remaining=True)
         pivoted.columns = pivoted.columns.swaplevel(0, 1)
         pivoted.columns = [
-            f"{slug}__{metric}"
-            for slug, metric in pivoted.columns
+            f"{row_key}__{metric}"
+            for row_key, metric in pivoted.columns
         ]
     else:
         pivoted.columns = [str(c) for c in pivoted.columns]
@@ -278,7 +305,7 @@ def pivot_reports_by_slug_op(context, combined: pd.DataFrame) -> pd.DataFrame:
     name="pivot_reports_by_slug",
     group_name="processed",
     ins={"reports_with_rank_percentile": AssetIn(key=AssetKey("reports_with_rank_percentile"))},
-    description="Pivot combined report data so each agency/year row has slug-derived columns.",
+    description="Pivot combined report data so each agency/year row has row_key-derived columns.",
 )
 def pivot_reports_by_slug(reports_with_rank_percentile: pd.DataFrame) -> pd.DataFrame:
     return pivot_reports_by_slug_op(reports_with_rank_percentile)
@@ -352,7 +379,7 @@ def write_agency_year_json(
     combined: pd.DataFrame,
     agency_reference_geocoded: pd.DataFrame,
 ) -> List[str]:
-    """Write one JSON file per agency with row-level slug metadata and values."""
+    """Write one JSON file per agency with row-level row_key metadata and values."""
     del agency_reference_geocoded
     if combined.empty:
         context.log.warning("Combined DataFrame empty; no JSON outputs created.")
@@ -414,7 +441,7 @@ def write_agency_year_json(
     required_cols = {
         "agency",
         "year",
-        "slug",
+        "row_key",
         "table",
         "table_id",
         "section",
@@ -430,7 +457,7 @@ def write_agency_year_json(
     value_cols = [c for c in PIVOT_VALUE_COLUMNS if c in combined.columns]
     row_cols = [
         "year",
-        "slug",
+        "row_key",
         "table",
         "table_id",
         "section",
@@ -444,7 +471,7 @@ def write_agency_year_json(
     output_paths: List[str] = []
     for agency, group in combined.groupby("agency"):
         records: List[dict] = []
-        for _, row in group.sort_values(["year", "slug"]).iterrows():
+        for _, row in group.sort_values(["year", "row_key"]).iterrows():
             payload = {col: row.get(col) for col in row_cols if col in row.index}
             year_val = payload.get("year")
             payload["year"] = int(year_val) if pd.notna(year_val) else None
@@ -519,8 +546,8 @@ def write_agency_index_json(
     city_cols = ["AddressCity", "City"]
     zip_cols = ["AddressZip", "Zip", "ZipCode"]
     phone_cols = ["Phone", "PhoneNumber", "Phone #"]
-    metric_slug = "rates--totals--all-stops"
-    metric_col = f"{metric_slug}__Total"
+    metric_row_key = "rates-by-race--totals--all-stops"
+    metric_col = f"{metric_row_key}__Total"
 
     if not agency_reference_geocoded.empty:
         for _, row in agency_reference_geocoded.iterrows():
@@ -538,7 +565,7 @@ def write_agency_index_json(
                     "city": None,
                     "zip": None,
                     "phone": None,
-                    metric_slug: None,
+                    metric_row_key: None,
                 }
                 names_by_key[key] = entry
 
@@ -566,7 +593,7 @@ def write_agency_index_json(
                     "city": None,
                     "zip": None,
                     "phone": None,
-                    metric_slug: None,
+                    metric_row_key: None,
                 }
                 names_by_key[agency] = entry
             else:
@@ -598,10 +625,10 @@ def write_agency_index_json(
                     "city": None,
                     "zip": None,
                     "phone": None,
-                    metric_slug: None,
+                    metric_row_key: None,
                 }
                 names_by_key[agency] = entry
-            entry[metric_slug] = value
+            entry[metric_row_key] = value
 
     records = sorted(names_by_key.values(), key=lambda item: item["agency_slug"])
     out_path.write_text(json.dumps(records, indent=2))
@@ -630,6 +657,74 @@ def write_statewide_baselines_json(context, baselines: pd.DataFrame) -> str:
     return str(out_path)
 
 
+@op(out=Out(str), required_resource_keys={"data_dir_out"})
+def write_report_dimension_index_json(context, combined: pd.DataFrame) -> str:
+    """Write unique table/section/metric identifiers to JSON for translations."""
+    out_root = Path(context.resources.data_dir_out.get_path())
+    out_root.mkdir(parents=True, exist_ok=True)
+    out_path = out_root / "report_dimensions.json"
+
+    if combined.empty:
+        payload = {"table_ids": [], "section_ids": [], "metric_ids": []}
+    else:
+        table_ids = (
+            combined["table_id"]
+            .dropna()
+            .astype(str)
+            .str.strip()
+            .replace("", pd.NA)
+            .dropna()
+            .unique()
+            .tolist()
+        )
+        section_ids = (
+            combined["section_id"]
+            .dropna()
+            .astype(str)
+            .str.strip()
+            .replace("", pd.NA)
+            .dropna()
+            .unique()
+            .tolist()
+        )
+        metric_ids = (
+            combined["metric_id"]
+            .dropna()
+            .astype(str)
+            .str.strip()
+            .replace("", pd.NA)
+            .dropna()
+            .unique()
+            .tolist()
+        )
+        payload = {
+            "table_ids": sorted(table_ids),
+            "section_ids": sorted(section_ids),
+            "metric_ids": sorted(metric_ids),
+        }
+
+    out_path.write_text(json.dumps(payload, indent=2))
+    context.log.info(
+        "Wrote report dimension index JSON → %s (tables=%d sections=%d metrics=%d)",
+        out_path,
+        len(payload["table_ids"]),
+        len(payload["section_ids"]),
+        len(payload["metric_ids"]),
+    )
+    try:
+        context.add_output_metadata(
+            {
+                "local_path": str(out_path),
+                "table_id_count": len(payload["table_ids"]),
+                "section_id_count": len(payload["section_ids"]),
+                "metric_id_count": len(payload["metric_ids"]),
+            }
+        )
+    except Exception:
+        pass
+    return str(out_path)
+
+
 @graph_asset(
     name="agency_year_json_exports",
     group_name="output",
@@ -637,7 +732,7 @@ def write_statewide_baselines_json(context, baselines: pd.DataFrame) -> str:
         "reports_with_rank_percentile": AssetIn(key=AssetKey("reports_with_rank_percentile")),
         "agency_reference_geocoded": AssetIn(key=AssetKey("agency_reference_geocoded")),
     },
-    description="Generate per-agency JSON files containing year-by-year slug data.",
+    description="Generate per-agency JSON files containing year-by-year row_key data.",
 )
 def agency_year_json_exports(
     reports_with_rank_percentile: pd.DataFrame,
@@ -670,3 +765,13 @@ def agency_index_json(
 )
 def statewide_slug_baselines_json(statewide_slug_baselines: pd.DataFrame) -> str:
     return write_statewide_baselines_json(statewide_slug_baselines)
+
+
+@graph_asset(
+    name="report_dimension_index_json",
+    group_name="output",
+    ins={"combine_all_reports": AssetIn(key=AssetKey("combine_all_reports"))},
+    description="Write unique table/section/metric identifiers for translations.",
+)
+def report_dimension_index_json(combine_all_reports: pd.DataFrame) -> str:
+    return write_report_dimension_index_json(combine_all_reports)

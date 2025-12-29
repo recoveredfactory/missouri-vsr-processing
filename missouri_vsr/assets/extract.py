@@ -126,7 +126,7 @@ EXTRACT_COLUMNS = [
     "Asian",
     "Other",
     "year",
-    "slug",
+    "row_key",
     "agency",
     "table",
     "table_id",
@@ -190,20 +190,8 @@ def _slugify_metric(value: str) -> str:
     return _slugify_simple(value.replace("%", "pct"))
 
 
-def _build_metric_slug(table_slug: str, section: str | None, metric: str) -> str:
-    metric_part = _slugify_metric(metric)
-    if section:
-        section_part = _slugify_metric(section)
-        return f"{table_slug}--{section_part}--{metric_part}"
-    return f"{table_slug}-{metric_part}"
-
-
-def _build_metric_id(table_id: str, section: str | None, metric: str) -> str:
-    parts = [table_id]
-    if section:
-        parts.append(section)
-    parts.append(metric)
-    return _slugify_simple("-".join(parts))
+def _build_metric_id(metric: str) -> str:
+    return _slugify_metric(metric)
 
 
 def _build_section_id(section: str | None) -> str | None:
@@ -212,13 +200,25 @@ def _build_section_id(section: str | None) -> str | None:
     return _slugify_metric(section)
 
 
-def _build_row_id(year: int | None, agency: str, table_id: str, section: str | None, metric: str) -> str:
+def _build_row_key(table_id: str, section_id: str | None, metric_id: str) -> str:
+    parts = [table_id]
+    if section_id:
+        parts.append(section_id)
+    parts.append(metric_id)
+    return "--".join(parts)
+
+
+def _build_row_id(
+    year: int | None,
+    agency: str,
+    table_id: str,
+    section_id: str | None,
+    metric_id: str,
+) -> str:
+    row_key = _build_row_key(table_id, section_id, metric_id)
     parts = [str(year)] if year is not None else []
     parts.append(_slugify_simple(agency))
-    parts.append(_slugify_simple(table_id))
-    if section:
-        parts.append(_slugify_metric(section))
-    parts.append(_slugify_metric(metric))
+    parts.append(row_key)
     return "-".join(parts)
 
 
@@ -375,7 +375,6 @@ def _parse_pdftotext_lines(lines: list[str], log, *, year: int | None, pdf_name:
     current_agency: str | None = None
     current_table_title: str | None = None
     current_table_id: str | None = None
-    current_table_slug: str | None = None
     current_section: str | None = None
     current_columns: list[str] | None = None
     pending_table_line: str | None = None
@@ -410,7 +409,7 @@ def _parse_pdftotext_lines(lines: list[str], log, *, year: int | None, pdf_name:
             column_data = {}
             column_current = None
             return
-        if not current_table_id or not current_table_slug or not current_agency:
+        if not current_table_id or not current_agency:
             column_mode = False
             column_row_labels = []
             column_data = {}
@@ -424,6 +423,8 @@ def _parse_pdftotext_lines(lines: list[str], log, *, year: int | None, pdf_name:
                     values.append(col_values[idx])
                 else:
                     values.append(None)
+            section_id = _build_section_id(section_label)
+            metric_id = _build_metric_id(metric_label)
             record = {
                 "Total": values[0],
                 "White": values[1],
@@ -433,15 +434,21 @@ def _parse_pdftotext_lines(lines: list[str], log, *, year: int | None, pdf_name:
                 "Asian": values[5],
                 "Other": values[6],
                 "year": year,
-                "slug": _build_metric_slug(current_table_slug, section_label, metric_label),
+                "row_key": _build_row_key(current_table_id, section_id, metric_id),
                 "agency": current_agency,
                 "table": current_table_title,
                 "table_id": current_table_id,
                 "section": section_label,
-                "section_id": _build_section_id(section_label),
+                "section_id": section_id,
                 "metric": metric_label,
-                "metric_id": _build_metric_id(current_table_id, section_label, metric_label),
-                "row_id": _build_row_id(year, current_agency, current_table_id, section_label, metric_label),
+                "metric_id": metric_id,
+                "row_id": _build_row_id(
+                    year,
+                    current_agency,
+                    current_table_id,
+                    section_id,
+                    metric_id,
+                ),
             }
             records.append(record)
             key = (current_agency, current_table_id)
@@ -475,7 +482,6 @@ def _parse_pdftotext_lines(lines: list[str], log, *, year: int | None, pdf_name:
                 log.info("Parser armed at agency header (%s): %s", pdf_name, current_agency)
                 current_table_title = None
                 current_table_id = None
-                current_table_slug = None
                 current_section = None
                 current_columns = None
                 continue
@@ -491,7 +497,6 @@ def _parse_pdftotext_lines(lines: list[str], log, *, year: int | None, pdf_name:
             stats["agency_headers"] += 1
             current_table_title = None
             current_table_id = None
-            current_table_slug = None
             current_section = None
             current_columns = None
             pending_table_line = None
@@ -508,7 +513,6 @@ def _parse_pdftotext_lines(lines: list[str], log, *, year: int | None, pdf_name:
             raw_agency = _clean_agency_name(table_match.group(2))
             current_table_title = raw_title
             current_table_id = _slugify_simple(raw_title)
-            current_table_slug = TABLE_SLUG_LOOKUP.get(raw_title, current_table_id)
             current_section = None
             current_columns = None
             pending_table_line = None
@@ -540,7 +544,6 @@ def _parse_pdftotext_lines(lines: list[str], log, *, year: int | None, pdf_name:
                 stats["notes_lines"] += 1
             current_table_title = None
             current_table_id = None
-            current_table_slug = None
             current_section = None
             current_columns = None
             continue
@@ -586,8 +589,10 @@ def _parse_pdftotext_lines(lines: list[str], log, *, year: int | None, pdf_name:
             continue
 
         parsed = _parse_metric_line(line)
-        if parsed and current_table_id and current_table_slug and current_agency:
+        if parsed and current_table_id and current_agency:
             metric_label, values = parsed
+            section_id = _build_section_id(current_section)
+            metric_id = _build_metric_id(metric_label)
             record = {
                 "Total": values[0],
                 "White": values[1],
@@ -597,15 +602,21 @@ def _parse_pdftotext_lines(lines: list[str], log, *, year: int | None, pdf_name:
                 "Asian": values[5],
                 "Other": values[6],
                 "year": year,
-                "slug": _build_metric_slug(current_table_slug, current_section, metric_label),
+                "row_key": _build_row_key(current_table_id, section_id, metric_id),
                 "agency": current_agency,
                 "table": current_table_title,
                 "table_id": current_table_id,
                 "section": current_section,
-                "section_id": _build_section_id(current_section),
+                "section_id": section_id,
                 "metric": metric_label,
-                "metric_id": _build_metric_id(current_table_id, current_section, metric_label),
-                "row_id": _build_row_id(year, current_agency, current_table_id, current_section, metric_label),
+                "metric_id": metric_id,
+                "row_id": _build_row_id(
+                    year,
+                    current_agency,
+                    current_table_id,
+                    section_id,
+                    metric_id,
+                ),
             }
             records.append(record)
             key = (current_agency, current_table_id)
@@ -659,8 +670,8 @@ def _add_extract_metadata(context, df: pd.DataFrame, label: str) -> None:
     if not df.empty:
         if "agency" in df.columns:
             meta["unique_agencies"] = int(df["agency"].nunique(dropna=True))
-        if "slug" in df.columns:
-            meta["unique_slugs"] = int(df["slug"].nunique(dropna=True))
+        if "row_key" in df.columns:
+            meta["unique_row_keys"] = int(df["row_key"].nunique(dropna=True))
     try:
         context.add_output_metadata(meta)
         context.log.info("%s metadata: %s", label, meta)
@@ -837,18 +848,24 @@ def _clean_camelot_table(table, log, *, year: int) -> pd.DataFrame | None:
         log.warning("Only non-numeric rows found – skipping table")
         return None
 
-    def _build_slug(row: pd.Series) -> str:
-        parts: list[str] = [table_slug]
-        if row.Measurement:
-            parts.extend(["", slugify(str(row.Measurement), lowercase=True, replacements=[["%", "pct"]]), ""])
-        parts.append(slugify(str(row.Key), lowercase=True, replacements=[["%", "pct"]]))
-        return "-".join(parts)
-
-    df["slug"] = df.apply(_build_slug, axis=1)
-    df["Department"] = dept_name
-    df["Table name"] = raw_table_name
+    df["agency"] = dept_name
+    df["table"] = raw_table_name
+    df["table_id"] = _slugify_simple(raw_table_name)
+    df["section"] = df["Measurement"]
+    df["metric"] = df["Key"]
+    df["section_id"] = df["section"].apply(_build_section_id)
+    df["metric_id"] = df["metric"].apply(_build_metric_id)
+    df["row_key"] = df.apply(
+        lambda row: _build_row_key(row["table_id"], row["section_id"], row["metric_id"]),
+        axis=1,
+    )
+    df["row_id"] = df.apply(
+        lambda row: _build_row_id(year, dept_name, row["table_id"], row["section_id"], row["metric_id"]),
+        axis=1,
+    )
     df["year"] = year
-    return df
+    df = df.drop(columns=["Key", "Measurement", "Department", "Table name"], errors="ignore")
+    return df.reindex(columns=EXTRACT_COLUMNS)
 
 # ------------------------------------------------------------------------------
 # Page-range fan-out / fan-in ops

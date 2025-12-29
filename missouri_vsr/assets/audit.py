@@ -11,17 +11,17 @@ from missouri_vsr.assets.extract import NUMERIC_COLS
 
 @op(out=Out(pd.DataFrame), required_resource_keys={"data_dir_processed"})
 def audit_race_sum_mismatch_total_op(context, combined: pd.DataFrame) -> pd.DataFrame:
-    """Flag rows where race subtotals do not match Total for rates--totals--all-stops."""
+    """Flag rows where race subtotals do not match Total for rates-by-race--totals--all-stops."""
     out_dir = Path(context.resources.data_dir_processed.get_path()) / "audits"
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / "race_sum_mismatch_total.parquet"
 
-    required_cols = {"agency", "year", "slug", "Total"}
+    required_cols = {"agency", "year", "row_key", "Total"}
     missing = required_cols - set(combined.columns)
     if missing:
         raise ValueError(f"Cannot audit race totals – missing columns: {sorted(missing)}")
 
-    slug_target = "rates--totals--all-stops"
+    row_key_target = "rates-by-race--totals--all-stops"
     races = [c for c in NUMERIC_COLS if c != "Total" and c in combined.columns]
     if not races:
         raise ValueError("Cannot audit race totals – no race columns were found.")
@@ -30,7 +30,7 @@ def audit_race_sum_mismatch_total_op(context, combined: pd.DataFrame) -> pd.Data
         columns=[
             "agency",
             "year",
-            "slug",
+            "row_key",
             "Total",
             "race_sum",
             "diff",
@@ -48,15 +48,15 @@ def audit_race_sum_mismatch_total_op(context, combined: pd.DataFrame) -> pd.Data
         context.log.warning("Combined report DataFrame is empty; no audit rows produced.")
         audit_rows = empty_frame
     else:
-        subset = combined[combined["slug"] == slug_target].copy()
+        subset = combined[combined["row_key"] == row_key_target].copy()
         if subset.empty:
-            context.log.warning("No rows found for slug %s; audit output empty.", slug_target)
+            context.log.warning("No rows found for row_key %s; audit output empty.", row_key_target)
             audit_rows = subset
         else:
             needed = ["Total", *races]
             subset = subset.dropna(subset=needed)
             if subset.empty:
-                context.log.warning("No rows with complete race totals for slug %s.", slug_target)
+                context.log.warning("No rows with complete race totals for row_key %s.", row_key_target)
                 audit_rows = subset
             else:
                 subset["race_sum"] = subset[races].sum(axis=1)
@@ -68,7 +68,7 @@ def audit_race_sum_mismatch_total_op(context, combined: pd.DataFrame) -> pd.Data
     out_cols = [
         "agency",
         "year",
-        "slug",
+        "row_key",
         "Total",
         "race_sum",
         "diff",
