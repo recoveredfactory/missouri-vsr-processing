@@ -81,6 +81,21 @@ Dagster caches materialized assets, but they don't persist between runs of the w
 
 `pdftotext -layout` output is cached alongside each PDF as `*.layout.txt`. Delete those cached files to force a re-extraction.
 
+### Key outputs
+
+- Per-year extracts: `data/processed/combined_output_<year>.parquet`
+- Combined extract: `data/processed/all_combined_output.parquet`
+- Per-agency JSON (row-based): `data/out/agency_year/<agency_slug>.json`
+- Report dimension index: `data/out/report_dimensions.json`
+- Statewide baselines: `data/out/statewide_slug_baselines.json`
+
+Extracted rows include the identifiers:
+- `table_id`: slug of the table title (no table number)
+- `section_id`: slug of the section header
+- `metric_id`: slug of the metric label
+- `row_key`: `<table_id>--<section_id>--<metric_id>`
+- `row_id`: `<year>-<agency_slug>-<row_key>`
+
 ### Quick sample run (2023 slice)
 
 - A 50-page slice of the 2023 VSR (pages 1694–1745) lives at `data/src/examples/VSRreport2023.pdf`.

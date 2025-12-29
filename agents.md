@@ -4,13 +4,13 @@ Quick reference for future coding agents working on this Dagster pipeline that p
 
 ## What this project does
 - Downloads per-year VSR PDFs (see `YEAR_URLS` in `missouri_vsr/assets/extract.py`) and stores them under `data/src/reports`.
-- Extracts tables via `pdftotext -layout` with a text-first parser (`extract_pdf_data_<year>` assets), normalizing rows into `metric`, race counts/rates, `agency`, `table`, and `section`.
-- Combines per-year Parquet outputs (`data/processed/combined_output_<year>.parquet`) into a master Parquet + DataFrame (`combine_all_reports`), then pivots by slug and emits per-agency JSON under `data/out/agency_year`.
+- Extracts tables via `pdftotext -layout` with a text-first parser (`extract_pdf_data_<year>` assets), normalizing rows into `agency`, `table`, `section`, `metric`, and race counts/rates plus `row_key`/`row_id`.
+- Combines per-year Parquet outputs (`data/processed/combined_output_<year>.parquet`) into a master Parquet + DataFrame (`combine_all_reports`), then pivots by row_key and emits per-agency JSON under `data/out/agency_year`. Also writes `data/out/report_dimensions.json` with unique table/section/metric ids.
 - `data/src/2025-05-05-post-law-enforcement-agencies-list.xlsx` is agency metadata to join via a crosswalk; the `agency_list` asset loads it and writes `data/processed/agency_list.parquet` for downstream joins.
 
 ## Repo layout (essentials)
 - `missouri_vsr/assets/`: Asset modules (`extract.py`, `reports.py`, `processed.py`, `audit.py`, `agency_reference.py`).
-- `missouri_vsr/assets/extract.py`: PDF parsing logic (pdftotext layout parsing, section detection, metric slugging).
+- `missouri_vsr/assets/extract.py`: PDF parsing logic (pdftotext layout parsing, section detection, metric identifiers).
 - `missouri_vsr/definitions/definitions.py`: Dagster `Definitions`; registers assets and resources.
 - `missouri_vsr/resources/resources.py`: S3, Airtable, Google Drive resources.
 - `run_configs/*.yaml`: Example Dagster run configs (e.g., S3 bucket/prefix, WSL low-memory).
@@ -28,15 +28,15 @@ Quick reference for future coding agents working on this Dagster pipeline that p
 ## Operational notes
 - `pdftotext -layout` outputs are cached next to the PDFs as `*.layout.txt`; delete those files to force re-extraction.
 - Outputs may upload to S3 if the `s3` resource is configured or env vars are present; presigned URLs default to 45 days (`presigned_expiration`).
-- Uses `slug` for pivoting; slugs encode table + metric hierarchy (e.g., `stops--citation-warning-violation--moving`). Per-agency JSON nests slug metrics (e.g., `rates__Stop rate`).
+- Uses `row_key` for pivoting; row_keys encode `table_id` + `section_id` + `metric_id` (e.g., `number-of-stops-by-race--citation-warning-violation--moving`). `row_id` is `<year>-<agency_slug>-<row_key>`. Per-agency JSON is row-based (flat rows with row_key + identifiers).
 - Keep an eye on PDF parsing heuristics (section detection, right-to-left numeric sniffing); adjust in `missouri_vsr/assets/extract.py` if tables shift.
 - Data directories are configured via resources: `data_dir_source`, `data_dir_report_pdfs`, `data_dir_processed`, `data_dir_out` (see `definitions.py`).
 
 ## Data checks (csv-driven queue)
-- `data_checks/row_sanity_checks.csv` drives per-year aggregate checks against `combine_all_reports`, matching on `slug`, `agency`, and `year`, then asserting provided numeric/metadata fields. Each check returns counts plus samples of missing/mismatched rows.
+- `data_checks/row_sanity_checks.csv` drives per-year aggregate checks against `combine_all_reports`, matching on `row_key`, `agency`, and `year`, then asserting provided numeric/metadata fields. Each check returns counts plus samples of missing/mismatched rows.
 - `checked` is for human review tracking only; checks still run for all rows.
 - Add more checks by appending rows to that CSV; columns are coerced to numbers where applicable.
-- Other checks in `asset_checks.py`: schema columns match, no duplicate `agency`+`slug`+`year`, no duplicate `row_id`+`year`, and numeric columns parse.
+- Other checks in `asset_checks.py`: schema columns match, no duplicate `agency`+`row_key`+`year`, no duplicate `row_id`+`year`, and numeric columns parse.
 
 ## Dev runs
 - Default dev workflow typically materializes everything, but you can select subsets in Dagster (e.g., a single `download_reports` output or one `extract_pdf_data_<year>` asset) and tune `VSR_PAGE_CHUNK_SIZE` to process smaller page chunks.
