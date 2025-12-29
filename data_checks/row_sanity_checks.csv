@@ -478,3 +478,263 @@ rates--rates--stop-rate-residents,Richmond Heights Police Dept,2.73,2.46,5.97,0.
 stops--driver-age--65-and-over,Bates County Sheriff's Dept,17,17,0,0,0,0,0,2022,0
 rates--population--2021-acs-pop,Barry County Sheriff's Dept,27662,23992,88,2148,337,424,2821,2022,0
 disparity-index-by-race--population--2020-decennial-pop,Osage Beach Police Dept,3949,3420,67,246,13,54,149,2022,0
+stops--stop-outcome--citation,Neosho Police Dept,1127,947,29,110,5,36,0,2023,0
+stops--citation-warning-violation--moving,Ste Genevieve Police Dept,541,496,31,4,4,3,3,2023,0
+search--probable-cause--inventory,Pike County Sheriff's Dept,6,4,2,0,,0,0,2023,0
+stops--officer-assignment--dedicated-traffic,Jefferson County Sheriff's Dept,10192,9756,324,2,11,42,57,2023,0
+stops--location-of-stop--interstate-hwy,Lincoln County Sheriff's Dept,63,51,8,3,0,0,1,2023,0
+rates--rates--search-rate,Richmond Police Dept,11.27,10.84,15.46,10,25,12.5,15.38,2023,0
+search--probable-cause--reas-susp-weapon,St Charles County Sheriff's Dept,1,1,0,0,,0,0,2023,0
+stops--stop-outcome--contraband,Carl Junction Police Dept,24,23,1,0,0,0,0,2023,0
+stops--location-of-stop--state-hwy,Laurie Police Dept,455,444,3,5,2,1,0,2023,0
+stops--reason-for-stop--other,Wood Heights Police Dept,0,0,0,0,0,0,0,2023,0
+rates--contraband-hit-rate--citation-rate,Nixa Schools Police Dept,0,0,,,,,,2023,0
+stops--driver-age--17-and-under,Pierce City Police Dept,12,11,1,0,0,0,0,2023,0
+stops--location-of-stop--us-hwy,Sullivan County Sheriff's Dept,0,0,0,0,0,0,0,2023,0
+stops--arrest-violation--property,Richland Police Dept,0,0,0,0,0,0,0,2023,0
+rates--rates--search-rate,Winona Police Dept,4.17,4.17,,,,,,2023,0
+rates--totals--searches,Butler County Sheriff's Dept,37,29,7,1,0,0,0,2023,0
+rates--rates--arrest-rate,Harrisonville Police Dept,9.77,9.65,15.79,6.45,,0,0,2023,0
+stops-non-resident-stops,Lone Jack Police Dept,1678,1432,216,8,1,14,7,2023,0
+stops-non-resident-stops,Bernie Police Dept,441,367,60,9,0,1,4,2023,0
+stops--reason-for-stop--other,Jonesburg Police Dept,0,0,0,0,0,0,0,2023,0
+stops--reason-for-stop--other,Versailles Police Dept,0,0,0,0,0,0,0,2023,0
+stops-all-stops,St Robert Police Dept,2084,1453,444,109,2,22,54,2023,0
+rates--totals--contraband,Missouri State Highway Patrol,2252,1789,335,105,6,17,0,2023,0
+stops--arrest-violation--dwi-bac,Osage County Sheriff's Dept,4,4,0,0,0,0,0,2023,0
+stops--officer-assignment--general-parol,O'Fallon Police Dept,16543,12644,3295,321,13,124,146,2023,0
+stops--reason-for-stop--moving,Pierce City Police Dept,105,91,3,10,0,1,0,2023,0
+stops--officer-assignment--dedicated-traffic,Carroll County Sheriff's Dept,0,0,0,0,,,0,2023,0
+stops--stop-outcome--contraband,Battlefield Police Dept,3,3,0,0,0,0,0,2023,0
+stops--officer-assignment--general-parol,Archie Police Dept,234,182,14,13,6,7,12,2023,0
+stops--citation-warning-violation--moving,Metropolitan Community College Police Dept,1,1,0,0,0,0,0,2023,0
+stops--driver-gender--female,Platte City Police Dept,291,229,38,16,0,3,5,2023,0
+stops--arrest-violation--off-against-person,Goodman Police Dept,0,0,0,0,0,0,0,2023,0
+search--contraband-found--other,Benton Police Dept,0,0,0,0,0,0,0,2023,0
+search--what-searched--driver-property,Vinita Park Police Dept,28,3,24,0,0,0,1,2023,0
+stops--driver-age--30-39,Salisbury Police Dept,16,14,0,1,0,1,0,2023,0
+search--probable-cause--other,Velda City Police Dept,10,0,10,0,0,0,0,2023,0
+rates--population--2020-decennial-pop,Senath Police Dept,1202,821,29,322,5,0,25,2023,0
+stops--reason-for-stop--officer-initiative,Franklin County Sheriff's Dept,66,62,2,1,0,1,0,2023,0
+rates--totals--citations,Cole County Sheriff's Dept,542,420,95,18,0,5,4,2023,0
+stops--stop-outcome--searches,Dent County Sheriff's Dept,40,40,0,0,0,0,0,2023,0
+stops--stop-outcome--no-action,Doolittle Police Dept,10,10,0,0,0,0,0,2023,0
+search--probable-cause--consent,Liberal Police Dept,0,0,0,0,0,0,0,2023,0
+stops--reason-for-stop--called-for-service,Ripley County Sheriff's Dept,2,2,0,0,0,0,0,2023,0
+search--probable-cause--inventory,Buchanan County Sheriff's Dept,2,2,0,0,0,0,0,2023,0
+stops--stop-outcome--contraband,Lincoln Police Dept,5,5,0,0,0,0,0,2023,0
+rates--totals--all-stops,Lee's Summit Police Dept,24780,18030,5358,285,24,260,823,2023,0
+search--probable-cause--drug-alcohol-odor,Iberia Police Dept,1,1,0,0,0,0,0,2023,0
+stops--driver-gender--female,Steelville Police Dept,206,202,1,2,0,0,1,2023,0
+search--search-duration--0-15-minutes,Kimberling City Police Dept,92,76,4,12,0,0,0,2023,0
+stops--reason-for-stop--moving,Howardville Police Dept,60,44,15,1,0,0,0,2023,0
+search--contraband-found--other,Union Police Dept,0,0,0,0,0,0,0,2023,0
+stops-resident-stops,Missouri Dept of Conservation Protection Branch,336,327,3,2,0,4,0,2023,0
+search--contraband-found--other,Clayton Police Dept,1,0,0,0,0,0,1,2023,0
+rates--population--2020-decennial-pop-pct,Kansas City Police Dept,100,56.64,24.53,10.35,0.39,3.17,4.92,2023,0
+rates--contraband-hit-rate--citation-rate,Howardville Police Dept,90.63,89.36,93.75,100,,,,2023,0
+stops--arrest-violation--property,Bates City Police Dept,0,0,0,0,0,0,0,2023,0
+search--probable-cause--inventory,Polk County Sheriff's Dept,6,5,0,1,0,0,0,2023,0
+stops--location-of-stop--county-road,Pettis County Sheriff's Dept,121,108,5,8,0,0,0,2023,0
+search--search-duration--16-30-minutes,Monroe City Police Dept,22,13,2,2,1,1,3,2023,0
+rates--rates--arrest-rate,Kennett Police Dept,7.7,7.02,8.76,10.86,0,0,,2023,0
+rates--totals--contraband,Shelbina Police Dept,3,3,0,0,0,0,0,2023,0
+stops--citation-warning-violation--moving,Carrollton Police Dept,229,216,7,3,0,3,0,2023,0
+search--contraband-found--drugs,Pilot Knob Police Dept,1,1,0,0,0,0,0,2023,0
+stops--location-of-stop--county-road,Morgan County Sheriff's Dept,52,50,2,0,0,0,0,2023,0
+stops--stop-outcome--searches,Mansfield Police Dept,75,74,1,0,0,0,0,2023,0
+stops--reason-for-stop--other,Linn Creek Police Dept,0,0,0,0,0,0,0,2023,0
+stops--driver-age--40-64,Nixa Police Dept,4251,4100,73,4,6,17,51,2023,0
+stops--stop-outcome--citation,Hannibal Police Dept,2630,2130,411,58,1,9,21,2023,0
+stops--citation-warning-violation--moving,Monroe County Sheriff's Dept,333,280,33,12,1,1,6,2023,0
+search--probable-cause--inventory,City of Bellerive Acres,0,0,0,0,0,0,0,2023,0
+stops--reason-for-stop--license,High Hill Police Dept,2,2,0,0,0,0,0,2023,0
+stops--arrest-violation--off-against-person,Normandy Police Dept,0,0,0,0,0,0,0,2023,0
+search--search-duration--16-30-minutes,St Peters Police Dept,58,46,9,3,0,0,0,2023,0
+stops-resident-stops,NW MO State University Police Dept,16,14,1,1,0,0,0,2023,0
+rates--totals--resident-stops,Lee's Summit Police Dept,11617,8865,2192,115,14,143,288,2023,0
+search--what-searched--car-property,Linn Creek Police Dept,3,3,0,0,0,0,0,2023,0
+stops--arrest-violation--off-against-person,Phelps County Sheriff's Dept,1,1,0,0,0,0,0,2023,0
+stops--arrest-violation--other,NW MO State University Police Dept,0,0,0,0,0,0,0,2023,0
+stops--location-of-stop--other,Sullivan Police Dept,41,38,2,1,0,0,0,2023,0
+stops--reason-for-stop--det-crime-bulletin,Monroe County Sheriff's Dept,0,0,0,0,0,0,0,2023,0
+stops--reason-for-stop--officer-initiative,Mansfield Police Dept,2,2,0,0,0,0,0,2023,0
+search--contraband-found--weapon,St Louis County Park Rangers,0,0,0,0,0,0,0,2023,0
+stops--officer-assignment--dedicated-traffic,Missouri Western State University Police Dept,1,1,0,0,0,0,0,2023,0
+search--contraband-found--alcohol,Liberal Police Dept,0,0,0,0,0,0,0,2023,0
+stops--location-of-stop--interstate-hwy,Eureka Police Dept,566,474,50,5,0,3,34,2023,0
+search--probable-cause--reas-susp-weapon,Texas County Sheriff's Dept,1,1,0,0,0,0,0,2023,0
+rates--rates--arrest-rate,Cassville Police Dept,2.05,1.71,0,6.82,0,0,0,2023,0
+stops--location-of-stop--city-street,Hornersville Police Dept,23,21,0,2,0,0,0,2023,0
+stops--stop-outcome--arrests,Mexico Police Dept,41,30,9,1,0,0,1,2023,0
+stops--arrest-violation--other,Laurie Police Dept,0,0,0,0,0,0,0,2023,0
+stops--stop-outcome--arrests,Gasconade County Sheriff's Dept,35,32,3,0,0,0,0,2023,0
+search--probable-cause--incident-to-arrest,City of California Police Dept,5,4,0,1,0,0,0,2023,0
+stops--citation-warning-violation--license-registration,St Joseph Police Dept,5832,4675,747,340,8,27,35,2023,0
+rates--rates--citation-rate,Cassville Police Dept,27.69,28.52,0,27.27,0,0,0,2023,0
+search--contraband-found--currency,Senath Police Dept,0,0,0,0,0,0,0,2023,0
+stops--stop-outcome--arrests,Canton Police Dept,8,5,2,1,0,0,0,2023,0
+rates--totals--citations,Marion County Sheriff's Dept,141,119,16,4,0,1,1,2023,0
+search--contraband-found--currency,St Charles Police Dept,0,0,0,0,0,0,0,2023,0
+search--probable-cause--consent,Festus Police Dept,18,18,0,0,0,0,0,2023,0
+search--search-duration--0-15-minutes,Rockaway Beach Police Dept,12,12,0,0,0,0,0,2023,0
+stops--officer-assignment--special-assignment,Hayti Police Dept,2,0,2,0,0,0,0,2023,0
+rates--totals--citations,Steelville Police Dept,105,98,2,5,0,0,0,2023,0
+stops--reason-for-stop--investigative,Poplar Bluff Police Dept,103,78,25,0,0,0,0,2023,0
+stops--stop-outcome--warning,Napoleon Police Dept,41,35,3,3,0,0,0,2023,0
+rates--rates--stop-rate,Northwoods Police Dept,18.5,7.97,19.48,,,,3.57,2023,0
+stops-resident-stops,Iberia Police Dept,192,168,22,1,0,1,0,2023,0
+stops--reason-for-stop--called-for-service,Pilot Knob Police Dept,0,0,0,0,0,0,0,2023,0
+stops--citation-warning-violation--moving,Higginsville Police Dept,558,461,72,20,1,2,2,2023,0
+rates--rates--contraband-hit-rate,Licking Police Dept,27.5,28.21,,0,,,,2023,0
+search--contraband-found--drugs,Pulaski County Sheriff's Dept,0,0,0,0,0,0,0,2023,0
+stops--driver-age--18-29,Cape Girardeau Co Sheriff's Dept,1218,947,228,24,1,2,16,2023,0
+stops--arrest-violation--resist-arrest,Newburg Police Dept,0,0,0,0,0,0,0,2023,0
+rates--rates--stop-rate-residents,Wheaton Police Dept,4.75,5.16,,,0,,0,2023,0
+stops--arrest-violation--traffic,Daviess County Sheriff's Dept,0,0,0,0,0,0,0,2023,0
+search--probable-cause--drug-alcohol-odor,Andrew County Sheriff's Dept,13,13,0,0,0,0,0,2023,0
+stops--driver-age--18-29,Winfield Police Dept,260,232,16,4,0,1,7,2023,0
+search--search-duration--31-minutes,Cleveland Police Dept,0,0,0,0,0,0,0,2023,0
+stops--arrest-violation--drug-violation,Ashland Police Dept,3,3,0,0,0,0,0,2023,0
+stops--reason-for-stop--officer-initiative,St Clair Police Dept,39,37,0,2,0,0,0,2023,0
+search--probable-cause--plain-view-contra,Pilot Knob Police Dept,0,0,0,0,0,0,0,2023,0
+search--probable-cause--other,Warsaw Police Dept,0,0,0,0,0,0,0,2023,0
+stops--arrest-violation--other,Greenfield Police Dept,0,0,0,0,0,0,0,2023,0
+stops--citation-warning-violation--moving,Shannon County Sheriff's Dept,4,4,0,0,0,0,0,2023,0
+stops--arrest-violation--off-against-person,Hillsboro Police Dept,0,0,0,0,0,0,0,2023,0
+stops--reason-for-stop--investigative,Reeds Spring Police Dept,14,13,1,0,0,0,0,2023,0
+rates--rates--stop-rate,Monett Police Dept,36.1,39.98,206.9,26.17,1.28,32.47,0.31,2023,0
+stops--reason-for-stop--officer-initiative,Butterfield Police Dept,0,0,0,0,0,0,0,2023,0
+stops-resident-stops,Linn Police Dept,13,13,0,0,0,0,0,2023,0
+search--probable-cause--drug-alcohol-odor,Ava Police Dept,6,6,0,0,0,0,0,2023,0
+search--probable-cause--drug-dog-alert,Monett Police Dept,0,0,0,0,0,0,0,2023,0
+stops--reason-for-stop--equpiment,Seymour Police Dept,402,378,17,6,1,0,0,2024,0
+rates--totals--resident-stops,Lee's Summit Police Dept,11484,8645,2288,155,14,136,246,2024,0
+stops--reason-for-stop--license,Granby Police Dept,30,28,0,1,0,1,0,2024,0
+rates--rates--arrest-rate,Thayer Police Dept,7.06,7.55,0,0,,,0,2024,0
+search--probable-cause--consent,Glendale Police Dept,0,0,0,0,0,0,0,2024,0
+stops-non-resident-stops,High Hill Police Dept,29,26,2,1,0,0,0,2024,0
+stops--location-of-stop--other,University of Missouri-Columbia Police Dept,208,153,35,8,1,4,7,2024,0
+stops--reason-for-stop--equpiment,Ash Grove Police Dept,138,133,0,4,0,1,0,2024,0
+stops--reason-for-stop--other,Duquesne Police Dept,0,0,0,0,0,0,0,2024,0
+rates--population--2020-decennial-pop-pct,Union Police Dept,100,90.44,1.4,2.27,0.42,0.62,4.85,2024,0
+rates--totals--resident-stops,Howard County Sheriff's Dept,151,134,15,2,0,0,0,2024,0
+stops--citation-warning-violation--moving,University of Missouri-Columbia Police Dept,2894,1995,512,77,29,120,161,2024,0
+search--what-searched--driver,Fordland Police Dept,0,0,0,0,0,0,0,2024,0
+search--probable-cause--drug-dog-alert,Ashland Police Dept,1,1,0,0,0,0,0,2024,0
+rates--totals--contraband,Morgan County Sheriff's Dept,25,25,0,0,0,0,0,2024,0
+stops-all-stops,Diamond Police Dept,1419,1235,41,110,4,20,9,2024,0
+rates--population--2020-decennial-pop,Lake Lotawana Police Dept,1873,1725,20,30,3,13,82,2024,0
+stops-all-stops,Ironton Police Dept,149,140,3,3,1,1,1,2024,0
+search--probable-cause--incident-to-arrest,Cameron Police Dept,52,43,7,1,0,1,0,2024,0
+search--what-searched--driver-property,Monroe City Police Dept,27,20,6,1,0,0,0,2024,0
+stops--reason-for-stop--called-for-service,Hollister Police Dept,11,10,0,1,0,0,0,2024,0
+stops--stop-outcome--citation,Granby Police Dept,51,47,0,4,0,0,0,2024,0
+search--search-duration--31-minutes,Shelby County Sheriff's Dept,0,0,0,0,0,0,0,2024,0
+rates--population--2023-acs-pop-pct,Easton Police Dept,100,97.1,0,1.24,1.66,0,0,2024,0
+stops--arrest-violation--property,Creve Coeur Police Dept,1,0,1,0,0,0,0,2024,0
+search--search-duration--31-minutes,Fulton Police Dept,3,2,1,0,0,0,0,2024,0
+stops--stop-outcome--warning,Festus Police Dept,1844,1697,108,22,2,7,8,2024,0
+stops--location-of-stop--other,Country Club Hills Police Dept,0,0,0,0,0,0,0,2024,0
+rates--rates--arrest-rate,Senath Police Dept,14.67,17.86,,5.26,,,,2024,0
+stops-resident-stops,Washington County Sheriff's Dept,301,299,1,1,0,0,0,2024,0
+rates--totals--resident-stops,Fulton Police Dept,1353,1048,279,11,1,4,10,2024,0
+stops--stop-outcome--citation,Garden City Police Dept,70,66,2,1,0,0,1,2024,0
+rates--rates--arrest-rate,Chillicothe Police Dept,7.37,7.28,6.12,18.75,0,0,50,2024,0
+search--probable-cause--inventory,Jackson Police Dept,17,16,1,0,0,0,0,2024,0
+rates--totals--citations,Wellsville Police Dept,232,224,6,1,0,1,0,2024,0
+stops--reason-for-stop--called-for-service,Crestwood Police Dept,12,8,3,0,0,0,1,2024,0
+search--probable-cause--consent,St Clair Police Dept,15,15,0,0,0,0,0,2024,0
+search--probable-cause--other,Knob Noster Police Dept,0,0,0,0,0,0,0,2024,0
+stops--arrest-violation--property,Texas County Sheriff's Dept,0,0,0,0,0,0,0,2024,0
+stops--arrest-violation--other,Johnson County Sheriff's Dept,12,11,1,0,0,0,0,2024,0
+stops--arrest-violation--drug-violation,Kennett Police Dept,42,8,32,2,0,0,0,2024,0
+rates--totals--arrests,Eldon Police Dept,10,9,1,0,0,0,0,2024,0
+stops--arrest-violation--off-against-person,Holts Summit Police Dept,0,0,0,0,0,0,0,2024,0
+stops-non-resident-stops,Mansfield Police Dept,944,916,21,5,0,2,0,2024,0
+rates--totals--citations,Bolivar Police Dept,477,433,21,20,1,2,0,2024,0
+stops--driver-age--30-39,Lake Ozark Police Dept,320,273,17,19,2,2,7,2024,0
+rates--population--2023-acs-pop-pct,Sullivan Police Dept,100,87.41,1.35,1.69,0.42,0,10.31,2024,0
+search--probable-cause--consent,Oak Grove Police Dept,2,2,0,0,0,0,0,2024,0
+stops--officer-assignment--dedicated-traffic,Joplin Police Dept,2143,1877,156,76,9,9,16,2024,0
+stops--reason-for-stop--moving,University of Missouri-Kansas City Police Dept,361,238,75,17,2,20,9,2024,0
+stops--driver-age--30-39,Noel Police Dept,69,54,3,5,1,5,1,2024,0
+rates--rates--stop-rate,Wentzville Police Dept,19.78,17.65,53.13,17.79,25,2.84,13.93,2024,0
+stops--reason-for-stop--det-crime-bulletin,Bridgeton Police Dept,30,8,18,1,0,1,2,2024,0
+stops--arrest-violation--off-against-person,Washburn Police Dept,0,0,0,0,0,0,0,2024,0
+stops--location-of-stop--interstate-hwy,Easton Police Dept,0,0,0,0,0,0,0,2024,0
+stops--arrest-violation--outstanding-warrent,Bernie Police Dept,3,3,0,0,0,0,0,2024,0
+search--contraband-found--drugs,Normandy Police Dept,2,1,1,0,0,0,0,2024,0
+search--contraband-found--drugs,University of Missouri-St Louis Police Dept,0,0,0,0,0,0,0,2024,0
+stops--arrest-violation--off-against-person,Mansfield Police Dept,0,0,0,0,0,0,0,2024,0
+stops--driver-gender--female,Greenwood Police Dept,705,477,79,7,0,2,140,2024,0
+search--contraband-found--currency,Rosebud Police Dept,0,0,0,0,0,0,0,2024,0
+stops--arrest-violation--other,Garden City Police Dept,1,0,1,0,0,0,0,2024,0
+search--search-duration--0-15-minutes,Marionville Police Dept,10,9,0,1,0,0,0,2024,0
+stops--arrest-violation--drug-violation,Fordland Police Dept,0,0,0,0,0,0,0,2024,0
+stops--officer-assignment--special-assignment,Platte Woods Police Dept,0,0,0,0,0,0,0,2024,0
+stops--arrest-violation--property,Lakeshire Police Dept,0,0,0,0,0,0,0,2024,0
+stops--driver-gender--female,Orrick Police Dept,8,8,0,0,0,0,0,2024,0
+stops--location-of-stop--other,Kahoka Police Dept,5,5,0,0,0,0,0,2024,0
+rates--rates--contraband-hit-rate,Ashland Police Dept,10.77,10.77,,,,,,2024,0
+stops--arrest-violation--drug-violation,Seymour Police Dept,3,3,0,0,0,0,0,2024,0
+stops--location-of-stop--other,Perryville Police Dept,25,22,2,1,0,0,0,2024,0
+stops--arrest-violation--off-against-person,Boone County Sheriff's Dept,9,3,6,0,0,0,0,2024,0
+stops--reason-for-stop--other,Clinton Police Dept,0,0,0,0,0,0,0,2024,0
+stops--driver-age--30-39,Lewis County Sheriff's Dept,75,70,3,1,0,0,1,2024,0
+stops--driver-age--65-and-over,Jefferson City Police Dept,756,640,96,8,0,7,5,2024,0
+search--probable-cause--drug-alcohol-odor,Pacific Police Dept,5,5,0,0,0,0,0,2024,0
+search--search-duration--16-30-minutes,Holts Summit Police Dept,9,4,2,3,0,0,0,2024,0
+stops--driver-age--30-39,New Florence Police Dept,101,66,15,7,4,4,5,2024,0
+search--probable-cause--other,Morrisville Police Dept,0,0,0,0,0,0,0,2024,0
+stops--arrest-violation--off-against-person,Maryland Heights Police Dept,13,2,11,0,0,0,0,2024,0
+search--contraband-found--other,Ashland Police Dept,3,3,0,0,0,0,0,2024,0
+rates--rates--search-rate,St James Police Dept,9.08,8.84,10.64,18.37,,0,0,2024,0
+search--probable-cause--drug-dog-alert,Bloomfield Police Dept,0,0,0,0,0,0,0,2024,0
+stops--driver-gender--male,Park Hills Police Dept,999,950,35,12,0,0,2,2024,0
+stops--reason-for-stop--officer-initiative,Vienna Police Dept,4,4,0,0,0,0,0,2024,0
+stops--stop-outcome--warning,Atchison County Sheriff's Dept,21,18,2,1,0,0,0,2024,0
+rates--population--2020-decennial-pop-pct,Pacific Police Dept,100,79.88,11.95,2.33,0.32,0.85,4.69,2024,0
+rates--rates--arrest-rate,Exeter Police Dept,5.32,5.88,0,0,,0,,2024,0
+rates--rates--search-rate,Rolla Police Dept,5.97,5.99,6.19,13.33,,0,2.27,2024,0
+stops--location-of-stop--county-road,Sullivan Police Dept,3,2,1,0,0,0,0,2024,0
+search--probable-cause--other,Cedar County Sheriff's Dept,2,2,0,0,0,0,0,2024,0
+rates--population--2020-decennial-pop-pct,Buffalo Police Dept,100,90.56,0.16,2.4,1.14,0.35,5.39,2024,0
+stops--driver-age--40-64,Howell County Sheriff's Dept,580,557,14,7,0,0,2,2024,0
+search--what-searched--car-property,Kahoka Police Dept,4,4,0,0,0,0,0,2024,0
+stops--stop-outcome--contraband,Blue Springs Police Dept,40,32,8,0,0,0,0,2024,0
+search--what-searched--driver,Perry County Sheriff's Dept,27,10,10,7,0,0,0,2024,0
+stops-resident-stops,Atchison County Sheriff's Dept,11,11,0,0,0,0,0,2024,0
+stops--location-of-stop--interstate-hwy,Canadian Pacific Kansas City Ltd Police Dept,1,1,0,0,0,0,0,2024,0
+stops--location-of-stop--us-hwy,Crane Police Dept,0,0,0,0,0,0,0,2024,0
+search--contraband-found--stolen-property,Livingston County Sheriff's Dept,0,0,0,0,0,0,0,2024,0
+stops--driver-age--18-29,Hawk Point Police Dept,46,43,1,1,0,0,1,2024,0
+search--probable-cause--plain-view-contra,Grundy County Sheriff's Dept,0,0,0,0,0,0,0,2024,0
+stops--citation-warning-violation--moving,Milan Police Dept,200,139,10,46,5,0,0,2024,0
+rates--totals--citations,Festus Police Dept,1414,1325,67,11,0,5,6,2024,0
+stops--driver-age--18-29,Alma Police Dept,1,1,0,0,0,0,0,2024,0
+rates--totals--resident-stops,Warren County Sheriff's Dept,1319,1206,70,34,3,0,6,2024,0
+stops--stop-outcome--no-action,Smithville Police Dept,72,61,10,0,0,0,1,2024,0
+stops--driver-age--18-29,St Charles Community College Police Dept,1,0,1,0,0,0,0,2024,0
+search--probable-cause--consent,Knox County Sheriff's Dept,4,4,0,0,0,0,0,2024,0
+stops--driver-gender--female,Christian County Sheriff's Dept,2436,2327,62,19,3,11,14,2024,0
+search--contraband-found--alcohol,Brookfield Police Dept,1,1,0,0,0,0,0,2024,0
+search--contraband-found--alcohol,Martinsburg Police Dept,0,0,0,0,0,0,0,2024,0
+stops-all-stops,Miller County Sheriff's Dept,1638,1497,79,34,2,4,22,2024,0
+stops--reason-for-stop--license,Schuyler County Sheriff's Dept,41,39,1,1,0,0,0,2024,0
+stops--officer-assignment--special-assignment,Bethany Police Dept,0,0,0,0,0,0,0,2024,0
+rates--totals--searches,Blue Springs Police Dept,201,138,57,2,0,4,0,2024,0
+stops--reason-for-stop--det-crime-bulletin,Louisiana Police Dept,2,1,1,0,0,0,0,2024,0
+search--search-duration--31-minutes,Berkeley Police Dept,1,0,1,0,0,0,0,2024,0
+search--search-duration--0-15-minutes,Blue Springs Police Dept,179,122,51,2,0,4,0,2024,0
+stops--officer-assignment--dedicated-traffic,Gerald Police Dept,51,51,0,0,0,0,0,2024,0
+stops--stop-outcome--contraband,Tipton Police Dept,8,8,0,0,0,0,0,2024,0
+rates--totals--arrests,Stoddard County Sheriff's Dept,61,56,5,0,0,0,0,2024,0
+rates--rates--contraband-hit-rate,Parkville Police Dept,14.52,22.73,14.81,0,,,,2024,0
+stops--driver-age--30-39,Doolittle Police Dept,118,97,9,6,1,1,4,2024,0
+search--probable-cause--inventory,Bismarck Police Dept,0,0,0,0,0,0,0,2024,0
+stops--reason-for-stop--license,Clay County Sheriff's Dept,5514,3913,1128,347,9,41,76,2024,0
+rates--totals--contraband,Howard County Sheriff's Dept,9,5,4,0,0,0,0,2024,0
+stops--stop-outcome--contraband,Chillicothe Police Dept,66,61,3,1,0,0,1,2024,0
+stops--driver-age--30-39,Benton Police Dept,17,14,2,1,0,0,0,2024,0
+stops--arrest-violation--dwi-bac,St Louis County Police Dept,431,273,145,8,1,3,1,2024,0
