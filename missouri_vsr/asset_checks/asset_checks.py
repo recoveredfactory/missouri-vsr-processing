@@ -72,7 +72,7 @@ def _rename_check_fields(d: dict) -> dict:
 
 
 with open("data_checks/row_sanity_checks.csv") as f:
-    ROW_SANITY_CHECKS = [_rename_check_fields(_coerce_row(r)) for r in csv.DictReader(f)]
+    ROW_EXPECTATIONS = [_rename_check_fields(_coerce_row(r)) for r in csv.DictReader(f)]
 
 
 # Schema check for extracted pdf data – ensure *exact* match with `EXPECTED_COLUMNS`.
@@ -99,6 +99,33 @@ def check_no_duplicate_slugs(df: pd.DataFrame) -> AssetCheckResult:
 
     # Include both department and slug for each duplicate row
     example_duplicates = dupes[["Department", "slug", "year"]].drop_duplicates().to_dict(orient="records")
+
+    return AssetCheckResult(
+        passed=passed,
+        metadata={
+            "duplicate_count": len(dupes),
+            "example_duplicates": example_duplicates,
+        },
+    )
+
+
+# Duplicate row_id check – row_id + year must be unique.
+@asset_check(asset=combine_all_reports)
+def check_no_duplicate_row_ids(df: pd.DataFrame) -> AssetCheckResult:
+    if "row_id" not in df.columns or "year" not in df.columns:
+        return AssetCheckResult(
+            passed=False,
+            metadata={"reason": "row_id/year columns missing"},
+        )
+
+    dupes = df[df.duplicated(["row_id", "year"], keep=False)]
+    passed = dupes.empty
+    example_duplicates = (
+        dupes[["row_id", "year", "Department", "slug"]]
+        .drop_duplicates()
+        .head(25)
+        .to_dict(orient="records")
+    )
 
     return AssetCheckResult(
         passed=passed,
@@ -141,10 +168,10 @@ def _convert_types(obj):
         return obj
 
 
-def _make_year_sanity_check(asset, year: int, rows: list[dict]):
+def _make_year_expectation_check(asset, year: int, rows: list[dict]):
     """Return an `asset_check` enforcing that all rows for a year match."""
 
-    check_name = f"sanity_check_{year}"
+    check_name = f"row_expectations_{year}"
 
     @asset_check(name=check_name, asset=asset)
     def _check(df: pd.DataFrame) -> AssetCheckResult:
@@ -218,7 +245,7 @@ def _make_year_sanity_check(asset, year: int, rows: list[dict]):
 
 
 ROWS_BY_YEAR: dict[int, list[dict]] = {}
-for check in ROW_SANITY_CHECKS:
+for check in ROW_EXPECTATIONS:
     year = check.get("year")
     if isinstance(year, int):
         ROWS_BY_YEAR.setdefault(year, []).append(check)
@@ -226,8 +253,8 @@ for check in ROW_SANITY_CHECKS:
         ROWS_BY_YEAR.setdefault(int(year), []).append(check)
 
 
-year_sanity_checks = [
-    _make_year_sanity_check(combine_all_reports, year, rows)
+year_expectation_checks = [
+    _make_year_expectation_check(combine_all_reports, year, rows)
     for year, rows in sorted(ROWS_BY_YEAR.items())
 ]
 
@@ -235,6 +262,7 @@ year_sanity_checks = [
 asset_checks = [
     check_expected_columns,
     check_no_duplicate_slugs,
+    check_no_duplicate_row_ids,
     check_numeric_columns_parse,
-    *year_sanity_checks,
+    *year_expectation_checks,
 ]
