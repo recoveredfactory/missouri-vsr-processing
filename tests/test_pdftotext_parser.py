@@ -22,7 +22,7 @@ def test_front_matter_is_ignored_until_agency():
     assert not df.empty
     assert (df["agency"].str.contains("Adair County Sheriff", na=False)).any()
     assert (df["table_id"] == "rates-by-race").any()
-    assert (df["slug"] == "rates--totals--all-stops").any()
+    assert (df["row_key"] == "rates-by-race--totals--all-stops").any()
 
 
 def test_parses_rates_table_rows():
@@ -36,9 +36,9 @@ def test_parses_rates_table_rows():
 
     assert row["table_id"] == "rates-by-race"
     assert row["section"] == "Totals"
-    assert row["slug"] == "rates--totals--all-stops"
-    assert row["metric_id"] == "rates-by-race-totals-all-stops"
-    assert row["row_id"] == "2023-adair-county-sheriff-s-dept-rates-by-race-totals-all-stops"
+    assert row["row_key"] == "rates-by-race--totals--all-stops"
+    assert row["metric_id"] == "all-stops"
+    assert row["row_id"] == "2023-adair-county-sheriff-s-dept-rates-by-race--totals--all-stops"
     assert row["Total"] == pytest.approx(317.0)
 
 
@@ -51,7 +51,7 @@ def test_parses_stops_table_sections():
 
     assert row["table_id"] == "number-of-stops-by-race"
     assert row["section"] == "Reason for Stop"
-    assert row["slug"] == "stops--reason-for-stop--moving"
+    assert row["row_key"] == "number-of-stops-by-race--reason-for-stop--moving"
     assert row["Total"] == pytest.approx(173.0)
 
 
@@ -64,7 +64,7 @@ def test_parses_disparity_index_table():
     ].iloc[0]
 
     assert row["table_id"] == "disparity-index-by-race"
-    assert row["slug"] == "disparity-index-by-race--disparity-index--all-stops"
+    assert row["row_key"] == "disparity-index-by-race--disparity-index--all-stops"
     assert pd.isna(row["Total"])
     assert row["White"] == pytest.approx(0.906, rel=1e-3)
 

@@ -12,21 +12,21 @@ def _sample_combined_df() -> pd.DataFrame:
             {
                 "agency": "Agency A",
                 "year": 2023,
-                "slug": "rates--totals--all-stops",
+                "row_key": "rates-by-race--totals--all-stops",
                 "Total": 100,
                 "White": 50,
             },
             {
                 "agency": "Agency B",
                 "year": 2023,
-                "slug": "rates--totals--all-stops",
+                "row_key": "rates-by-race--totals--all-stops",
                 "Total": 200,
                 "White": 50,
             },
             {
                 "agency": "Missouri State Highway Patrol",
                 "year": 2023,
-                "slug": "rates--totals--all-stops",
+                "row_key": "rates-by-race--totals--all-stops",
                 "Total": 150,
                 "White": 25,
             },
@@ -41,16 +41,16 @@ def test_add_rank_percentile_rows_op():
 
     assert len(augmented) == len(df) * 4
 
-    base_slug = "rates--totals--all-stops"
+    base_row_key = "rates-by-race--totals--all-stops"
     slug_suffixes = {
-        slug.replace(base_slug, "")
-        for slug in augmented["slug"].unique()
-        if slug.startswith(base_slug)
+        row_key.replace(base_row_key, "")
+        for row_key in augmented["row_key"].unique()
+        if row_key.startswith(base_row_key)
     }
     assert slug_suffixes == {"", "-percentage", "-rank", "-percentile"}
 
     rank_row = augmented[
-        (augmented["slug"] == f"{base_slug}-rank")
+        (augmented["row_key"] == f"{base_row_key}-rank")
         & (augmented["agency"] == "Agency B")
     ]
     assert rank_row["Total"].iloc[0] == 1
@@ -68,7 +68,7 @@ def test_compute_statewide_baselines_op(tmp_path):
 
     assert set(baselines.columns) == {
         "year",
-        "slug",
+        "row_key",
         "metric",
         "count",
         "mean",
