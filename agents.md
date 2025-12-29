@@ -34,6 +34,7 @@ Quick reference for future coding agents working on this Dagster pipeline that p
 
 ## Data checks (csv-driven queue)
 - `data_checks/row_sanity_checks.csv` drives dynamic row-level asset checks. Each row becomes a check against `combine_all_reports`, matching on `slug`, `Department`, and `year`, then asserting provided numeric/metadata fields. Blank cells mean “don’t check / allow missing.”
+- `checked` is for human review tracking only; checks still run for all rows.
 - Add more checks by appending rows to that CSV; columns are coerced to numbers where applicable, with slight field renames (`section`→`Measurement`, etc. in `asset_checks.py`).
 - Other checks in `asset_checks.py`: schema columns match, no duplicate `Department`+`slug`+`year`, and numeric columns parse.
 

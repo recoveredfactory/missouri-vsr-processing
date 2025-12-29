@@ -147,7 +147,7 @@ def _make_row_sanity_check(asset, check: dict, idx: int) -> AssetCheckSpec:
 
     check_slug = check["slug"].replace("-", "_")
     dept_slug = slugify(check["Department"], separator="_")
-    check_name = f"sanity_check_{idx}_{check_slug}_{dept_slug}_{check['year']}"
+    check_name = f"sanity_check_{idx:04d}_{check_slug}_{dept_slug}_{check['year']}"
 
     @asset_check(name=check_name, asset=asset)
     def _check(df: pd.DataFrame) -> AssetCheckResult:
@@ -162,7 +162,7 @@ def _make_row_sanity_check(asset, check: dict, idx: int) -> AssetCheckSpec:
         # Check all additional fields in the dict (besides slug/department)
         mismatches = []
         for key, val in check.items():
-            if key in ("slug", "Department"):
+            if key in ("slug", "Department", "checked"):
                 continue
 
             actual_val = row.iloc[0][key]
