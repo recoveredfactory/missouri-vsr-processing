@@ -2,8 +2,7 @@ import csv
 
 import numpy as np
 import pandas as pd
-from slugify import slugify
-from dagster import AssetCheckResult, AssetCheckSpec, MetadataValue, asset_check
+from dagster import AssetCheckResult, MetadataValue, asset_check
 
 from missouri_vsr.assets.reports import combine_all_reports
 
@@ -142,56 +141,94 @@ def _convert_types(obj):
         return obj
 
 
-def _make_row_sanity_check(asset, check: dict, idx: int) -> AssetCheckSpec:
-    """Return an `asset_check` enforcing that *one* row matches `check`."""
+def _make_year_sanity_check(asset, year: int, rows: list[dict]):
+    """Return an `asset_check` enforcing that all rows for a year match."""
 
-    check_slug = check["slug"].replace("-", "_")
-    dept_slug = slugify(check["Department"], separator="_")
-    check_name = f"sanity_check_{idx:04d}_{check_slug}_{dept_slug}_{check['year']}"
+    check_name = f"sanity_check_{year}"
 
     @asset_check(name=check_name, asset=asset)
     def _check(df: pd.DataFrame) -> AssetCheckResult:
-        # Ensure both conditions are applied correctly with parentheses
-        row = df[(df["slug"] == check["slug"]) & (df["Department"] == check["Department"]) & (df["year"] == check["year"])]
-        if row.empty:
+        year_df = df[df["year"] == year].copy()
+        if year_df.empty:
             return AssetCheckResult(
                 passed=False,
-                metadata={"reason": f"{check['slug']} + {check['Department']} + {check['year']} not found"},
+                metadata={"reason": f"no rows found for year {year}"},
             )
 
-        # Check all additional fields in the dict (besides slug/department)
+        year_df = year_df.drop_duplicates(["slug", "Department", "year"])
+        year_index = year_df.set_index(["slug", "Department", "year"], drop=False)
+
+        missing = []
         mismatches = []
-        for key, val in check.items():
-            if key in ("slug", "Department", "checked"):
+        for check in rows:
+            key = (check.get("slug"), check.get("Department"), check.get("year"))
+            if key not in year_index.index:
+                missing.append({"slug": key[0], "Department": key[1], "year": key[2]})
                 continue
 
-            actual_val = row.iloc[0][key]
+            actual_row = year_index.loc[key]
+            if isinstance(actual_row, pd.DataFrame):
+                actual_row = actual_row.iloc[0]
 
-            # Treat both None and NaN as equivalent
-            if pd.isna(actual_val) and val is None:
-                continue
+            row_mismatches = []
+            for field, expected in check.items():
+                if field in ("slug", "Department", "checked"):
+                    continue
 
-            # Otherwise, check for (fairly) strict equality
-            if actual_val != val:
-                mismatches.append({"field": key, "expected": val, "actual": actual_val})
+                actual_val = actual_row.get(field)
 
-        mismatches = _convert_types(mismatches)
+                # Treat both None and NaN as equivalent
+                if pd.isna(actual_val) and expected is None:
+                    continue
 
+                # Otherwise, check for (fairly) strict equality
+                if actual_val != expected:
+                    row_mismatches.append(
+                        {"field": field, "expected": expected, "actual": actual_val}
+                    )
+
+            if row_mismatches:
+                mismatches.append(
+                    {
+                        "slug": key[0],
+                        "Department": key[1],
+                        "year": key[2],
+                        "mismatches": row_mismatches,
+                    }
+                )
+
+        sample_limit = 20
+        missing_sample = _convert_types(missing[:sample_limit])
+        mismatches_sample = _convert_types(mismatches[:sample_limit])
+
+        passed = not missing and not mismatches
         return AssetCheckResult(
-            passed=not mismatches,
+            passed=passed,
             metadata={
-                "checked_fields": [k for k in check.keys() if k not in ("slug", "Department")],
-                "mismatches": MetadataValue.json(mismatches),
+                "year": year,
+                "expected_rows": len(rows),
+                "missing_count": len(missing),
+                "mismatch_count": len(mismatches),
+                "missing_sample": MetadataValue.json(missing_sample),
+                "mismatch_sample": MetadataValue.json(mismatches_sample),
             },
         )
 
     return _check
 
 
-# Dynamically materialise any row-level checks defined above.
-row_sanity_checks = [
-    _make_row_sanity_check(combine_all_reports, check, i)
-    for i, check in enumerate(ROW_SANITY_CHECKS)
+ROWS_BY_YEAR: dict[int, list[dict]] = {}
+for check in ROW_SANITY_CHECKS:
+    year = check.get("year")
+    if isinstance(year, int):
+        ROWS_BY_YEAR.setdefault(year, []).append(check)
+    elif isinstance(year, str) and year.isdigit():
+        ROWS_BY_YEAR.setdefault(int(year), []).append(check)
+
+
+year_sanity_checks = [
+    _make_year_sanity_check(combine_all_reports, year, rows)
+    for year, rows in sorted(ROWS_BY_YEAR.items())
 ]
 
 # Aggregate if you need to expose the list for Dagster’s loader utilities
@@ -199,5 +236,5 @@ asset_checks = [
     check_expected_columns,
     check_no_duplicate_slugs,
     check_numeric_columns_parse,
-    *row_sanity_checks,
+    *year_sanity_checks,
 ]
