@@ -81,16 +81,16 @@ def _load_crosswalk(csv_path: Path, log: logging.Logger) -> pd.DataFrame:
 
 def _candidate_pool(vsr_df: pd.DataFrame, crosswalk: pd.DataFrame) -> List[str]:
     # Candidates are all distinct departments from the combined VSR output
-    if "Department" not in vsr_df.columns:
-        raise ValueError("VSR parquet missing 'Department' column")
-    raw_names = sorted(set(str(v) for v in vsr_df["Department"].dropna().unique()))
+    if "agency" not in vsr_df.columns:
+        raise ValueError("VSR parquet missing 'agency' column")
+    raw_names = sorted(set(str(v) for v in vsr_df["agency"].dropna().unique()))
     canon = sorted(set(str(v) for v in crosswalk.get("Canonical", pd.Series(dtype=object)).dropna().unique()))
     # Prioritize Canonical first, then fall back to raw names
     return canon + [n for n in raw_names if n not in canon]
 
 
 def _suggest(candidates: List[str], query: str, limit: int = 5) -> List[Tuple[str, int]]:
-    """Suggest best candidate Departments for a given agency name.
+    """Suggest best candidate agencies for a given agency name.
 
     Scores are computed on normalized strings using a blend of RapidFuzz scorers
     with a small prefix bonus. This tends to favor very similar names and stable
@@ -139,7 +139,12 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Interactive agency crosswalk builder")
     p.add_argument("--source-parquet", type=Path, default=Path("data/processed/agency_list.parquet"), help="Path to agency list Parquet")
     p.add_argument("--source-excel", type=Path, default=Path("data/src/2025-05-05-post-law-enforcement-agencies-list.xlsx"), help="Path to agency list Excel (fallback)")
-    p.add_argument("--vsr-parquet", type=Path, default=Path("data/processed/all_combined_output.parquet"), help="Path to combined VSR Parquet (for Department candidates)")
+    p.add_argument(
+        "--vsr-parquet",
+        type=Path,
+        default=Path("data/processed/all_combined_output.parquet"),
+        help="Path to combined VSR Parquet (for agency candidates)",
+    )
     p.add_argument("--crosswalk", type=Path, default=Path("data/src/agency_crosswalk.csv"), help="Path to crosswalk CSV to create/update")
     p.add_argument("--name-col", type=str, default=None, help="Column name in agency list to treat as the agency/department name")
     p.add_argument("--top-k", type=int, default=5, help="Number of suggestions to display")

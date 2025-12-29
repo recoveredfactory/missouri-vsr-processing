@@ -23,7 +23,7 @@ def _build_rank_percentile_frame(
     value_cols: List[str],
     suffix: str,
 ) -> pd.DataFrame:
-    frame = base[["Department", "year", "slug"]].copy()
+    frame = base[["agency", "year", "slug"]].copy()
     frame["slug"] = frame["slug"].astype(str) + suffix
     for col in value_cols:
         frame[col] = metric_df[col]
@@ -31,6 +31,29 @@ def _build_rank_percentile_frame(
         if col not in frame.columns:
             frame[col] = pd.NA
     return frame[base.columns]
+
+
+def _build_percentage_frame(
+    base: pd.DataFrame,
+    value_cols: List[str],
+    *,
+    metric_col: str,
+) -> pd.DataFrame:
+    if metric_col not in base.columns:
+        return pd.DataFrame(columns=base.columns)
+
+    metric_series = base[metric_col].astype(str)
+    non_rate_mask = ~metric_series.str.contains(r"\brate\b", case=False, regex=True, na=False)
+    percentage_base = base.loc[non_rate_mask].copy()
+    if percentage_base.empty:
+        return pd.DataFrame(columns=base.columns)
+
+    total = pd.to_numeric(percentage_base["Total"], errors="coerce")
+    percentages = percentage_base[value_cols].div(total, axis=0)
+    percentages = percentages.where(total > 0)
+    percentage_base[value_cols] = percentages
+    percentage_base["slug"] = percentage_base["slug"].astype(str) + "-percentage"
+    return percentage_base
 
 
 def _rank_and_percentile(
@@ -69,7 +92,7 @@ def add_rank_percentile_rows(context, combined: pd.DataFrame) -> pd.DataFrame:
         context.log.warning("Combined report DataFrame is empty; skipping rank/percentile.")
         return combined
 
-    required_cols = {"Department", "year", "slug"}
+    required_cols = {"agency", "year", "slug"}
     missing = required_cols - set(combined.columns)
     if missing:
         raise ValueError(f"Cannot add ranks/percentiles – missing columns: {sorted(missing)}")
@@ -79,15 +102,18 @@ def add_rank_percentile_rows(context, combined: pd.DataFrame) -> pd.DataFrame:
         raise ValueError("Cannot add ranks/percentiles – no numeric value columns were found.")
 
     base = combined.copy()
+    metric_col = "metric"
+    percentage_rows = _build_percentage_frame(base, value_cols, metric_col=metric_col)
     rank_all, percentile_all = _rank_and_percentile(base, value_cols)
 
     derived = [
+        percentage_rows,
         _build_rank_percentile_frame(base, rank_all, value_cols, "-rank"),
         _build_rank_percentile_frame(base, percentile_all, value_cols, "-percentile"),
     ]
     augmented = pd.concat([base, *derived], ignore_index=True)
     context.log.info(
-        "Added rank/percentile rows: %d base rows → %d total rows",
+        "Added rank/percentile/percentage rows: %d base rows → %d total rows",
         len(base),
         len(augmented),
     )
@@ -122,7 +148,7 @@ def compute_statewide_slug_baselines(context, combined: pd.DataFrame) -> pd.Data
         context.log.warning("Combined report DataFrame is empty; no baselines computed.")
         return pd.DataFrame(columns=baseline_columns)
 
-    required_cols = {"Department", "year", "slug"}
+    required_cols = {"agency", "year", "slug"}
     missing = required_cols - set(combined.columns)
     if missing:
         raise ValueError(f"Cannot compute baselines – missing columns: {sorted(missing)}")
@@ -131,8 +157,8 @@ def compute_statewide_slug_baselines(context, combined: pd.DataFrame) -> pd.Data
     if not value_cols:
         raise ValueError("Cannot compute baselines – no numeric value columns were found.")
 
-    base = combined[["Department", "year", "slug", *value_cols]].copy()
-    base["Department"] = base["Department"].astype(str).str.strip()
+    base = combined[["agency", "year", "slug", *value_cols]].copy()
+    base["agency"] = base["agency"].astype(str).str.strip()
 
     def _build_baseline(df: pd.DataFrame, scope: str) -> pd.DataFrame:
         melted = df.melt(
@@ -160,7 +186,7 @@ def compute_statewide_slug_baselines(context, combined: pd.DataFrame) -> pd.Data
         return grouped
 
     all_baselines = _build_baseline(base, "all")
-    no_mshp_baselines = _build_baseline(base.loc[base["Department"].ne(MSHP_DEPARTMENT_NAME)], "no_mshp")
+    no_mshp_baselines = _build_baseline(base.loc[base["agency"].ne(MSHP_DEPARTMENT_NAME)], "no_mshp")
     if all_baselines.empty and no_mshp_baselines.empty:
         baselines = pd.DataFrame(columns=baseline_columns)
     else:
@@ -197,9 +223,9 @@ def pivot_reports_by_slug_op(context, combined: pd.DataFrame) -> pd.DataFrame:
     """Pivot combined report data so each Agency+Year row contains slug-based columns."""
     if combined.empty:
         context.log.warning("Combined report DataFrame is empty; returning empty pivot result.")
-        return pd.DataFrame(columns=["Department", "year"])
+        return pd.DataFrame(columns=["agency", "year"])
 
-    required_cols = {"Department", "year", "slug"}
+    required_cols = {"agency", "year", "slug"}
     missing = required_cols - set(combined.columns)
     if missing:
         raise ValueError(f"Cannot pivot – missing columns: {sorted(missing)}")
@@ -208,11 +234,11 @@ def pivot_reports_by_slug_op(context, combined: pd.DataFrame) -> pd.DataFrame:
     if not value_cols:
         raise ValueError("Cannot pivot – no numeric value columns were found.")
 
-    base = combined[["Department", "year", "slug", *value_cols]].copy()
-    dup_mask = base.duplicated(subset=["Department", "year", "slug"], keep=False)
+    base = combined[["agency", "year", "slug", *value_cols]].copy()
+    dup_mask = base.duplicated(subset=["agency", "year", "slug"], keep=False)
     if dup_mask.any():
         dupe_preview = (
-            base.loc[dup_mask, ["Department", "year", "slug"]]
+            base.loc[dup_mask, ["agency", "year", "slug"]]
             .drop_duplicates()
             .head(5)
             .to_dict(orient="records")
@@ -224,7 +250,7 @@ def pivot_reports_by_slug_op(context, combined: pd.DataFrame) -> pd.DataFrame:
         )
 
     pivoted = base.pivot_table(
-        index=["Department", "year"],
+        index=["agency", "year"],
         columns="slug",
         values=value_cols,
         aggfunc="first",
@@ -323,13 +349,13 @@ def _json_safe_record(record: dict) -> dict:
 @op(out=Out(list), required_resource_keys={"data_dir_out", "data_dir_processed"})
 def write_agency_year_json(
     context,
-    pivoted: pd.DataFrame,
+    combined: pd.DataFrame,
     agency_reference_geocoded: pd.DataFrame,
 ) -> List[str]:
-    """Write one JSON file per agency containing rows for each year."""
+    """Write one JSON file per agency with row-level slug metadata and values."""
     del agency_reference_geocoded
-    if pivoted.empty:
-        context.log.warning("Pivoted DataFrame empty; no JSON outputs created.")
+    if combined.empty:
+        context.log.warning("Combined DataFrame empty; no JSON outputs created.")
         return []
 
     out_root = Path(context.resources.data_dir_out.get_path()) / "agency_year"
@@ -385,39 +411,54 @@ def write_agency_year_json(
     else:
         context.log.info("Agency reference metadata not found at %s; skipping metadata", reference_path)
 
+    required_cols = {
+        "agency",
+        "year",
+        "slug",
+        "table",
+        "table_id",
+        "section",
+        "section_id",
+        "metric",
+        "metric_id",
+        "row_id",
+    }
+    missing = required_cols - set(combined.columns)
+    if missing:
+        raise ValueError(f"Cannot write agency JSON – missing columns: {sorted(missing)}")
+
+    value_cols = [c for c in PIVOT_VALUE_COLUMNS if c in combined.columns]
+    row_cols = [
+        "year",
+        "slug",
+        "table",
+        "table_id",
+        "section",
+        "section_id",
+        "metric",
+        "metric_id",
+        "row_id",
+        *value_cols,
+    ]
+
     output_paths: List[str] = []
-    for department, group in pivoted.groupby("Department"):
+    for agency, group in combined.groupby("agency"):
         records: List[dict] = []
-        for _, row in group.sort_values("year").iterrows():
-            row_payload: dict = {}
-            year_val = row.get("year")
-            if pd.notna(year_val):
-                row_payload["year"] = int(year_val)
-            else:
-                row_payload["year"] = None
+        for _, row in group.sort_values(["year", "slug"]).iterrows():
+            payload = {col: row.get(col) for col in row_cols if col in row.index}
+            year_val = payload.get("year")
+            payload["year"] = int(year_val) if pd.notna(year_val) else None
+            records.append(_json_safe_record(payload))
 
-            for col, value in row.items():
-                if col in {"Department", "year"}:
-                    continue
-                if pd.isna(value):
-                    continue
-                if "__" not in col:
-                    row_payload[col] = value
-                    continue
-                slug, metric = col.split("__", 1)
-                slug_bucket = row_payload.setdefault(slug, {})
-                slug_bucket[metric] = value
-            records.append(row_payload)
-
-        agency_slug = _agency_slug(department)
+        agency_slug = _agency_slug(agency)
         out_path = out_root / f"{agency_slug}.json"
-        payload = {"agency": department, "rows": records}
-        meta_row = agency_meta_lookup.get(str(department).strip())
+        payload = {"agency": agency, "rows": records}
+        meta_row = agency_meta_lookup.get(str(agency).strip())
         if meta_row is not None:
             payload["agency_metadata"] = _series_to_json_dict(meta_row)
         out_path.write_text(json.dumps(payload, indent=2))
         output_paths.append(str(out_path))
-        context.log.info("Wrote %d year rows for %s → %s", len(records), department, out_path)
+        context.log.info("Wrote %d year rows for %s → %s", len(records), agency, out_path)
 
     return output_paths
 
@@ -512,34 +553,34 @@ def write_agency_index_json(
             if not entry["phone"]:
                 entry["phone"] = _first_non_empty(row, phone_cols)
 
-    if not pivoted.empty and "Department" in pivoted.columns:
-        for dept in (
-            pivoted["Department"].dropna().astype(str).str.strip().replace("", pd.NA).dropna().unique()
+    if not pivoted.empty and "agency" in pivoted.columns:
+        for agency in (
+            pivoted["agency"].dropna().astype(str).str.strip().replace("", pd.NA).dropna().unique()
         ):
-            entry = names_by_key.get(dept)
+            entry = names_by_key.get(agency)
             if entry is None:
                 entry = {
-                    "agency_slug": _agency_slug(dept),
-                    "canonical_name": dept,
-                    "names": [dept],
+                    "agency_slug": _agency_slug(agency),
+                    "canonical_name": agency,
+                    "names": [agency],
                     "city": None,
                     "zip": None,
                     "phone": None,
                     metric_slug: None,
                 }
-                names_by_key[dept] = entry
+                names_by_key[agency] = entry
             else:
-                if dept not in entry["names"]:
-                    entry["names"].append(dept)
+                if agency not in entry["names"]:
+                    entry["names"].append(agency)
 
-    if not pivoted.empty and "Department" in pivoted.columns and metric_col in pivoted.columns:
-        subset = pivoted[["Department", "year", metric_col]].copy()
-        subset = subset[pd.notna(subset["Department"])]
-        subset["Department"] = subset["Department"].astype(str).str.strip()
-        subset = subset[subset["Department"].ne("")]
+    if not pivoted.empty and "agency" in pivoted.columns and metric_col in pivoted.columns:
+        subset = pivoted[["agency", "year", metric_col]].copy()
+        subset = subset[pd.notna(subset["agency"])]
+        subset["agency"] = subset["agency"].astype(str).str.strip()
+        subset = subset[subset["agency"].ne("")]
         subset["year"] = pd.to_numeric(subset["year"], errors="coerce")
-        subset = subset.sort_values(["Department", "year"], ascending=[True, False])
-        for dept, group in subset.groupby("Department", sort=False):
+        subset = subset.sort_values(["agency", "year"], ascending=[True, False])
+        for agency, group in subset.groupby("agency", sort=False):
             value = None
             for item in group[metric_col].tolist():
                 if _is_null(item):
@@ -548,18 +589,18 @@ def write_agency_index_json(
                 break
             if value is None:
                 continue
-            entry = names_by_key.get(dept)
+            entry = names_by_key.get(agency)
             if entry is None:
                 entry = {
-                    "agency_slug": _agency_slug(dept),
-                    "canonical_name": dept,
-                    "names": [dept],
+                    "agency_slug": _agency_slug(agency),
+                    "canonical_name": agency,
+                    "names": [agency],
                     "city": None,
                     "zip": None,
                     "phone": None,
                     metric_slug: None,
                 }
-                names_by_key[dept] = entry
+                names_by_key[agency] = entry
             entry[metric_slug] = value
 
     records = sorted(names_by_key.values(), key=lambda item: item["agency_slug"])
@@ -593,16 +634,16 @@ def write_statewide_baselines_json(context, baselines: pd.DataFrame) -> str:
     name="agency_year_json_exports",
     group_name="output",
     ins={
-        "pivot_reports_by_slug": AssetIn(key=AssetKey("pivot_reports_by_slug")),
+        "reports_with_rank_percentile": AssetIn(key=AssetKey("reports_with_rank_percentile")),
         "agency_reference_geocoded": AssetIn(key=AssetKey("agency_reference_geocoded")),
     },
     description="Generate per-agency JSON files containing year-by-year slug data.",
 )
 def agency_year_json_exports(
-    pivot_reports_by_slug: pd.DataFrame,
+    reports_with_rank_percentile: pd.DataFrame,
     agency_reference_geocoded: pd.DataFrame,
 ) -> List[str]:
-    return write_agency_year_json(pivot_reports_by_slug, agency_reference_geocoded)
+    return write_agency_year_json(reports_with_rank_percentile, agency_reference_geocoded)
 
 
 @graph_asset(

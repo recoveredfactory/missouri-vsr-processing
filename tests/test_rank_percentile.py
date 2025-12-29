@@ -8,21 +8,21 @@ def _sample_combined_df() -> pd.DataFrame:
     return pd.DataFrame(
         [
             {
-                "Department": "Agency A",
+                "agency": "Agency A",
                 "year": 2023,
                 "slug": "rates--totals--all-stops",
                 "Total": 100,
                 "White": 50,
             },
             {
-                "Department": "Agency B",
+                "agency": "Agency B",
                 "year": 2023,
                 "slug": "rates--totals--all-stops",
                 "Total": 200,
                 "White": 50,
             },
             {
-                "Department": "Missouri State Highway Patrol",
+                "agency": "Missouri State Highway Patrol",
                 "year": 2023,
                 "slug": "rates--totals--all-stops",
                 "Total": 150,
@@ -38,8 +38,8 @@ def test_rank_and_percentile_dense():
 
     rank_all, pct_all = processed._rank_and_percentile(df, value_cols)
 
-    def _value(series: pd.Series, dept: str) -> float:
-        return series.loc[df["Department"].eq(dept)].iloc[0]
+    def _value(series: pd.Series, agency: str) -> float:
+        return series.loc[df["agency"].eq(agency)].iloc[0]
 
     assert _value(rank_all["Total"], "Agency B") == 1
     assert _value(rank_all["Total"], "Missouri State Highway Patrol") == 2

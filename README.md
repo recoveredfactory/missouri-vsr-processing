@@ -91,7 +91,7 @@ Dagster caches materialized assets, but they don't persist between runs of the w
 
 ## Agency crosswalk CLI
 
-Interactive helper to map agency names from the metadata spreadsheet to canonical “Department” values seen in the VSR output.
+Interactive helper to map agency names from the metadata spreadsheet to canonical “agency” values seen in the VSR output.
 
 Prereqs: have `data/processed/all_combined_output.parquet` (run `combine_all_reports`) and the agency metadata (`data/src/2025-05-05-post-law-enforcement-agencies-list.xlsx` or the Parquet it produces).
 
@@ -108,7 +108,7 @@ uv run python -m missouri_vsr.cli.crosswalk \
 
 Behavior highlights:
 - Picks a name column automatically (agency/department/name) unless `--name-col` is provided.
-- Suggests candidate Departments (from combined VSR output) using fuzzy matching; accept, mark “not in VSR” (`n`), skip for later (`s`), back, or page for more.
+- Suggests candidate agencies (from combined VSR output) using fuzzy matching; accept, mark “not in VSR” (`n`), skip for later (`s`), back, or page for more.
 - Auto-fills exact normalized matches; writes progress on every decision to `agency_crosswalk.csv` and resume state to `agency_crosswalk.state.json` (same directory).
 - Optional merged output (`agency_reference.parquet`) joins the agency metadata with the crosswalk for downstream joins.
 

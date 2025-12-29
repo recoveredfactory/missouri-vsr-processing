@@ -10,21 +10,21 @@ def _sample_combined_df() -> pd.DataFrame:
     return pd.DataFrame(
         [
             {
-                "Department": "Agency A",
+                "agency": "Agency A",
                 "year": 2023,
                 "slug": "rates--totals--all-stops",
                 "Total": 100,
                 "White": 50,
             },
             {
-                "Department": "Agency B",
+                "agency": "Agency B",
                 "year": 2023,
                 "slug": "rates--totals--all-stops",
                 "Total": 200,
                 "White": 50,
             },
             {
-                "Department": "Missouri State Highway Patrol",
+                "agency": "Missouri State Highway Patrol",
                 "year": 2023,
                 "slug": "rates--totals--all-stops",
                 "Total": 150,
@@ -39,7 +39,7 @@ def test_add_rank_percentile_rows_op():
     context = build_op_context()
     augmented = processed.add_rank_percentile_rows(context, df)
 
-    assert len(augmented) == len(df) * 3
+    assert len(augmented) == len(df) * 4
 
     base_slug = "rates--totals--all-stops"
     slug_suffixes = {
@@ -47,11 +47,11 @@ def test_add_rank_percentile_rows_op():
         for slug in augmented["slug"].unique()
         if slug.startswith(base_slug)
     }
-    assert slug_suffixes == {"", "-rank", "-percentile"}
+    assert slug_suffixes == {"", "-percentage", "-rank", "-percentile"}
 
     rank_row = augmented[
         (augmented["slug"] == f"{base_slug}-rank")
-        & (augmented["Department"] == "Agency B")
+        & (augmented["agency"] == "Agency B")
     ]
     assert rank_row["Total"].iloc[0] == 1
 

@@ -4,7 +4,7 @@ Quick reference for future coding agents working on this Dagster pipeline that p
 
 ## What this project does
 - Downloads per-year VSR PDFs (see `YEAR_URLS` in `missouri_vsr/assets/extract.py`) and stores them under `data/src/reports`.
-- Extracts tables via `pdftotext -layout` with a text-first parser (`extract_pdf_data_<year>` assets), normalizing rows into `Key`, race counts/rates, department, table name, and measurement.
+- Extracts tables via `pdftotext -layout` with a text-first parser (`extract_pdf_data_<year>` assets), normalizing rows into `metric`, race counts/rates, `agency`, `table`, and `section`.
 - Combines per-year Parquet outputs (`data/processed/combined_output_<year>.parquet`) into a master Parquet + DataFrame (`combine_all_reports`), then pivots by slug and emits per-agency JSON under `data/out/agency_year`.
 - `data/src/2025-05-05-post-law-enforcement-agencies-list.xlsx` is agency metadata to join via a crosswalk; the `agency_list` asset loads it and writes `data/processed/agency_list.parquet` for downstream joins.
 
@@ -33,10 +33,10 @@ Quick reference for future coding agents working on this Dagster pipeline that p
 - Data directories are configured via resources: `data_dir_source`, `data_dir_report_pdfs`, `data_dir_processed`, `data_dir_out` (see `definitions.py`).
 
 ## Data checks (csv-driven queue)
-- `data_checks/row_sanity_checks.csv` drives per-year aggregate checks against `combine_all_reports`, matching on `slug`, `Department`, and `year`, then asserting provided numeric/metadata fields. Each check returns counts plus samples of missing/mismatched rows.
+- `data_checks/row_sanity_checks.csv` drives per-year aggregate checks against `combine_all_reports`, matching on `slug`, `agency`, and `year`, then asserting provided numeric/metadata fields. Each check returns counts plus samples of missing/mismatched rows.
 - `checked` is for human review tracking only; checks still run for all rows.
-- Add more checks by appending rows to that CSV; columns are coerced to numbers where applicable, with slight field renames (`section`→`Measurement`, etc. in `asset_checks.py`).
-- Other checks in `asset_checks.py`: schema columns match, no duplicate `Department`+`slug`+`year`, and numeric columns parse.
+- Add more checks by appending rows to that CSV; columns are coerced to numbers where applicable.
+- Other checks in `asset_checks.py`: schema columns match, no duplicate `agency`+`slug`+`year`, no duplicate `row_id`+`year`, and numeric columns parse.
 
 ## Dev runs
 - Default dev workflow typically materializes everything, but you can select subsets in Dagster (e.g., a single `download_reports` output or one `extract_pdf_data_<year>` asset) and tune `VSR_PAGE_CHUNK_SIZE` to process smaller page chunks.
@@ -47,7 +47,7 @@ Quick reference for future coding agents working on this Dagster pipeline that p
 ## Agency crosswalk CLI
 - Script: `python -m missouri_vsr.cli.crosswalk` (run via `uv run …`).
 - Defaults: reads agency metadata from `data/processed/agency_list.parquet` (or Excel fallback), VSR candidates from `data/processed/all_combined_output.parquet`, writes `data/src/agency_crosswalk.csv`, and optional merged join to `data/processed/agency_reference.parquet`.
-- Auto-picks a name column unless `--name-col` is set; uses fuzzy suggestions from VSR “Department” values. Auto-accepts exact normalized matches.
+- Auto-picks a name column unless `--name-col` is set; uses fuzzy suggestions from VSR “agency” values. Auto-accepts exact normalized matches.
 - Interactive controls: pick a suggestion; `n` mark “not in VSR” (blank canonical); `s` skip for later (leave unresolved); `m` more; `b` back; `q` save/quit. Progress autosaves crosswalk + `.state.json` (same dir) for resume.
 - Crosswalk is still evolving; current spreadsheet columns are in flux—don’t overfit.
 

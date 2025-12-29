@@ -20,7 +20,7 @@ def _parse_fixture(name: str, year: int):
 def test_front_matter_is_ignored_until_agency():
     df = _parse_fixture("2020_p1_16.txt", year=2020)
     assert not df.empty
-    assert (df["Department"].str.contains("Adair County Sheriff", na=False)).any()
+    assert (df["agency"].str.contains("Adair County Sheriff", na=False)).any()
     assert (df["table_id"] == "rates-by-race").any()
     assert (df["slug"] == "rates--totals--all-stops").any()
 
@@ -38,7 +38,7 @@ def test_parses_rates_table_rows():
     assert row["section"] == "Totals"
     assert row["slug"] == "rates--totals--all-stops"
     assert row["metric_id"] == "rates-by-race-totals-all-stops"
-    assert row["row_id"] == "adair-county-sheriff-s-dept-rates-by-race-totals-all-stops"
+    assert row["row_id"] == "2023-adair-county-sheriff-s-dept-rates-by-race-totals-all-stops"
     assert row["Total"] == pytest.approx(317.0)
 
 

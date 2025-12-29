@@ -7,7 +7,6 @@ from dagster import AssetCheckResult, MetadataValue, asset_check
 from missouri_vsr.assets.reports import combine_all_reports
 
 EXPECTED_COLUMNS = [
-    "Key",
     "Total",
     "White",
     "Black",
@@ -17,13 +16,11 @@ EXPECTED_COLUMNS = [
     "Other",
     "year",
     "slug",
-    "Department",
-    "Table name",
-    "Measurement",
     "agency",
     "table",
     "table_id",
     "section",
+    "section_id",
     "metric",
     "metric_id",
     "row_id",
@@ -60,10 +57,7 @@ def _coerce_row(raw: dict) -> dict:
 
 
 RENAME_CHECK_FIELDS = {
-    "key": "Key",
-    "department": "Department",
-    "table name": "Table name",
-    "section": "Measurement",
+    "department": "agency",
 }
 
 
@@ -91,14 +85,14 @@ def check_expected_columns(df: pd.DataFrame) -> AssetCheckResult:
     )
 
 
-# Duplicate‐slug check – combination of dept/slug/year must be unique.
+# Duplicate‐slug check – combination of agency/slug/year must be unique.
 @asset_check(asset=combine_all_reports)
 def check_no_duplicate_slugs(df: pd.DataFrame) -> AssetCheckResult:
-    dupes = df[df.duplicated(["Department", "slug", "year"], keep=False)]
+    dupes = df[df.duplicated(["agency", "slug", "year"], keep=False)]
     passed = dupes.empty
 
     # Include both department and slug for each duplicate row
-    example_duplicates = dupes[["Department", "slug", "year"]].drop_duplicates().to_dict(orient="records")
+    example_duplicates = dupes[["agency", "slug", "year"]].drop_duplicates().to_dict(orient="records")
 
     return AssetCheckResult(
         passed=passed,
@@ -121,7 +115,7 @@ def check_no_duplicate_row_ids(df: pd.DataFrame) -> AssetCheckResult:
     dupes = df[df.duplicated(["row_id", "year"], keep=False)]
     passed = dupes.empty
     example_duplicates = (
-        dupes[["row_id", "year", "Department", "slug"]]
+        dupes[["row_id", "year", "agency", "slug"]]
         .drop_duplicates()
         .head(25)
         .to_dict(orient="records")
@@ -182,15 +176,15 @@ def _make_year_expectation_check(asset, year: int, rows: list[dict]):
                 metadata={"reason": f"no rows found for year {year}"},
             )
 
-        year_df = year_df.drop_duplicates(["slug", "Department", "year"])
-        year_index = year_df.set_index(["slug", "Department", "year"], drop=False)
+        year_df = year_df.drop_duplicates(["slug", "agency", "year"])
+        year_index = year_df.set_index(["slug", "agency", "year"], drop=False)
 
         missing = []
         mismatches = []
         for check in rows:
-            key = (check.get("slug"), check.get("Department"), check.get("year"))
+            key = (check.get("slug"), check.get("agency"), check.get("year"))
             if key not in year_index.index:
-                missing.append({"slug": key[0], "Department": key[1], "year": key[2]})
+                missing.append({"slug": key[0], "agency": key[1], "year": key[2]})
                 continue
 
             actual_row = year_index.loc[key]
@@ -199,7 +193,7 @@ def _make_year_expectation_check(asset, year: int, rows: list[dict]):
 
             row_mismatches = []
             for field, expected in check.items():
-                if field in ("slug", "Department", "checked"):
+                if field in ("slug", "agency", "checked"):
                     continue
 
                 actual_val = actual_row.get(field)
@@ -218,7 +212,7 @@ def _make_year_expectation_check(asset, year: int, rows: list[dict]):
                 mismatches.append(
                     {
                         "slug": key[0],
-                        "Department": key[1],
+                        "agency": key[1],
                         "year": key[2],
                         "mismatches": row_mismatches,
                     }

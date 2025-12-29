@@ -369,6 +369,21 @@ def geocode_agency_reference(context, agency_reference: pd.DataFrame) -> pd.Data
         if col not in working.columns:
             working[col] = pd.NA
 
+    if out_path.exists():
+        try:
+            existing = pd.read_parquet(out_path)
+        except Exception as exc:
+            context.log.warning("Failed reading existing geocode output %s: %s", out_path, exc)
+            existing = pd.DataFrame()
+
+        if not existing.empty and "Department" in existing.columns:
+            existing = existing.drop_duplicates(subset=["Department"], keep="first")
+            existing = existing.set_index("Department")
+            for col in extra_cols:
+                if col in existing.columns:
+                    working[col] = working["Department"].map(existing[col])
+            context.log.info("Loaded %d cached geocode rows from %s", len(existing), out_path)
+
     if not api_key:
         context.log.warning("GEOCODIO_API_KEY not set; writing output with status only.")
         working["geocode_address_status"] = "missing_api_key"
@@ -476,6 +491,10 @@ def geocode_agency_reference(context, agency_reference: pd.DataFrame) -> pd.Data
     with httpx.Client(timeout=GEOCODIO_TIMEOUT) as client:
         for idx, row in working.iterrows():
             agency_name = _display_agency_name(row, f"row:{idx}")
+            status = row.get("geocode_address_status")
+            if isinstance(status, str) and status in {"ok", "skipped"}:
+                _note_address_progress(agency_name)
+                continue
             query = _build_address_query(row)
             if not query:
                 _track_status("geocode_address", idx, "skipped", "missing_address")
@@ -512,6 +531,10 @@ def geocode_agency_reference(context, agency_reference: pd.DataFrame) -> pd.Data
         for idx in rows_by_scope["state"]:
             row = working.loc[idx]
             agency_name = _display_agency_name(row, f"row:{idx}")
+            status = row.get("geocode_jurisdiction_status")
+            if isinstance(status, str) and status in {"ok", "skipped"}:
+                _note_jurisdiction_progress(agency_name)
+                continue
             query = "Missouri"
             working.loc[idx, "geocode_jurisdiction_query"] = query
             if not state_cache["ready"]:
@@ -544,6 +567,10 @@ def geocode_agency_reference(context, agency_reference: pd.DataFrame) -> pd.Data
         for idx in rows_by_scope["county"]:
             row = working.loc[idx]
             agency_name = _display_agency_name(row, f"row:{idx}")
+            status = row.get("geocode_jurisdiction_status")
+            if isinstance(status, str) and status in {"ok", "skipped"}:
+                _note_jurisdiction_progress(agency_name)
+                continue
             city = _clean_city(row.get("AddressCity"))
             if not city:
                 _track_status("geocode_jurisdiction", idx, "skipped", "missing_city")
@@ -616,6 +643,10 @@ def geocode_agency_reference(context, agency_reference: pd.DataFrame) -> pd.Data
         for idx in rows_by_scope["municipal"]:
             row = working.loc[idx]
             agency_name = _display_agency_name(row, f"row:{idx}")
+            status = row.get("geocode_jurisdiction_status")
+            if isinstance(status, str) and status in {"ok", "skipped"}:
+                _note_jurisdiction_progress(agency_name)
+                continue
             city = _clean_city(row.get("AddressCity"))
             if not city:
                 _track_status("geocode_jurisdiction", idx, "skipped", "missing_city")
@@ -651,8 +682,33 @@ def geocode_agency_reference(context, agency_reference: pd.DataFrame) -> pd.Data
         for idx in rows_by_scope["address"]:
             row = working.loc[idx]
             agency_name = _display_agency_name(row, f"row:{idx}")
+            status = row.get("geocode_jurisdiction_status")
+            if isinstance(status, str) and status in {"ok", "skipped"}:
+                _note_jurisdiction_progress(agency_name)
+                continue
             _track_status("geocode_jurisdiction", idx, "skipped", "no_jurisdiction")
             _note_jurisdiction_progress(agency_name)
+
+    address_status_counts = (
+        working["geocode_address_status"].value_counts(dropna=True).to_dict()
+        if "geocode_address_status" in working.columns
+        else {}
+    )
+    address_reason_counts = (
+        working["geocode_address_reason"].value_counts(dropna=True).to_dict()
+        if "geocode_address_reason" in working.columns
+        else {}
+    )
+    jurisdiction_status_counts = (
+        working["geocode_jurisdiction_status"].value_counts(dropna=True).to_dict()
+        if "geocode_jurisdiction_status" in working.columns
+        else {}
+    )
+    jurisdiction_reason_counts = (
+        working["geocode_jurisdiction_reason"].value_counts(dropna=True).to_dict()
+        if "geocode_jurisdiction_reason" in working.columns
+        else {}
+    )
 
     working.to_parquet(out_path, index=False, engine="pyarrow")
     context.log.info("Wrote agency geocode Parquet → %s (%d rows)", out_path, len(working))

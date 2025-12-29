@@ -16,7 +16,7 @@ def audit_race_sum_mismatch_total_op(context, combined: pd.DataFrame) -> pd.Data
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / "race_sum_mismatch_total.parquet"
 
-    required_cols = {"Department", "year", "slug", "Total"}
+    required_cols = {"agency", "year", "slug", "Total"}
     missing = required_cols - set(combined.columns)
     if missing:
         raise ValueError(f"Cannot audit race totals – missing columns: {sorted(missing)}")
@@ -28,7 +28,7 @@ def audit_race_sum_mismatch_total_op(context, combined: pd.DataFrame) -> pd.Data
 
     empty_frame = pd.DataFrame(
         columns=[
-            "Department",
+            "agency",
             "year",
             "slug",
             "Total",
@@ -66,7 +66,7 @@ def audit_race_sum_mismatch_total_op(context, combined: pd.DataFrame) -> pd.Data
                 audit_rows = subset[subset["diff"] != 0].copy()
 
     out_cols = [
-        "Department",
+        "agency",
         "year",
         "slug",
         "Total",

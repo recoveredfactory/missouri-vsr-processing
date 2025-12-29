@@ -118,7 +118,6 @@ FINAL_COLUMNS = [
 NUMERIC_COLS = FINAL_COLUMNS[1:8]
 PIVOT_VALUE_COLUMNS = NUMERIC_COLS
 EXTRACT_COLUMNS = [
-    "Key",
     "Total",
     "White",
     "Black",
@@ -128,13 +127,11 @@ EXTRACT_COLUMNS = [
     "Other",
     "year",
     "slug",
-    "Department",
-    "Table name",
-    "Measurement",
     "agency",
     "table",
     "table_id",
     "section",
+    "section_id",
     "metric",
     "metric_id",
     "row_id",
@@ -209,12 +206,20 @@ def _build_metric_id(table_id: str, section: str | None, metric: str) -> str:
     return _slugify_simple("-".join(parts))
 
 
-def _build_row_id(agency: str, table_id: str, section: str | None, metric: str) -> str:
-    parts = [agency, table_id]
+def _build_section_id(section: str | None) -> str | None:
+    if not section:
+        return None
+    return _slugify_metric(section)
+
+
+def _build_row_id(year: int | None, agency: str, table_id: str, section: str | None, metric: str) -> str:
+    parts = [str(year)] if year is not None else []
+    parts.append(_slugify_simple(agency))
+    parts.append(_slugify_simple(table_id))
     if section:
-        parts.append(section)
-    parts.append(metric)
-    return _slugify_simple("-".join(parts))
+        parts.append(_slugify_metric(section))
+    parts.append(_slugify_metric(metric))
+    return "-".join(parts)
 
 
 def _normalize_line(line: str) -> str:
@@ -420,7 +425,6 @@ def _parse_pdftotext_lines(lines: list[str], log, *, year: int | None, pdf_name:
                 else:
                     values.append(None)
             record = {
-                "Key": metric_label,
                 "Total": values[0],
                 "White": values[1],
                 "Black": values[2],
@@ -428,18 +432,16 @@ def _parse_pdftotext_lines(lines: list[str], log, *, year: int | None, pdf_name:
                 "Native American": values[4],
                 "Asian": values[5],
                 "Other": values[6],
-                "Department": current_agency,
-                "Table name": current_table_title,
-                "Measurement": section_label,
                 "year": year,
                 "slug": _build_metric_slug(current_table_slug, section_label, metric_label),
                 "agency": current_agency,
                 "table": current_table_title,
                 "table_id": current_table_id,
                 "section": section_label,
+                "section_id": _build_section_id(section_label),
                 "metric": metric_label,
                 "metric_id": _build_metric_id(current_table_id, section_label, metric_label),
-                "row_id": _build_row_id(current_agency, current_table_id, section_label, metric_label),
+                "row_id": _build_row_id(year, current_agency, current_table_id, section_label, metric_label),
             }
             records.append(record)
             key = (current_agency, current_table_id)
@@ -587,7 +589,6 @@ def _parse_pdftotext_lines(lines: list[str], log, *, year: int | None, pdf_name:
         if parsed and current_table_id and current_table_slug and current_agency:
             metric_label, values = parsed
             record = {
-                "Key": metric_label,
                 "Total": values[0],
                 "White": values[1],
                 "Black": values[2],
@@ -595,18 +596,16 @@ def _parse_pdftotext_lines(lines: list[str], log, *, year: int | None, pdf_name:
                 "Native American": values[4],
                 "Asian": values[5],
                 "Other": values[6],
-                "Department": current_agency,
-                "Table name": current_table_title,
-                "Measurement": current_section,
                 "year": year,
                 "slug": _build_metric_slug(current_table_slug, current_section, metric_label),
                 "agency": current_agency,
                 "table": current_table_title,
                 "table_id": current_table_id,
                 "section": current_section,
+                "section_id": _build_section_id(current_section),
                 "metric": metric_label,
                 "metric_id": _build_metric_id(current_table_id, current_section, metric_label),
-                "row_id": _build_row_id(current_agency, current_table_id, current_section, metric_label),
+                "row_id": _build_row_id(year, current_agency, current_table_id, current_section, metric_label),
             }
             records.append(record)
             key = (current_agency, current_table_id)
@@ -645,6 +644,7 @@ def _parse_pdftotext_lines(lines: list[str], log, *, year: int | None, pdf_name:
     if df.empty:
         return pd.DataFrame(columns=EXTRACT_COLUMNS)
 
+    df = df.reindex(columns=EXTRACT_COLUMNS)
     for col in NUMERIC_COLS:
         df[col] = pd.to_numeric(df[col].map(_clean_numeric_str), errors="coerce")
     return df
@@ -657,8 +657,8 @@ def _add_extract_metadata(context, df: pd.DataFrame, label: str) -> None:
         "row_count": int(len(df)),
     }
     if not df.empty:
-        if "Department" in df.columns:
-            meta["unique_agencies"] = int(df["Department"].nunique(dropna=True))
+        if "agency" in df.columns:
+            meta["unique_agencies"] = int(df["agency"].nunique(dropna=True))
         if "slug" in df.columns:
             meta["unique_slugs"] = int(df["slug"].nunique(dropna=True))
     try:

@@ -24,6 +24,11 @@ def combine_reports(context, **extracted_reports: dict[str, pd.DataFrame]) -> pd
     if not dfs:
         raise ValueError("No extracted tables found to combine.")
     combined = pd.concat(dfs, ignore_index=True)
+    legacy_cols = ["Key", "Department", "Table name", "Measurement"]
+    drop_cols = [col for col in legacy_cols if col in combined.columns]
+    if drop_cols:
+        context.log.info("Dropping legacy columns from combined output: %s", drop_cols)
+        combined = combined.drop(columns=drop_cols)
 
     # Write combined Parquet
     processed_dir = Path(context.resources.data_dir_processed.get_path())
@@ -90,8 +95,8 @@ def combine_reports(context, **extracted_reports: dict[str, pd.DataFrame]) -> pd
     # Add the same row-count/uniques metadata as per-year extracts.
     try:
         meta["row_count"] = int(len(combined))
-        if "Department" in combined.columns:
-            meta["unique_agencies"] = int(combined["Department"].nunique(dropna=True))
+        if "agency" in combined.columns:
+            meta["unique_agencies"] = int(combined["agency"].nunique(dropna=True))
         if "slug" in combined.columns:
             meta["unique_slugs"] = int(combined["slug"].nunique(dropna=True))
         context.add_output_metadata(meta)
