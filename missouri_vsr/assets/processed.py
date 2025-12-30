@@ -546,8 +546,10 @@ def write_agency_index_json(
     city_cols = ["AddressCity", "City"]
     zip_cols = ["AddressZip", "Zip", "ZipCode"]
     phone_cols = ["Phone", "PhoneNumber", "Phone #"]
+    county_cols = ["geocode_jurisdiction_county", "geocode_address_county", "County"]
     metric_row_key = "rates-by-race--totals--all-stops"
     metric_col = f"{metric_row_key}__Total"
+    metric_alias = "all_stops_total"
 
     if not agency_reference_geocoded.empty:
         for _, row in agency_reference_geocoded.iterrows():
@@ -565,7 +567,9 @@ def write_agency_index_json(
                     "city": None,
                     "zip": None,
                     "phone": None,
+                    "county": None,
                     metric_row_key: None,
+                    metric_alias: None,
                 }
                 names_by_key[key] = entry
 
@@ -579,6 +583,8 @@ def write_agency_index_json(
                 entry["zip"] = _first_non_empty(row, zip_cols)
             if not entry["phone"]:
                 entry["phone"] = _first_non_empty(row, phone_cols)
+            if not entry["county"]:
+                entry["county"] = _first_non_empty(row, county_cols)
 
     if not pivoted.empty and "agency" in pivoted.columns:
         for agency in (
@@ -593,7 +599,9 @@ def write_agency_index_json(
                     "city": None,
                     "zip": None,
                     "phone": None,
+                    "county": None,
                     metric_row_key: None,
+                    metric_alias: None,
                 }
                 names_by_key[agency] = entry
             else:
@@ -625,10 +633,13 @@ def write_agency_index_json(
                     "city": None,
                     "zip": None,
                     "phone": None,
+                    "county": None,
                     metric_row_key: None,
+                    metric_alias: None,
                 }
                 names_by_key[agency] = entry
             entry[metric_row_key] = value
+            entry[metric_alias] = value
 
     records = sorted(names_by_key.values(), key=lambda item: item["agency_slug"])
     out_path.write_text(json.dumps(records, indent=2))
