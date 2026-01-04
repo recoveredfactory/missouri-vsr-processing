@@ -2,7 +2,7 @@ import csv
 
 import numpy as np
 import pandas as pd
-from dagster import AssetCheckResult, MetadataValue, asset_check
+from dagster import AssetCheckResult, AssetKey, MetadataValue, asset_check
 
 from missouri_vsr.assets.reports import combine_all_reports
 
@@ -261,3 +261,121 @@ asset_checks = [
     check_numeric_columns_parse,
     *year_expectation_checks,
 ]
+
+
+# ------------------------------------------------------------------------------
+# GIS checks
+# ------------------------------------------------------------------------------
+@asset_check(asset=AssetKey("us_gpkg"))
+def check_us_gpkg(us_gpkg: str) -> AssetCheckResult:
+    from pathlib import Path
+
+    path = Path(us_gpkg) if us_gpkg else None
+    exists = bool(path) and path.exists()
+    return AssetCheckResult(
+        passed=exists,
+        metadata={"path": us_gpkg, "exists": exists},
+    )
+
+
+def _check_columns(df: pd.DataFrame, required: list[str]) -> AssetCheckResult:
+    missing = [col for col in required if col not in df.columns]
+    return AssetCheckResult(
+        passed=not missing,
+        metadata={"missing_columns": missing},
+    )
+
+
+@asset_check(asset=AssetKey("mo_counties"))
+def check_mo_county_schema(mo_counties: pd.DataFrame) -> AssetCheckResult:
+    required = ["geoid", "name", "statefp", "countyfp", "boundary_type", "geometry"]
+    return _check_columns(mo_counties, required)
+
+
+@asset_check(asset=AssetKey("mo_places"))
+def check_mo_place_schema(mo_places: pd.DataFrame) -> AssetCheckResult:
+    required = ["geoid", "name", "statefp", "placefp", "boundary_type", "geometry"]
+    return _check_columns(mo_places, required)
+
+
+@asset_check(asset=AssetKey("mo_counties"))
+def check_mo_county_count(mo_counties: pd.DataFrame) -> AssetCheckResult:
+    count = len(mo_counties)
+    return AssetCheckResult(passed=count >= 114, metadata={"row_count": count})
+
+
+@asset_check(asset=AssetKey("mo_places"))
+def check_mo_place_count(mo_places: pd.DataFrame) -> AssetCheckResult:
+    count = len(mo_places)
+    return AssetCheckResult(passed=count >= 900, metadata={"row_count": count})
+
+
+@asset_check(asset=AssetKey("mo_counties"))
+def check_mo_county_geometries(mo_counties: pd.DataFrame) -> AssetCheckResult:
+    if "geometry" not in mo_counties.columns or mo_counties.empty:
+        return AssetCheckResult(passed=False, metadata={"reason": "missing geometry"})
+    valid_ratio = float(mo_counties.geometry.is_valid.mean())
+    return AssetCheckResult(passed=valid_ratio >= 0.99, metadata={"valid_ratio": valid_ratio})
+
+
+@asset_check(asset=AssetKey("mo_places"))
+def check_mo_place_geometries(mo_places: pd.DataFrame) -> AssetCheckResult:
+    if "geometry" not in mo_places.columns or mo_places.empty:
+        return AssetCheckResult(passed=False, metadata={"reason": "missing geometry"})
+    valid_ratio = float(mo_places.geometry.is_valid.mean())
+    return AssetCheckResult(passed=valid_ratio >= 0.99, metadata={"valid_ratio": valid_ratio})
+
+
+@asset_check(asset=AssetKey("mo_jurisdictions_pmtiles"))
+def check_mo_pmtiles_size(mo_jurisdictions_pmtiles: str) -> AssetCheckResult:
+    from pathlib import Path
+
+    path = Path(mo_jurisdictions_pmtiles)
+    size = path.stat().st_size if path.exists() else 0
+    return AssetCheckResult(passed=size > 1_000_000, metadata={"size_bytes": size})
+
+
+@asset_check(asset=AssetKey("agency_boundary_matches"))
+def check_county_match_rate(agency_boundary_matches: pd.DataFrame) -> AssetCheckResult:
+    if agency_boundary_matches.empty:
+        return AssetCheckResult(passed=False, metadata={"reason": "no agency rows"})
+    county_rows = agency_boundary_matches[
+        agency_boundary_matches["agency_type"].astype(str).str.contains("county", case=False, na=False)
+    ]
+    total = len(county_rows)
+    matched = int(county_rows["matched"].fillna(False).sum())
+    match_rate = matched / total if total else 0.0
+    return AssetCheckResult(
+        passed=match_rate >= 0.9,
+        metadata={"county_total": total, "county_matched": matched, "match_rate": match_rate},
+    )
+
+
+@asset_check(asset=AssetKey("agency_relationships"))
+def check_relationship_columns(agency_relationships: pd.DataFrame) -> AssetCheckResult:
+    required = ["agency_id", "touching_ids", "contained_ids"]
+    missing = [col for col in required if col not in agency_relationships.columns]
+    if missing:
+        return AssetCheckResult(passed=False, metadata={"missing_columns": missing})
+    touching_ok = bool(agency_relationships["touching_ids"].apply(lambda v: isinstance(v, list)).all())
+    contained_ok = bool(agency_relationships["contained_ids"].apply(lambda v: isinstance(v, list)).all())
+    return AssetCheckResult(
+        passed=touching_ok and contained_ok,
+        metadata={"touching_ok": touching_ok, "contained_ok": contained_ok},
+    )
+
+
+asset_checks.extend(
+    [
+        check_us_gpkg,
+        check_mo_county_schema,
+        check_mo_place_schema,
+        check_mo_county_count,
+        check_mo_place_count,
+        check_mo_county_geometries,
+        check_mo_place_geometries,
+        check_mo_pmtiles_size,
+        check_county_match_rate,
+        check_relationship_columns,
+    ]
+)
