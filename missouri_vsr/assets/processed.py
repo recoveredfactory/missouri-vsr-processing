@@ -10,6 +10,7 @@ from slugify import slugify
 from dagster import AssetIn, AssetKey, Out, graph_asset, op
 
 from missouri_vsr.assets.extract import PIVOT_VALUE_COLUMNS, _slugify_simple
+from missouri_vsr.assets.s3_utils import upload_paths, s3_uri_for_dir, s3_uri_for_path
 
 # ------------------------------------------------------------------------------
 # Pivoted outputs & per-agency JSON exports
@@ -373,7 +374,7 @@ def _json_safe_record(record: dict) -> dict:
     return cleaned
 
 
-@op(out=Out(list), required_resource_keys={"data_dir_out", "data_dir_processed"})
+@op(out=Out(list), required_resource_keys={"data_dir_out", "data_dir_processed", "s3"})
 def write_agency_year_json(
     context,
     combined: pd.DataFrame,
@@ -487,6 +488,100 @@ def write_agency_year_json(
         output_paths.append(str(out_path))
         context.log.info("Wrote %d year rows for %s → %s", len(records), agency, out_path)
 
+    base_dir = Path(context.resources.data_dir_out.get_path())
+    uploaded = upload_paths(
+        context,
+        [Path(path) for path in output_paths],
+        base_dir=base_dir,
+    )
+    if uploaded:
+        context.log.info("Uploaded %d agency-year JSON files to S3", len(uploaded))
+
+    try:
+        metadata = {"output_count": len(output_paths)}
+        s3_folder = s3_uri_for_dir(context, out_root, base_dir)
+        if s3_folder:
+            metadata["s3_folder"] = s3_folder
+        if uploaded:
+            metadata["s3_paths"] = uploaded
+        context.add_output_metadata(metadata)
+    except Exception:
+        pass
+
+    return output_paths
+
+
+@op(out=Out(list), required_resource_keys={"data_dir_out", "s3"})
+def write_metric_year_json(context, combined: pd.DataFrame) -> List[str]:
+    """Write one JSON file per row_key with agency/year and race columns."""
+    if combined.empty:
+        context.log.warning("Combined DataFrame empty; no metric-year JSON outputs created.")
+        return []
+
+    required_cols = {"agency", "year", "row_key"}
+    missing = required_cols - set(combined.columns)
+    if missing:
+        raise ValueError(f"Cannot write metric-year JSON – missing columns: {sorted(missing)}")
+
+    value_cols = [c for c in PIVOT_VALUE_COLUMNS if c in combined.columns]
+    if not value_cols:
+        raise ValueError("Cannot write metric-year JSON – no numeric value columns were found.")
+
+    out_root = Path(context.resources.data_dir_out.get_path()) / "metric_year"
+    out_root.mkdir(parents=True, exist_ok=True)
+
+    output_paths: List[str] = []
+    row_key_count = 0
+    row_count = 0
+
+    for row_key, group in combined.groupby("row_key"):
+        if pd.isna(row_key) or str(row_key).strip() == "":
+            continue
+        row_key_count += 1
+        records: List[dict] = []
+        sorted_group = group.sort_values(["agency", "year"], na_position="last")
+        for _, row in sorted_group.iterrows():
+            agency = row.get("agency")
+            year_val = row.get("year")
+            year = int(year_val) if pd.notna(year_val) else None
+            payload = {
+                "agency": _json_safe_value(agency),
+                "year": year,
+            }
+            for col in value_cols:
+                payload[col] = _json_safe_value(row.get(col))
+            records.append(payload)
+        row_count += len(records)
+        payload = {"row_key": str(row_key), "rows": records}
+        out_path = out_root / f"{row_key}.json"
+        out_path.write_text(json.dumps(payload, indent=2))
+        output_paths.append(str(out_path))
+        context.log.info("Wrote metric-year JSON → %s (%d rows)", out_path, len(records))
+
+    base_dir = Path(context.resources.data_dir_out.get_path())
+    uploaded = upload_paths(
+        context,
+        [Path(path) for path in output_paths],
+        base_dir=base_dir,
+    )
+    if uploaded:
+        context.log.info("Uploaded %d metric-year JSON files to S3", len(uploaded))
+
+    try:
+        metadata = {
+            "output_count": len(output_paths),
+            "row_key_count": row_key_count,
+            "row_count": row_count,
+        }
+        s3_folder = s3_uri_for_dir(context, out_root, base_dir)
+        if s3_folder:
+            metadata["s3_folder"] = s3_folder
+        if uploaded:
+            metadata["s3_paths"] = uploaded
+        context.add_output_metadata(metadata)
+    except Exception:
+        pass
+
     return output_paths
 
 
@@ -521,7 +616,7 @@ def _first_non_empty(row: pd.Series, columns: list[str]) -> str | None:
     return None
 
 
-@op(out=Out(str), required_resource_keys={"data_dir_out"})
+@op(out=Out(str), required_resource_keys={"data_dir_out", "s3"})
 def write_agency_index_json(
     context,
     pivoted: pd.DataFrame,
@@ -644,14 +739,26 @@ def write_agency_index_json(
     records = sorted(names_by_key.values(), key=lambda item: item["agency_slug"])
     out_path.write_text(json.dumps(records, indent=2))
     context.log.info("Wrote agency index JSON → %s (%d rows)", out_path, len(records))
+    base_dir = Path(context.resources.data_dir_out.get_path())
+    uploaded = upload_paths(
+        context,
+        [out_path],
+        base_dir=base_dir,
+    )
+    if uploaded:
+        context.log.info("Uploaded agency index JSON to S3")
     try:
-        context.add_output_metadata({"local_path": str(out_path), "row_count": len(records)})
+        metadata = {"local_path": str(out_path), "row_count": len(records)}
+        s3_path = s3_uri_for_path(context, out_path, base_dir)
+        if s3_path:
+            metadata["s3_path"] = s3_path
+        context.add_output_metadata(metadata)
     except Exception:
         pass
     return str(out_path)
 
 
-@op(out=Out(str), required_resource_keys={"data_dir_out"})
+@op(out=Out(str), required_resource_keys={"data_dir_out", "s3"})
 def write_statewide_baselines_json(context, baselines: pd.DataFrame) -> str:
     """Write statewide baselines to JSON for downstream consumers."""
     out_root = Path(context.resources.data_dir_out.get_path())
@@ -661,14 +768,26 @@ def write_statewide_baselines_json(context, baselines: pd.DataFrame) -> str:
     records = [_json_safe_record(item) for item in baselines.to_dict(orient="records")]
     out_path.write_text(json.dumps(records, indent=2))
     context.log.info("Wrote statewide baselines JSON → %s (%d rows)", out_path, len(records))
+    base_dir = Path(context.resources.data_dir_out.get_path())
+    uploaded = upload_paths(
+        context,
+        [out_path],
+        base_dir=base_dir,
+    )
+    if uploaded:
+        context.log.info("Uploaded statewide baselines JSON to S3")
     try:
-        context.add_output_metadata({"local_path": str(out_path), "row_count": len(records)})
+        metadata = {"local_path": str(out_path), "row_count": len(records)}
+        s3_path = s3_uri_for_path(context, out_path, base_dir)
+        if s3_path:
+            metadata["s3_path"] = s3_path
+        context.add_output_metadata(metadata)
     except Exception:
         pass
     return str(out_path)
 
 
-@op(out=Out(str), required_resource_keys={"data_dir_out"})
+@op(out=Out(str), required_resource_keys={"data_dir_out", "s3"})
 def write_report_dimension_index_json(context, combined: pd.DataFrame) -> str:
     """Write unique table/section/metric identifiers to JSON for translations."""
     out_root = Path(context.resources.data_dir_out.get_path())
@@ -722,15 +841,25 @@ def write_report_dimension_index_json(context, combined: pd.DataFrame) -> str:
         len(payload["section_ids"]),
         len(payload["metric_ids"]),
     )
+    base_dir = Path(context.resources.data_dir_out.get_path())
+    uploaded = upload_paths(
+        context,
+        [out_path],
+        base_dir=base_dir,
+    )
+    if uploaded:
+        context.log.info("Uploaded report dimension index JSON to S3")
     try:
-        context.add_output_metadata(
-            {
-                "local_path": str(out_path),
-                "table_id_count": len(payload["table_ids"]),
-                "section_id_count": len(payload["section_ids"]),
-                "metric_id_count": len(payload["metric_ids"]),
-            }
-        )
+        metadata = {
+            "local_path": str(out_path),
+            "table_id_count": len(payload["table_ids"]),
+            "section_id_count": len(payload["section_ids"]),
+            "metric_id_count": len(payload["metric_ids"]),
+        }
+        s3_path = s3_uri_for_path(context, out_path, base_dir)
+        if s3_path:
+            metadata["s3_path"] = s3_path
+        context.add_output_metadata(metadata)
     except Exception:
         pass
     return str(out_path)
@@ -750,6 +879,16 @@ def agency_year_json_exports(
     agency_reference_geocoded: pd.DataFrame,
 ) -> List[str]:
     return write_agency_year_json(reports_with_rank_percentile, agency_reference_geocoded)
+
+
+@graph_asset(
+    name="metric_year_json_exports",
+    group_name="output",
+    ins={"combine_all_reports": AssetIn(key=AssetKey("combine_all_reports"))},
+    description="Generate per-row_key JSON files with agency/year/race values.",
+)
+def metric_year_json_exports(combine_all_reports: pd.DataFrame) -> List[str]:
+    return write_metric_year_json(combine_all_reports)
 
 
 @graph_asset(

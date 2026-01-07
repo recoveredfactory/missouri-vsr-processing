@@ -15,6 +15,7 @@ from slugify import slugify
 
 from dagster import AssetIn, AssetKey, AssetOut, Output, graph_asset, multi_asset, op, Out
 
+from missouri_vsr.assets.s3_utils import upload_paths, s3_uri_for_dir, s3_uri_for_path
 GENZ_GPKG_URL = "https://www2.census.gov/geo/tiger/GENZ2024/gpkg/cb_2024_us_all_500k.zip"
 
 COUNTY_PARQUET_NAME = "cb2024_mo_counties.parquet"
@@ -658,8 +659,8 @@ def map_agencies_to_boundaries(
         "mo_jurisdictions_pmtiles": AssetOut(),
         "mo_jurisdictions_manifest": AssetOut(),
     },
-    group_name="gis",
-    required_resource_keys={"data_dir_processed", "data_dir_out"},
+    group_name="output",
+    required_resource_keys={"data_dir_processed", "data_dir_out", "s3"},
     description="Build PMTiles for Missouri jurisdictions and write a manifest.",
 )
 def build_mo_jurisdiction_tiles(context, mo_counties_enriched: pd.DataFrame, mo_places_enriched: pd.DataFrame):
@@ -764,8 +765,26 @@ def build_mo_jurisdiction_tiles(context, mo_counties_enriched: pd.DataFrame, mo_
     context.log.info("Wrote PMTiles → %s (%.2f MB)", pmtiles_path, pmtiles_size / (1024 * 1024))
     context.log.info("Wrote manifest → %s", manifest_path)
 
-    yield Output(str(pmtiles_path), output_name="mo_jurisdictions_pmtiles", metadata={"size_bytes": pmtiles_size})
-    yield Output(str(manifest_path), output_name="mo_jurisdictions_manifest", metadata={"local_path": str(manifest_path)})
+    base_dir = Path(context.resources.data_dir_out.get_path())
+    uploaded = upload_paths(
+        context,
+        [pmtiles_path, manifest_path],
+        base_dir=base_dir,
+    )
+    if uploaded:
+        context.log.info("Uploaded %d jurisdiction tile artifacts to S3", len(uploaded))
+
+    pmtiles_meta = {"size_bytes": pmtiles_size}
+    pmtiles_s3 = s3_uri_for_path(context, pmtiles_path, base_dir)
+    if pmtiles_s3:
+        pmtiles_meta["s3_path"] = pmtiles_s3
+    manifest_meta = {"local_path": str(manifest_path)}
+    manifest_s3 = s3_uri_for_path(context, manifest_path, base_dir)
+    if manifest_s3:
+        manifest_meta["s3_path"] = manifest_s3
+
+    yield Output(str(pmtiles_path), output_name="mo_jurisdictions_pmtiles", metadata=pmtiles_meta)
+    yield Output(str(manifest_path), output_name="mo_jurisdictions_manifest", metadata=manifest_meta)
 
 
 def _build_touching_map(gdf) -> Dict[str, List[str]]:
@@ -823,7 +842,7 @@ def _build_contained_map(counties_gdf, places_gdf) -> Dict[str, List[str]]:
     return contained
 
 
-@op(out=Out(pd.DataFrame), required_resource_keys={"data_dir_out"})
+@op(out=Out(pd.DataFrame), required_resource_keys={"data_dir_out", "s3"})
 def build_agency_relationships(
     context,
     agency_boundary_matches: pd.DataFrame,
@@ -909,6 +928,7 @@ def build_agency_relationships(
     except Exception:
         mapping = None
 
+    geojson_paths: list[Path] = []
     if mapping is not None:
         for _, row in geoms.iterrows():
             agency_id = row.get("agency_id")
@@ -935,9 +955,27 @@ def build_agency_relationships(
             payload = {"type": "FeatureCollection", "features": [feature]}
             out_path = boundaries_dir / f"{agency_id}.geojson"
             out_path.write_text(json.dumps(payload))
+            geojson_paths.append(out_path)
+
+    base_dir = Path(context.resources.data_dir_out.get_path())
+    upload_targets = [relationships_path, *geojson_paths]
+    uploaded = upload_paths(
+        context,
+        upload_targets,
+        base_dir=base_dir,
+    )
+    if uploaded:
+        context.log.info("Uploaded %d agency relationship artifacts to S3", len(uploaded))
 
     try:
-        context.add_output_metadata({"local_path": str(relationships_path), "row_count": len(relationships)})
+        metadata = {"local_path": str(relationships_path), "row_count": len(relationships)}
+        s3_path = s3_uri_for_path(context, relationships_path, base_dir)
+        if s3_path:
+            metadata["s3_path"] = s3_path
+        s3_folder = s3_uri_for_dir(context, boundaries_dir, base_dir)
+        if s3_folder:
+            metadata["s3_folder"] = s3_folder
+        context.add_output_metadata(metadata)
     except Exception:
         pass
     return relationships
