@@ -2,7 +2,11 @@
 
 Process data from the [Missouri Vehicle Stops report](https://ago.mo.gov/get-help/vehicle-stops-report/) (VSR). 
 
-This project is a data pipeline implemented with Dagster. It extracts data from PDFs published by the state (via `pdftotext -layout` and a text-first parser) to create a canonical database in a tidy format. In the future, it will then join those records to additional information we have collected: a) A database of contact information for each department, b) a cross-walk of agency to county where they have jurisdiction, and c) the agency's comments on their VSR submission.
+This project is a data pipeline implemented with Dagster. It extracts data from PDFs published by the state (via `pdftotext -layout` and a text-first parser) to create a canonical database in a tidy format. It joins those records to additional information we have collected: a) A database of contact information and type for each agency, and b) Census data and geography obtained via geographic looks using [geocod.io](https://geocodio).
+
+The rig outputs data for use in analysis and a web-based editorial product, including JSON data files and pmtiles maps for geospatial analysis and display.
+
+In the future, we also plan to join the agency's comments on their VSR submission.
 
 # Project Setup and Execution
 
@@ -86,6 +90,8 @@ Dagster caches materialized assets, but they don't persist between runs of the w
 - Per-year extracts: `data/processed/combined_output_<year>.parquet`
 - Combined extract: `data/processed/all_combined_output.parquet`
 - Per-agency JSON (row-based): `data/out/agency_year/<agency_slug>.json`
+- Metric-year JSON (per row_key): `data/out/metric_year/<row_key>.json`
+- Metric-year subset (compact): `data/out/metric_year_subset.json`
 - Report dimension index: `data/out/report_dimensions.json`
 - Statewide baselines: `data/out/statewide_slug_baselines.json`
 
@@ -96,6 +102,23 @@ Extracted rows include the identifiers:
 - `row_key`: `<table_id>--<section_id>--<metric_id>`
 - `row_id`: `<year>-<agency_slug>-<row_key>`
 - ACS population rows are normalized in `combine_all_reports` so any `*--population--YYYY-acs-pop`, `*--population--YYYY-pop`, and `*--population--YYYY-acs-pop-pct`/`YYYY-pop-pct` row_keys become `*--population--acs-pop` / `*--population--acs-pop-pct` for cross-year comparability (applies to `rates-by-race` and `disparity-index-by-race`).
+
+The compact metric-year subset uses indexed rows to reduce size:
+
+```json
+{
+  "agencies": ["Adair County Sheriff's Dept", "..."],
+  "years": [2020, 2021, 2022, 2023, 2024],
+  "columns": ["agency_idx", "year_idx", "Total", "White", "Black", "Hispanic", "Native American", "Asian", "Other"],
+  "rows": {
+    "rates-by-race--totals--all-stops": [
+      [0, 3, 317, 281, 25, 8, 0, 2, 1]
+    ]
+  }
+}
+```
+
+To decode each row: `agency = agencies[row[0]]`, `year = years[row[1]]`, and the remaining values align with `columns[2:]`.
 
 ### Quick sample run (2023 slice)
 
