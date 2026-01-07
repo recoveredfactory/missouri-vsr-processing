@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 
 import pandas as pd
@@ -12,6 +13,46 @@ from missouri_vsr.assets.extract import YEAR_URLS
 # ------------------------------------------------------------------------------
 # Combine all extracted DataFrame assets into one JSON and DataFrame
 # ------------------------------------------------------------------------------
+def _normalize_acs_population_rows(combined: pd.DataFrame, log) -> pd.DataFrame:
+    if "row_key" not in combined.columns:
+        return combined
+
+    row_key_series = combined["row_key"].astype(str)
+    pattern = r"^.+--population--\d{4}-(?:acs-)?pop(?:-pct)?$"
+    mask = row_key_series.str.match(pattern, na=False)
+    if not mask.any():
+        return combined
+
+    old_keys = row_key_series[mask]
+    new_keys = old_keys.str.replace(r"--\d{4}-(?:acs-)?pop", "--acs-pop", regex=True)
+    combined.loc[mask, "row_key"] = new_keys.values
+
+    if "metric_id" in combined.columns:
+        combined.loc[mask, "metric_id"] = (
+            combined.loc[mask, "metric_id"]
+            .astype(str)
+            .str.replace(r"^\d{4}-(?:acs-)?pop", "acs-pop", regex=True)
+        )
+
+    if "metric" in combined.columns:
+        combined.loc[mask, "metric"] = (
+            combined.loc[mask, "metric"]
+            .astype(str)
+            .str.replace(r"^\d{4}\s+(?:ACS\s+)?pop\s*%", "ACS pop %", regex=True)
+            .str.replace(r"^\d{4}\s+(?:ACS\s+)?pop", "ACS pop", regex=True)
+        )
+
+    if "row_id" in combined.columns:
+        row_ids = combined.loc[mask, "row_id"].astype(str)
+        combined.loc[mask, "row_id"] = [
+            row_id.replace(old_key, new_key) if old_key in row_id else row_id
+            for row_id, old_key, new_key in zip(row_ids, old_keys, new_keys)
+        ]
+
+    log.info("Normalized ACS population row_key values (%d rows).", int(mask.sum()))
+    return combined
+
+
 @op(
     ins={f"extract_pdf_data_{year}": In(pd.DataFrame) for year in YEAR_URLS},
     out=Out(pd.DataFrame),
@@ -34,6 +75,8 @@ def combine_reports(context, **extracted_reports: dict[str, pd.DataFrame]) -> pd
         combined = combined.rename(columns={"slug": "row_key"})
     if "slug" in combined.columns:
         combined = combined.drop(columns=["slug"])
+
+    combined = _normalize_acs_population_rows(combined, context.log)
 
     # Write combined Parquet
     processed_dir = Path(context.resources.data_dir_processed.get_path())

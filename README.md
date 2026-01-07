@@ -95,6 +95,7 @@ Extracted rows include the identifiers:
 - `metric_id`: slug of the metric label
 - `row_key`: `<table_id>--<section_id>--<metric_id>`
 - `row_id`: `<year>-<agency_slug>-<row_key>`
+- ACS population rows are normalized in `combine_all_reports` so any `*--population--YYYY-acs-pop`, `*--population--YYYY-pop`, and `*--population--YYYY-acs-pop-pct`/`YYYY-pop-pct` row_keys become `*--population--acs-pop` / `*--population--acs-pop-pct` for cross-year comparability (applies to `rates-by-race` and `disparity-index-by-race`).
 
 ### Quick sample run (2023 slice)
 
