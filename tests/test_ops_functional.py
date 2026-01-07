@@ -2,7 +2,7 @@ import pandas as pd
 import pytest
 from dagster import build_op_context
 
-from missouri_vsr.resources import LocalDirectoryResource
+from missouri_vsr.resources import LocalDirectoryResource, S3Resource
 from missouri_vsr.assets import processed
 
 
@@ -37,9 +37,14 @@ def _sample_combined_df() -> pd.DataFrame:
     )
 
 
-def test_add_rank_percentile_rows_op():
+def test_add_rank_percentile_rows_op(tmp_path):
     df = _sample_combined_df()
-    context = build_op_context()
+    context = build_op_context(
+        resources={
+            "data_dir_processed": LocalDirectoryResource(path=str(tmp_path)),
+            "s3": S3Resource(),
+        }
+    )
     augmented = processed.add_rank_percentile_rows(context, df)
 
     assert len(augmented) == len(df) * 4
@@ -62,7 +67,10 @@ def test_add_rank_percentile_rows_op():
 def test_compute_statewide_baselines_op(tmp_path):
     df = _sample_combined_df()
     context = build_op_context(
-        resources={"data_dir_processed": LocalDirectoryResource(path=str(tmp_path))}
+        resources={
+            "data_dir_processed": LocalDirectoryResource(path=str(tmp_path)),
+            "s3": S3Resource(),
+        }
     )
     baselines = processed.compute_statewide_slug_baselines(context, df)
 

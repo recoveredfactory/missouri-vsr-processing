@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import re
 from pathlib import Path
 
@@ -9,6 +8,9 @@ import pandas as pd
 from dagster import AssetIn, AssetKey, In, Out, graph_asset, op
 
 from missouri_vsr.assets.extract import YEAR_URLS
+from missouri_vsr.assets.s3_utils import upload_file_with_presign
+
+PRESIGN_6_MONTHS = 6 * 30 * 24 * 60 * 60
 
 # ------------------------------------------------------------------------------
 # Combine all extracted DataFrame assets into one JSON and DataFrame
@@ -87,56 +89,17 @@ def combine_reports(context, **extracted_reports: dict[str, pd.DataFrame]) -> pd
     # Attach local path and optional S3 metadata
     meta = {"local_path": str(out_file)}
     try:
-        s3_res = getattr(context.resources, "s3", None)
-        if s3_res is not None:
-            # Resolve bucket/prefix from resource config or env.
-            resolver_bucket = getattr(s3_res, "resolved_bucket", None)
-            bucket = resolver_bucket() if callable(resolver_bucket) else getattr(s3_res, "bucket", None)
-            if not bucket:
-                bucket = os.getenv("MISSOURI_BUCKET_NAME") or os.getenv("AWS_S3_BUCKET")
-            s3_prefix = getattr(s3_res, "resolved_prefix", None)
-            prefix_clean = s3_prefix() if callable(s3_prefix) else (getattr(s3_res, "s3_prefix", "") or "").strip("/")
-
-            if not bucket:
-                context.log.warning("S3 resource present but no bucket configured (env MISSOURI_BUCKET_NAME/AWS_S3_BUCKET). Skipping upload.")
-                meta["s3_upload_error"] = "Missing bucket configuration."
-                context.add_output_metadata(meta)
-                return combined
-
-            context.log.info("S3 configured; uploading combined Parquet… [bucket=%s, prefix=%s]", bucket, prefix_clean)
-            key_prefix = f"{prefix_clean}/" if prefix_clean else ""
-            key = f"{key_prefix}combined/all_combined_output.parquet"
-            import boto3
-            from botocore.config import Config
-            cfg = Config(signature_version="s3v4")
-            region = getattr(s3_res, "resolved_region", lambda: None)()
-            if region:
-                client = boto3.client("s3", region_name=region, config=cfg)
-            else:
-                client = boto3.client("s3", config=cfg)
-            try:
-                client.upload_file(str(out_file), bucket, key, ExtraArgs={"ContentType": "application/vnd.apache.parquet"})
-            except Exception as e:
-                context.log.exception("S3 upload failed for combined Parquet: %s", e)
-                meta["s3_upload_error"] = str(e)
-            uri = f"s3://{bucket}/{key}"
-            meta["s3_uri"] = uri
-            try:
-                # Default to 45 days if not configured.
-                expires = int(getattr(s3_res, "presigned_expiration", 45 * 24 * 60 * 60))
-                presigned = client.generate_presigned_url(
-                    ClientMethod="get_object",
-                    Params={"Bucket": bucket, "Key": key},
-                    ExpiresIn=expires,
-                )
-                meta["presigned_url"] = presigned
-                context.log.info("Generated presigned URL for combined Parquet")
-            except Exception as e:
-                context.log.exception("Presign failed for combined Parquet: %s", e)
-                meta["s3_presign_error"] = str(e)
-            context.log.info("Combined Parquet available at %s", uri)
-        else:
-            context.log.debug("No S3 resource configured; skipping S3 upload for combined Parquet")
+        s3_meta = upload_file_with_presign(
+            context,
+            out_file,
+            "combined/all_combined_output.parquet",
+            content_type="application/vnd.apache.parquet",
+            expires_in=PRESIGN_6_MONTHS,
+        )
+        if s3_meta:
+            meta.update(s3_meta)
+            if "s3_uri" in s3_meta:
+                context.log.info("Combined Parquet available at %s", s3_meta["s3_uri"])
     except Exception as e:
         context.log.exception("S3 handling encountered an exception for combined Parquet: %s", e)
 

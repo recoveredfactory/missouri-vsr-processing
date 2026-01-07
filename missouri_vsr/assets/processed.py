@@ -10,12 +10,27 @@ from slugify import slugify
 from dagster import AssetIn, AssetKey, Out, graph_asset, op
 
 from missouri_vsr.assets.extract import PIVOT_VALUE_COLUMNS, _slugify_simple
-from missouri_vsr.assets.s3_utils import upload_paths, s3_uri_for_dir, s3_uri_for_path
+from missouri_vsr.assets.s3_utils import (
+    upload_paths,
+    s3_uri_for_dir,
+    s3_uri_for_path,
+    upload_file_with_presign,
+)
 
 # ------------------------------------------------------------------------------
 # Pivoted outputs & per-agency JSON exports
 # ------------------------------------------------------------------------------
 MSHP_DEPARTMENT_NAME = "Missouri State Highway Patrol"
+PRESIGN_6_MONTHS = 6 * 30 * 24 * 60 * 60
+METRIC_YEAR_SUBSET_KEYS = [
+    "rates-by-race--totals--all-stops",
+    "rates-by-race--totals--arrests",
+    "rates-by-race--totals--citations",
+    "rates-by-race--totals--searches",
+    "rates-by-race--totals--contraband",
+    "rates-by-race--totals--resident-stops",
+    "rates-by-race--population--acs-pop",
+]
 
 
 def _build_rank_percentile_frame(
@@ -112,7 +127,7 @@ def _rank_and_percentile(
     return rank_full, percentile_full
 
 
-@op(out=Out(pd.DataFrame))
+@op(out=Out(pd.DataFrame), required_resource_keys={"data_dir_processed", "s3"})
 def add_rank_percentile_rows(context, combined: pd.DataFrame) -> pd.DataFrame:
     """Add rank/percentile rows per row_key/year across agencies."""
     if combined.empty:
@@ -145,6 +160,30 @@ def add_rank_percentile_rows(context, combined: pd.DataFrame) -> pd.DataFrame:
         len(base),
         len(augmented),
     )
+
+    out_dir = Path(context.resources.data_dir_processed.get_path())
+    out_path = out_dir / "reports_with_rank_percentile.parquet"
+    augmented.to_parquet(out_path, index=False, engine="pyarrow")
+    context.log.info("Wrote rank/percentile Parquet → %s (%d rows)", out_path, len(augmented))
+
+    meta = {"local_path": str(out_path), "row_count": len(augmented)}
+    try:
+        s3_meta = upload_file_with_presign(
+            context,
+            out_path,
+            "processed/reports_with_rank_percentile.parquet",
+            content_type="application/vnd.apache.parquet",
+            expires_in=PRESIGN_6_MONTHS,
+        )
+        if s3_meta:
+            meta.update(s3_meta)
+    except Exception as exc:
+        context.log.exception("S3 handling encountered an exception for rank/percentile Parquet: %s", exc)
+
+    try:
+        context.add_output_metadata(meta)
+    except Exception:
+        pass
     return augmented
 
 
@@ -158,7 +197,7 @@ def reports_with_rank_percentile(combine_all_reports: pd.DataFrame) -> pd.DataFr
     return add_rank_percentile_rows(combine_all_reports)
 
 
-@op(out=Out(pd.DataFrame), required_resource_keys={"data_dir_processed"})
+@op(out=Out(pd.DataFrame), required_resource_keys={"data_dir_processed", "s3"})
 def compute_statewide_slug_baselines(context, combined: pd.DataFrame) -> pd.DataFrame:
     """Compute statewide mean/median baselines per year/row_key/metric."""
     baseline_columns = [
@@ -229,8 +268,23 @@ def compute_statewide_slug_baselines(context, combined: pd.DataFrame) -> pd.Data
     out_path = out_dir / "statewide_slug_baselines.parquet"
     baselines.to_parquet(out_path, index=False, engine="pyarrow")
     context.log.info("Wrote statewide baselines Parquet → %s (%d rows)", out_path, len(baselines))
+
+    meta = {"local_path": str(out_path), "row_count": len(baselines)}
     try:
-        context.add_output_metadata({"local_path": str(out_path), "row_count": len(baselines)})
+        s3_meta = upload_file_with_presign(
+            context,
+            out_path,
+            "processed/statewide_slug_baselines.parquet",
+            content_type="application/vnd.apache.parquet",
+            expires_in=PRESIGN_6_MONTHS,
+        )
+        if s3_meta:
+            meta.update(s3_meta)
+    except Exception as exc:
+        context.log.exception("S3 handling encountered an exception for statewide baselines Parquet: %s", exc)
+
+    try:
+        context.add_output_metadata(meta)
     except Exception:
         pass
     return baselines
@@ -585,6 +639,111 @@ def write_metric_year_json(context, combined: pd.DataFrame) -> List[str]:
     return output_paths
 
 
+@op(out=Out(str), required_resource_keys={"data_dir_out", "s3"})
+def write_metric_year_subset_json(context, combined: pd.DataFrame) -> str:
+    """Write a compact JSON file with selected row_keys across agencies/years."""
+    if combined.empty:
+        context.log.warning("Combined DataFrame empty; no metric-year subset JSON created.")
+        return ""
+
+    required_cols = {"agency", "year", "row_key"}
+    missing = required_cols - set(combined.columns)
+    if missing:
+        raise ValueError(f"Cannot write metric-year subset JSON – missing columns: {sorted(missing)}")
+
+    value_cols = [c for c in PIVOT_VALUE_COLUMNS if c in combined.columns]
+    if not value_cols:
+        raise ValueError("Cannot write metric-year subset JSON – no numeric value columns were found.")
+
+    out_root = Path(context.resources.data_dir_out.get_path())
+    out_root.mkdir(parents=True, exist_ok=True)
+    out_path = out_root / "metric_year_subset.json"
+
+    subset = combined[combined["row_key"].isin(METRIC_YEAR_SUBSET_KEYS)].copy()
+    subset = subset.sort_values(["row_key", "agency", "year"], na_position="last")
+
+    agencies = (
+        subset["agency"]
+        .dropna()
+        .astype(str)
+        .str.strip()
+        .replace("", pd.NA)
+        .dropna()
+        .unique()
+        .tolist()
+    )
+    years = (
+        pd.to_numeric(subset["year"], errors="coerce")
+        .dropna()
+        .astype(int)
+        .unique()
+        .tolist()
+    )
+    agencies = sorted(agencies)
+    years = sorted(years)
+    agency_index = {name: idx for idx, name in enumerate(agencies)}
+    year_index = {year: idx for idx, year in enumerate(years)}
+
+    rows_by_key: dict[str, list[list]] = {}
+    total_rows = 0
+    for key in METRIC_YEAR_SUBSET_KEYS:
+        group = subset[subset["row_key"] == key]
+        rows: List[list] = []
+        for _, row in group.iterrows():
+            agency = row.get("agency")
+            agency_key = str(agency).strip() if pd.notna(agency) else None
+            if not agency_key or agency_key not in agency_index:
+                continue
+            year_val = row.get("year")
+            if pd.isna(year_val):
+                continue
+            try:
+                year_val = int(year_val)
+            except (TypeError, ValueError):
+                continue
+            if year_val not in year_index:
+                continue
+            entry = [agency_index[agency_key], year_index[year_val]]
+            for col in value_cols:
+                entry.append(_json_safe_value(row.get(col)))
+            rows.append(entry)
+        total_rows += len(rows)
+        rows_by_key[key] = rows
+
+    payload = {
+        "agencies": agencies,
+        "years": years,
+        "columns": ["agency_idx", "year_idx", *value_cols],
+        "rows": rows_by_key,
+    }
+    out_path.write_text(json.dumps(payload, separators=(",", ":")))
+    context.log.info("Wrote metric-year subset JSON → %s (%d rows)", out_path, total_rows)
+
+    base_dir = Path(context.resources.data_dir_out.get_path())
+    uploaded = upload_paths(
+        context,
+        [out_path],
+        base_dir=base_dir,
+    )
+    if uploaded:
+        context.log.info("Uploaded metric-year subset JSON to S3")
+
+    try:
+        metadata = {
+            "local_path": str(out_path),
+            "row_key_count": len(METRIC_YEAR_SUBSET_KEYS),
+            "row_count": total_rows,
+        }
+        s3_path = s3_uri_for_path(context, out_path, base_dir)
+        if s3_path:
+            metadata["s3_path"] = s3_path
+        context.add_output_metadata(metadata)
+    except Exception:
+        pass
+
+    return str(out_path)
+
+
 def _collect_names(row: pd.Series, name_cols: list[str]) -> list[str]:
     seen = set()
     names: list[str] = []
@@ -889,6 +1048,16 @@ def agency_year_json_exports(
 )
 def metric_year_json_exports(combine_all_reports: pd.DataFrame) -> List[str]:
     return write_metric_year_json(combine_all_reports)
+
+
+@graph_asset(
+    name="metric_year_subset_json",
+    group_name="output",
+    ins={"combine_all_reports": AssetIn(key=AssetKey("combine_all_reports"))},
+    description="Write a compact JSON file with selected row_keys across agencies/years.",
+)
+def metric_year_subset_json(combine_all_reports: pd.DataFrame) -> str:
+    return write_metric_year_subset_json(combine_all_reports)
 
 
 @graph_asset(
