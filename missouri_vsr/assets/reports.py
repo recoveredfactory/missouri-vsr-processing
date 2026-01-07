@@ -8,9 +8,7 @@ import pandas as pd
 from dagster import AssetIn, AssetKey, In, Out, graph_asset, op
 
 from missouri_vsr.assets.extract import YEAR_URLS
-from missouri_vsr.assets.s3_utils import upload_file_with_presign
-
-PRESIGN_6_MONTHS = 6 * 30 * 24 * 60 * 60
+from missouri_vsr.assets.s3_utils import upload_file_to_s3
 
 # ------------------------------------------------------------------------------
 # Combine all extracted DataFrame assets into one JSON and DataFrame
@@ -89,12 +87,11 @@ def combine_reports(context, **extracted_reports: dict[str, pd.DataFrame]) -> pd
     # Attach local path and optional S3 metadata
     meta = {"local_path": str(out_file)}
     try:
-        s3_meta = upload_file_with_presign(
+        s3_meta = upload_file_to_s3(
             context,
             out_file,
-            "combined/all_combined_output.parquet",
+            "downloads/combined/all_combined_output.parquet",
             content_type="application/vnd.apache.parquet",
-            expires_in=PRESIGN_6_MONTHS,
         )
         if s3_meta:
             meta.update(s3_meta)

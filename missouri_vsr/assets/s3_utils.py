@@ -22,15 +22,14 @@ def _resolve_s3_target(context) -> tuple[str, str, object] | None:
     return bucket, dist_prefix, s3_res
 
 
-def upload_file_with_presign(
+def upload_file_to_s3(
     context,
     path: Path,
     key: str,
     *,
     content_type: str | None = None,
-    expires_in: int | None = None,
 ) -> dict:
-    """Upload a single file to S3 (prefix aware) and return metadata (s3_uri, presigned_url, errors)."""
+    """Upload a single file to S3 (prefix aware) and return metadata (s3_uri, errors)."""
     meta: dict = {}
     s3_res = getattr(context.resources, "s3", None)
     if s3_res is None:
@@ -68,21 +67,6 @@ def upload_file_with_presign(
 
     uri = f"s3://{bucket}/{key}"
     meta["s3_uri"] = uri
-
-    try:
-        expires = (
-            int(expires_in)
-            if expires_in is not None
-            else int(getattr(s3_res, "presigned_expiration", 45 * 24 * 60 * 60))
-        )
-        presigned = client.generate_presigned_url(
-            ClientMethod="get_object",
-            Params={"Bucket": bucket, "Key": key},
-            ExpiresIn=expires,
-        )
-        meta["presigned_url"] = presigned
-    except Exception as exc:
-        meta["s3_presign_error"] = str(exc)
 
     return meta
 

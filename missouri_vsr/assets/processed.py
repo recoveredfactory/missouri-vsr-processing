@@ -14,14 +14,13 @@ from missouri_vsr.assets.s3_utils import (
     upload_paths,
     s3_uri_for_dir,
     s3_uri_for_path,
-    upload_file_with_presign,
+    upload_file_to_s3,
 )
 
 # ------------------------------------------------------------------------------
 # Pivoted outputs & per-agency JSON exports
 # ------------------------------------------------------------------------------
 MSHP_DEPARTMENT_NAME = "Missouri State Highway Patrol"
-PRESIGN_6_MONTHS = 6 * 30 * 24 * 60 * 60
 METRIC_YEAR_SUBSET_KEYS = [
     "rates-by-race--totals--all-stops",
     "rates-by-race--totals--arrests",
@@ -168,12 +167,11 @@ def add_rank_percentile_rows(context, combined: pd.DataFrame) -> pd.DataFrame:
 
     meta = {"local_path": str(out_path), "row_count": len(augmented)}
     try:
-        s3_meta = upload_file_with_presign(
+        s3_meta = upload_file_to_s3(
             context,
             out_path,
-            "processed/reports_with_rank_percentile.parquet",
+            "downloads/processed/reports_with_rank_percentile.parquet",
             content_type="application/vnd.apache.parquet",
-            expires_in=PRESIGN_6_MONTHS,
         )
         if s3_meta:
             meta.update(s3_meta)
@@ -271,12 +269,11 @@ def compute_statewide_slug_baselines(context, combined: pd.DataFrame) -> pd.Data
 
     meta = {"local_path": str(out_path), "row_count": len(baselines)}
     try:
-        s3_meta = upload_file_with_presign(
+        s3_meta = upload_file_to_s3(
             context,
             out_path,
-            "processed/statewide_slug_baselines.parquet",
+            "downloads/processed/statewide_slug_baselines.parquet",
             content_type="application/vnd.apache.parquet",
-            expires_in=PRESIGN_6_MONTHS,
         )
         if s3_meta:
             meta.update(s3_meta)
