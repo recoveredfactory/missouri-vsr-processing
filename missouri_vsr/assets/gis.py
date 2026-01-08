@@ -983,7 +983,7 @@ def build_agency_relationships(
 
 @graph_asset(
     name="agency_relationships",
-    group_name="gis",
+    group_name="output",
     ins={
         "agency_boundary_matches": AssetIn(key=AssetKey("agency_boundary_matches")),
         "mo_counties": AssetIn(key=AssetKey("mo_counties")),
