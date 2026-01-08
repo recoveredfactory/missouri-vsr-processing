@@ -90,7 +90,7 @@ def combine_reports(context, **extracted_reports: dict[str, pd.DataFrame]) -> pd
         s3_meta = upload_file_to_s3(
             context,
             out_file,
-            "downloads/combined/all_combined_output.parquet",
+            "downloads/all_combined_output.parquet",
             content_type="application/vnd.apache.parquet",
         )
         if s3_meta:

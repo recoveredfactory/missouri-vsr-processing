@@ -170,7 +170,7 @@ def add_rank_percentile_rows(context, combined: pd.DataFrame) -> pd.DataFrame:
         s3_meta = upload_file_to_s3(
             context,
             out_path,
-            "downloads/processed/reports_with_rank_percentile.parquet",
+            "downloads/reports_with_rank_percentile.parquet",
             content_type="application/vnd.apache.parquet",
         )
         if s3_meta:
@@ -272,7 +272,7 @@ def compute_statewide_slug_baselines(context, combined: pd.DataFrame) -> pd.Data
         s3_meta = upload_file_to_s3(
             context,
             out_path,
-            "downloads/processed/statewide_slug_baselines.parquet",
+            "downloads/statewide_slug_baselines.parquet",
             content_type="application/vnd.apache.parquet",
         )
         if s3_meta:
