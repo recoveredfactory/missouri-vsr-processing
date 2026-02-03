@@ -964,6 +964,11 @@ def write_statewide_year_sums_json(context, combined: pd.DataFrame) -> str:
         rate_mask = subset["row_key"].astype(str).str.endswith("-rate", na=False)
         if rate_mask.any():
             subset = subset.loc[~rate_mask].copy()
+        pop_mask = subset["row_key"].astype(str).str.startswith(
+            "rates-by-race--population", na=False
+        )
+        if pop_mask.any():
+            subset = subset.loc[~pop_mask].copy()
     for col in value_cols:
         subset[col] = pd.to_numeric(subset[col], errors="coerce")
 
