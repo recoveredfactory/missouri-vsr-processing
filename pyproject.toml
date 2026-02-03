@@ -50,6 +50,7 @@ build-backend = "hatchling.build"
 [dependency-groups]
 dev = [
     "ipdb>=0.13.13",
+    "marimo>=0.19.7",
     "pytest>=9.0.2",
 ]
 

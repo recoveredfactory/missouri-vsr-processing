@@ -944,6 +944,67 @@ def write_statewide_baselines_json(context, baselines: pd.DataFrame) -> str:
 
 
 @op(out=Out(str), required_resource_keys={"data_dir_out", "s3"})
+def write_statewide_year_sums_json(context, combined: pd.DataFrame) -> str:
+    """Write statewide per-year sums for each row_key and race column."""
+    if combined.empty:
+        context.log.warning("Combined DataFrame empty; no statewide sums JSON created.")
+        return ""
+
+    required_cols = {"year", "row_key"}
+    missing = required_cols - set(combined.columns)
+    if missing:
+        raise ValueError(f"Cannot write statewide sums JSON – missing columns: {sorted(missing)}")
+
+    value_cols = [c for c in PIVOT_VALUE_COLUMNS if c in combined.columns]
+    if not value_cols:
+        raise ValueError("Cannot write statewide sums JSON – no numeric value columns were found.")
+
+    subset = combined[["year", "row_key", *value_cols]].copy()
+    if "row_key" in subset.columns:
+        rate_mask = subset["row_key"].astype(str).str.endswith("-rate", na=False)
+        if rate_mask.any():
+            subset = subset.loc[~rate_mask].copy()
+    for col in value_cols:
+        subset[col] = pd.to_numeric(subset[col], errors="coerce")
+
+    grouped = (
+        subset.groupby(["year", "row_key"], dropna=True)[value_cols]
+        .sum(min_count=1)
+        .reset_index()
+        .sort_values(["year", "row_key"], na_position="last")
+    )
+
+    records = [_json_safe_record(item) for item in grouped.to_dict(orient="records")]
+
+    out_root = Path(context.resources.data_dir_out.get_path())
+    out_root.mkdir(parents=True, exist_ok=True)
+    out_path = out_root / "statewide_year_sums.json"
+    out_path.write_text(json.dumps(records, indent=2))
+    context.log.info("Wrote statewide sums JSON → %s (%d rows)", out_path, len(records))
+
+    base_dir = Path(context.resources.data_dir_out.get_path())
+    uploaded = upload_paths(context, [out_path], base_dir=base_dir)
+    if uploaded:
+        context.log.info("Uploaded statewide sums JSON to S3")
+
+    try:
+        metadata = {
+            "local_path": str(out_path),
+            "row_count": len(records),
+            "row_key_count": int(grouped["row_key"].nunique(dropna=True)),
+            "year_count": int(grouped["year"].nunique(dropna=True)),
+        }
+        s3_path = s3_uri_for_path(context, out_path, base_dir)
+        if s3_path:
+            metadata["s3_path"] = s3_path
+        context.add_output_metadata(metadata)
+    except Exception:
+        pass
+
+    return str(out_path)
+
+
+@op(out=Out(str), required_resource_keys={"data_dir_out", "s3"})
 def write_report_dimension_index_json(context, combined: pd.DataFrame) -> str:
     """Write unique table/section/metric identifiers to JSON for translations."""
     out_root = Path(context.resources.data_dir_out.get_path())
@@ -1081,6 +1142,16 @@ def agency_index_json(
 )
 def statewide_slug_baselines_json(statewide_slug_baselines: pd.DataFrame) -> str:
     return write_statewide_baselines_json(statewide_slug_baselines)
+
+
+@graph_asset(
+    name="statewide_year_sums_json",
+    group_name="output",
+    ins={"combine_all_reports": AssetIn(key=AssetKey("combine_all_reports"))},
+    description="Write statewide per-year sums for each row_key and race column.",
+)
+def statewide_year_sums_json(combine_all_reports: pd.DataFrame) -> str:
+    return write_statewide_year_sums_json(combine_all_reports)
 
 
 @graph_asset(

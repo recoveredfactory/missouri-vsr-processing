@@ -94,6 +94,7 @@ Dagster caches materialized assets, but they don't persist between runs of the w
 - Metric-year subset (compact): `data/out/metric_year_subset.json`
 - Report dimension index: `data/out/report_dimensions.json`
 - Statewide baselines: `data/out/statewide_slug_baselines.json`
+- Statewide per-year sums (excludes row_keys ending in `-rate`): `data/out/statewide_year_sums.json`
 
 Extracted rows include the identifiers:
 - `table_id`: slug of the table title (no table number)
@@ -127,6 +128,11 @@ To decode each row: `agency = agencies[row[0]]`, `year = years[row[1]]`, and the
 - Materialize just the 2023 extract with:  
   `uv run dagster asset materialize --select extract_pdf_data_2023 -m missouri_vsr.definitions -c run_configs/example_2023_sample.yaml`
 - `download_reports` will reuse the bundled PDF in `data/src/examples` and skip downloading.
+
+### Marimo notebook (statewide sums)
+
+After materializing `statewide_year_sums_json`, you can open the Marimo notebook at
+`notebooks/marimo/statewide_year_sums.py` to view the statewide totals table.
 
 ## Agency crosswalk CLI
 
