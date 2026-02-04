@@ -6,7 +6,7 @@ from pathlib import Path
 import pandas as pd
 import requests
 
-from dagster import AssetIn, AssetKey, AssetOut, In, Out, graph_asset, op, multi_asset
+from dagster import AssetIn, AssetKey, AssetOut, In, Out, Output, graph_asset, op, multi_asset
 
 from missouri_vsr.assets.extract import YEAR_URLS, _ensure_pdftotext
 from missouri_vsr.assets.s3_utils import upload_file_to_s3
