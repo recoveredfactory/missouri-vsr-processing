@@ -166,3 +166,6 @@ data/
 
 # The classic
 .DS_Store
+
+# Marimo notebook state
+__marimo__/
