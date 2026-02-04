@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from pathlib import Path
 
 import pandas as pd
@@ -23,10 +24,15 @@ _COMMENT_MARKER_RE = re.compile(r"agency public comments?|public agency comments
 
 
 def _normalize_agency_name(value: str) -> str:
+    text = unicodedata.normalize("NFKC", value)
     text = (
-        value.replace("’", "'")
+        text.replace("’", "'")
         .replace("‘", "'")
         .replace("`", "'")
+        .replace("\u00a0", " ")
+        .replace("\u200b", "")
+        .replace("¿", "")
+        .replace("�", "")
     )
     text = re.sub(r"\s+'s\b", "'s", text)
     text = re.sub(r"\s{2,}", " ", text)
