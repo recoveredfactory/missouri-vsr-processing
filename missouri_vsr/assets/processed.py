@@ -986,12 +986,18 @@ def write_statewide_year_sums_json(context, combined: pd.DataFrame) -> str:
     if not value_cols:
         raise ValueError("Cannot write statewide sums JSON – no numeric value columns were found.")
 
-    subset_all = combined[["year", "row_key", *value_cols]].copy()
+    subset_all = combined[["year", "row_key", "agency", *value_cols]].copy()
     for col in value_cols:
         subset_all[col] = pd.to_numeric(subset_all[col], errors="coerce")
 
     grouped_all = (
         subset_all.groupby(["year", "row_key"], dropna=True)[value_cols]
+        .sum(min_count=1)
+        .reset_index()
+    )
+    subset_no_mshp_all = subset_all[subset_all["agency"].ne(MSHP_DEPARTMENT_NAME)].copy()
+    grouped_no_mshp = (
+        subset_no_mshp_all.groupby(["year", "row_key"], dropna=True)[value_cols]
         .sum(min_count=1)
         .reset_index()
     )
@@ -1007,26 +1013,110 @@ def write_statewide_year_sums_json(context, combined: pd.DataFrame) -> str:
         if pop_mask.any():
             subset = subset.loc[~pop_mask].copy()
 
-    lookup = grouped_all.set_index(["year", "row_key"])[value_cols]
-    derived_rows: list[dict] = []
-    for year in grouped_all["year"].dropna().unique().tolist():
+    def _derived_rates_from_grouped(grouped: pd.DataFrame) -> pd.DataFrame:
+        lookup = grouped.set_index(["year", "row_key"])[value_cols]
+        derived_rows: list[dict] = []
+        for year in grouped["year"].dropna().unique().tolist():
+            for spec in STATEWIDE_RATE_SPECS:
+                num_key = spec["numerator"]
+                den_key = spec["denominator"]
+                if (year, num_key) not in lookup.index or (year, den_key) not in lookup.index:
+                    continue
+                num = lookup.loc[(year, num_key)]
+                den = lookup.loc[(year, den_key)]
+                rates = num / den
+                rates = rates.where(den != 0)
+                record = {"year": year, "row_key": spec["row_key"]}
+                for col in value_cols:
+                    record[col] = rates.get(col)
+                derived_rows.append(record)
+        return pd.DataFrame(derived_rows)
+
+    derived = _derived_rates_from_grouped(grouped_all)
+    if not derived.empty:
+        subset = pd.concat([subset, derived], ignore_index=True)
+
+    subset_no_mshp = grouped_no_mshp.copy()
+    if "row_key" in subset_no_mshp.columns:
+        rate_mask = subset_no_mshp["row_key"].astype(str).str.endswith("-rate", na=False)
+        if rate_mask.any():
+            subset_no_mshp = subset_no_mshp.loc[~rate_mask].copy()
+        pop_mask = subset_no_mshp["row_key"].astype(str).str.startswith(
+            "rates-by-race--population", na=False
+        )
+        if pop_mask.any():
+            subset_no_mshp = subset_no_mshp.loc[~pop_mask].copy()
+    derived_no_mshp = _derived_rates_from_grouped(grouped_no_mshp)
+    if not derived_no_mshp.empty:
+        subset_no_mshp = pd.concat([subset_no_mshp, derived_no_mshp], ignore_index=True)
+    if not subset_no_mshp.empty:
+        subset_no_mshp["row_key"] = "no-mshp--" + subset_no_mshp["row_key"].astype(str)
+
+    subset_avg_no_mshp = subset_no_mshp_all.copy()
+    if "row_key" in subset_avg_no_mshp.columns:
+        rate_mask = subset_avg_no_mshp["row_key"].astype(str).str.endswith("-rate", na=False)
+        if rate_mask.any():
+            subset_avg_no_mshp = subset_avg_no_mshp.loc[~rate_mask].copy()
+        pop_mask = subset_avg_no_mshp["row_key"].astype(str).str.startswith(
+            "rates-by-race--population", na=False
+        )
+        if pop_mask.any():
+            subset_avg_no_mshp = subset_avg_no_mshp.loc[~pop_mask].copy()
+    avg_no_mshp = (
+        subset_avg_no_mshp.groupby(["year", "row_key"], dropna=True)[value_cols]
+        .mean()
+        .reset_index()
+    )
+
+    def _derived_rates_avg_from_agency(
+        agency_df: pd.DataFrame,
+    ) -> pd.DataFrame:
+        derived_rows: list[dict] = []
         for spec in STATEWIDE_RATE_SPECS:
             num_key = spec["numerator"]
             den_key = spec["denominator"]
-            if (year, num_key) not in lookup.index or (year, den_key) not in lookup.index:
+            num_df = agency_df[agency_df["row_key"] == num_key][
+                ["agency", "year", *value_cols]
+            ]
+            den_df = agency_df[agency_df["row_key"] == den_key][
+                ["agency", "year", *value_cols]
+            ]
+            if num_df.empty or den_df.empty:
                 continue
-            num = lookup.loc[(year, num_key)]
-            den = lookup.loc[(year, den_key)]
-            rates = num / den
-            rates = rates.where(den != 0)
-            record = {"year": year, "row_key": spec["row_key"]}
-            for col in value_cols:
-                record[col] = rates.get(col)
-            derived_rows.append(record)
+            merged = num_df.merge(den_df, on=["agency", "year"], suffixes=("_num", "_den"))
+            if merged.empty:
+                continue
+            rate_records: list[dict] = []
+            for _, row in merged.iterrows():
+                record = {"year": row["year"]}
+                for col in value_cols:
+                    num = row.get(f"{col}_num")
+                    den = row.get(f"{col}_den")
+                    if pd.isna(num) or pd.isna(den) or den == 0:
+                        record[col] = pd.NA
+                    else:
+                        record[col] = num / den
+                rate_records.append(record)
+            rates_df = pd.DataFrame(rate_records)
+            if rates_df.empty:
+                continue
+            grouped = rates_df.groupby("year")[value_cols].mean().reset_index()
+            grouped["row_key"] = spec["row_key"]
+            derived_rows.append(grouped)
+        if not derived_rows:
+            return pd.DataFrame(columns=["year", "row_key", *value_cols])
+        return pd.concat(derived_rows, ignore_index=True)
 
-    derived = pd.DataFrame(derived_rows)
-    if not derived.empty:
-        subset = pd.concat([subset, derived], ignore_index=True)
+    derived_avg_no_mshp = _derived_rates_avg_from_agency(subset_no_mshp_all)
+    if not derived_avg_no_mshp.empty:
+        avg_no_mshp = pd.concat([avg_no_mshp, derived_avg_no_mshp], ignore_index=True)
+    if not avg_no_mshp.empty:
+        avg_no_mshp["row_key"] = "avg-no-mshp--" + avg_no_mshp["row_key"].astype(str)
+
+    if not subset_no_mshp.empty:
+        subset = pd.concat([subset, subset_no_mshp], ignore_index=True)
+    if not avg_no_mshp.empty:
+        subset = pd.concat([subset, avg_no_mshp], ignore_index=True)
 
     subset = subset.sort_values(["year", "row_key"], na_position="last")
 

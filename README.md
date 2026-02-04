@@ -94,7 +94,7 @@ Dagster caches materialized assets, but they don't persist between runs of the w
 - Metric-year subset (compact): `data/out/metric_year_subset.json`
 - Report dimension index: `data/out/report_dimensions.json`
 - Statewide baselines: `data/out/statewide_slug_baselines.json`
-- Statewide per-year sums: `data/out/statewide_year_sums.json` (base rows exclude `-rate` and population row_keys; derived statewide rates are recomputed from totals + ACS population)
+- Statewide per-year sums: `data/out/statewide_year_sums.json` (base rows exclude `-rate` and population row_keys; derived statewide rates are recomputed from totals + ACS population). Also includes `no-mshp--*` rows (sum across agencies excluding Missouri State Highway Patrol) and `avg-no-mshp--*` rows (mean across agencies excluding Missouri State Highway Patrol; derived rates computed per-agency then averaged).
 
 Extracted rows include the identifiers:
 - `table_id`: slug of the table title (no table number)
