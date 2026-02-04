@@ -31,8 +31,6 @@ def _normalize_agency_name(value: str) -> str:
         .replace("`", "'")
         .replace("\u00a0", " ")
         .replace("\u200b", "")
-        .replace("¿", "")
-        .replace("�", "")
     )
     text = re.sub(r"\s+'s\b", "'s", text)
     text = re.sub(r"\s{2,}", " ", text)
