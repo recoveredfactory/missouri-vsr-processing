@@ -11,7 +11,7 @@ from dagster import AssetIn, AssetKey, In, Out, graph_asset, op
 from missouri_vsr.assets.extract import YEAR_URLS, _ensure_pdftotext
 from missouri_vsr.assets.s3_utils import upload_file_to_s3
 
-AGENCY_COMMENTS_URLS = {
+AGENCY_RESPONSE_URLS = {
     2024: "https://ago.mo.gov/wp-content/uploads/2024-Agency-Responses-1.pdf",
     2023: "https://ago.mo.gov/wp-content/uploads/VSRagencynotes2023.pdf",
     2022: "https://ago.mo.gov/wp-content/uploads/2022-agency-comments-ago.pdf",
@@ -290,22 +290,55 @@ def combine_all_reports(**extracted_reports: pd.DataFrame) -> pd.DataFrame:
     return combine_reports(**extracted_reports)
 
 
-@op(out=Out(pd.DataFrame), required_resource_keys={"data_dir_source", "data_dir_processed"})
-def parse_agency_comments(context) -> pd.DataFrame:
+@multi_asset(
+    outs={
+        f"agency_response_{year}": AssetOut(metadata={"url": url})
+        for year, url in AGENCY_RESPONSE_URLS.items()
+    },
+    group_name="responses",
+    can_subset=True,
+    required_resource_keys={"data_dir_source"},
+    description="Download VSR agency response PDFs for each year.",
+)
+def download_agency_responses(context):
+    selected = (
+        set(context.selected_output_names)
+        if context.selected_output_names
+        else set(f"agency_response_{year}" for year in AGENCY_RESPONSE_URLS)
+    )
     out_dir = Path(context.resources.data_dir_source.get_path()) / "agency_comments"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    records: list[dict] = []
-    for year, url in AGENCY_COMMENTS_URLS.items():
+    for year, url in AGENCY_RESPONSE_URLS.items():
+        output_name = f"agency_response_{year}"
+        if output_name not in selected:
+            context.log.debug("Skipping %s (not selected)", output_name)
+            continue
         pdf_path = out_dir / f"VSR_agency_comments_{year}.pdf"
         if not pdf_path.exists():
-            context.log.info("Downloading agency comments %s → %s", url, pdf_path)
+            context.log.info("Downloading agency responses %s → %s", url, pdf_path)
             resp = requests.get(url, timeout=(10, 300))
             resp.raise_for_status()
             pdf_path.write_bytes(resp.content)
         else:
             context.log.debug("Using cached %s", pdf_path)
+        yield Output(
+            str(pdf_path),
+            output_name=output_name,
+            metadata={"url": url, "local_path": str(pdf_path), "year": year},
+        )
 
+
+@op(out=Out(pd.DataFrame), required_resource_keys={"data_dir_processed"})
+def parse_agency_comments(context, **response_paths: dict[str, str]) -> pd.DataFrame:
+    records: list[dict] = []
+    for year, url in AGENCY_RESPONSE_URLS.items():
+        key = f"agency_response_{year}"
+        path_str = response_paths.get(key)
+        if not path_str:
+            context.log.warning("Missing agency response path for %s", year)
+            continue
+        pdf_path = Path(path_str)
         text_path = _ensure_pdftotext(pdf_path, context.log)
         if text_path is None:
             context.log.error("Skipping agency comments for %s (pdftotext failed)", year)
@@ -344,8 +377,9 @@ def parse_agency_comments(context) -> pd.DataFrame:
 
 @graph_asset(
     name="agency_comments",
-    group_name="processed",
+    group_name="responses",
+    ins={f"agency_response_{year}": AssetIn(key=AssetKey(f"agency_response_{year}")) for year in AGENCY_RESPONSE_URLS},
     description="Parse agency response PDFs into a per-agency comment table.",
 )
-def agency_comments() -> pd.DataFrame:
-    return parse_agency_comments()
+def agency_comments(**response_paths: str) -> pd.DataFrame:
+    return parse_agency_comments(**response_paths)
