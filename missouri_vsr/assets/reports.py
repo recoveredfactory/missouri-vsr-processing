@@ -329,7 +329,11 @@ def download_agency_responses(context):
         )
 
 
-@op(out=Out(pd.DataFrame), required_resource_keys={"data_dir_processed"})
+@op(
+    out=Out(pd.DataFrame),
+    ins={f"agency_response_{year}": In(str) for year in AGENCY_RESPONSE_URLS},
+    required_resource_keys={"data_dir_processed"},
+)
 def parse_agency_comments(context, **response_paths: dict[str, str]) -> pd.DataFrame:
     records: list[dict] = []
     for year, url in AGENCY_RESPONSE_URLS.items():
