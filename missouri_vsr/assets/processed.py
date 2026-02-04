@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import List
 
@@ -452,11 +453,27 @@ def _json_safe_record(record: dict) -> dict:
     return cleaned
 
 
+def _normalize_agency_key(value: str | None) -> str:
+    if value is None:
+        return ""
+    text = (
+        str(value)
+        .replace("’", "'")
+        .replace("‘", "'")
+        .replace("`", "'")
+    )
+    text = text.strip()
+    text = re.sub(r"\s+'s\b", "'s", text)
+    text = re.sub(r"\s{2,}", " ", text)
+    return text.lower()
+
+
 @op(out=Out(list), required_resource_keys={"data_dir_out", "data_dir_processed", "s3"})
 def write_agency_year_json(
     context,
     combined: pd.DataFrame,
     agency_reference_geocoded: pd.DataFrame,
+    agency_comments: pd.DataFrame,
 ) -> List[str]:
     """Write one JSON file per agency with row-level row_key metadata and values."""
     del agency_reference_geocoded
@@ -468,6 +485,7 @@ def write_agency_year_json(
     out_root.mkdir(parents=True, exist_ok=True)
 
     agency_meta_lookup: dict[str, pd.Series] = {}
+    comments_lookup: dict[str, list[dict]] = {}
     processed_dir = Path(context.resources.data_dir_processed.get_path())
     reference_path = processed_dir / "agency_reference_geocoded.parquet"
     if not reference_path.exists():
@@ -517,6 +535,31 @@ def write_agency_year_json(
     else:
         context.log.info("Agency reference metadata not found at %s; skipping metadata", reference_path)
 
+    if agency_comments is not None and not agency_comments.empty:
+        try:
+            for _, row in agency_comments.iterrows():
+                agency = row.get("agency")
+                key = _normalize_agency_key(agency)
+                if not key:
+                    continue
+                year_val = row.get("year")
+                year = int(year_val) if pd.notna(year_val) else None
+                entry = {
+                    "year": year,
+                    "comment": _json_safe_value(row.get("comment")),
+                    "has_comment": bool(row.get("has_comment")),
+                    "source_url": _json_safe_value(row.get("source_url")),
+                }
+                comments_lookup.setdefault(key, []).append(entry)
+            for key in comments_lookup:
+                comments_lookup[key] = sorted(
+                    comments_lookup[key],
+                    key=lambda item: (item.get("year") is None, item.get("year")),
+                )
+            context.log.info("Loaded agency comments for %d agencies", len(comments_lookup))
+        except Exception as exc:
+            context.log.exception("Failed to process agency comments: %s", exc)
+
     required_cols = {
         "agency",
         "year",
@@ -562,6 +605,9 @@ def write_agency_year_json(
         meta_row = agency_meta_lookup.get(str(agency).strip())
         if meta_row is not None:
             payload["agency_metadata"] = _series_to_json_dict(meta_row)
+        comments = comments_lookup.get(_normalize_agency_key(agency))
+        if comments:
+            payload["agency_comments"] = comments
         out_path.write_text(json.dumps(payload, indent=2))
         output_paths.append(str(out_path))
         context.log.info("Wrote %d year rows for %s → %s", len(records), agency, out_path)
@@ -1234,14 +1280,20 @@ def write_report_dimension_index_json(context, combined: pd.DataFrame) -> str:
     ins={
         "reports_with_rank_percentile": AssetIn(key=AssetKey("reports_with_rank_percentile")),
         "agency_reference_geocoded": AssetIn(key=AssetKey("agency_reference_geocoded")),
+        "agency_comments": AssetIn(key=AssetKey("agency_comments")),
     },
     description="Generate per-agency JSON files containing year-by-year row_key data.",
 )
 def agency_year_json_exports(
     reports_with_rank_percentile: pd.DataFrame,
     agency_reference_geocoded: pd.DataFrame,
+    agency_comments: pd.DataFrame,
 ) -> List[str]:
-    return write_agency_year_json(reports_with_rank_percentile, agency_reference_geocoded)
+    return write_agency_year_json(
+        reports_with_rank_percentile,
+        agency_reference_geocoded,
+        agency_comments,
+    )
 
 
 @graph_asset(

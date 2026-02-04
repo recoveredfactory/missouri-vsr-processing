@@ -4,11 +4,173 @@ import re
 from pathlib import Path
 
 import pandas as pd
+import requests
 
 from dagster import AssetIn, AssetKey, In, Out, graph_asset, op
 
-from missouri_vsr.assets.extract import YEAR_URLS
+from missouri_vsr.assets.extract import YEAR_URLS, _ensure_pdftotext
 from missouri_vsr.assets.s3_utils import upload_file_to_s3
+
+AGENCY_COMMENTS_URLS = {
+    2024: "https://ago.mo.gov/wp-content/uploads/2024-Agency-Responses-1.pdf",
+    2023: "https://ago.mo.gov/wp-content/uploads/VSRagencynotes2023.pdf",
+    2022: "https://ago.mo.gov/wp-content/uploads/2022-agency-comments-ago.pdf",
+    2021: "https://ago.mo.gov/wp-content/uploads/2021-VSR-Agency-Comments.pdf",
+    2020: "https://ago.mo.gov/wp-content/uploads/2020-VSR-Agency-Comments.pdf",
+}
+
+_COMMENT_MARKER_RE = re.compile(r"agency public comments?|public agency comments", re.IGNORECASE)
+
+
+def _normalize_agency_name(value: str) -> str:
+    text = (
+        value.replace("’", "'")
+        .replace("‘", "'")
+        .replace("`", "'")
+    )
+    text = re.sub(r"\s+'s\b", "'s", text)
+    text = re.sub(r"\s{2,}", " ", text)
+    return text.strip()
+
+
+def _is_comment_marker(line: str) -> bool:
+    return bool(_COMMENT_MARKER_RE.search(line))
+
+
+def _parse_agency_header(line: str) -> str | None:
+    text = _normalize_agency_name(line)
+    if not text:
+        return None
+    lower = text.lower()
+    if "contents" == lower or "table of contents" in lower:
+        return None
+    if "agency comments" == lower or "agency responses" == lower:
+        return None
+    if _is_comment_marker(text):
+        return None
+    tokens = text.split()
+    if not tokens:
+        return None
+    idx = 0
+    while idx < len(tokens) and re.fullmatch(r"\d+[.)]?", tokens[idx]):
+        idx += 1
+    if idx == 0:
+        return None
+    tokens = tokens[idx:]
+    if tokens and re.fullmatch(r"\d+", tokens[-1]):
+        tokens = tokens[:-1]
+    if not tokens:
+        return None
+    if any(re.fullmatch(r"\d+", tok) for tok in tokens):
+        return None
+    name = " ".join(tokens).strip()
+    if not re.search(r"[A-Za-z]", name):
+        return None
+    return _normalize_agency_name(name)
+
+
+def _collapse_comment_lines(lines: list[str]) -> str:
+    parts: list[str] = []
+    for line in lines:
+        text = line.strip()
+        if not text:
+            if parts and parts[-1] != "":
+                parts.append("")
+            continue
+        parts.append(text)
+    if not parts:
+        return ""
+    text = "\n".join(parts).strip()
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text
+
+
+def _parse_agency_comments(lines: list[str], *, year: int, pdf_name: str, url: str, log) -> list[dict]:
+    normalized_lines = []
+    for raw in lines:
+        cleaned = raw.replace("\x0c", "")
+        cleaned = _normalize_agency_name(cleaned)
+        normalized_lines.append(cleaned)
+
+    marker_mode = any(_is_comment_marker(line) for line in normalized_lines)
+    records: dict[str, dict] = {}
+
+    current_agency: str | None = None
+    current_lines: list[str] = []
+    pending_agency: str | None = None
+    pending_age = 0
+    capturing = False
+
+    def _commit():
+        nonlocal current_agency, current_lines, capturing
+        if not current_agency:
+            return
+        comment = _collapse_comment_lines(current_lines)
+        record = {
+            "year": year,
+            "agency": current_agency,
+            "comment": comment or None,
+            "has_comment": bool(comment),
+            "source_pdf": pdf_name,
+            "source_url": url,
+        }
+        existing = records.get(current_agency)
+        if existing is None or (record["has_comment"] and not existing["has_comment"]):
+            records[current_agency] = record
+        current_agency = None
+        current_lines = []
+        capturing = False
+
+    for line in normalized_lines:
+        if pending_agency:
+            pending_age += 1
+            if pending_age > 5:
+                pending_agency = None
+        if not line.strip():
+            if capturing:
+                current_lines.append("")
+            continue
+        if line.strip().isdigit():
+            continue
+
+        header = _parse_agency_header(line)
+        if header:
+            if marker_mode:
+                if capturing:
+                    _commit()
+                pending_agency = header
+                pending_age = 0
+                continue
+            if current_agency:
+                _commit()
+            current_agency = header
+            current_lines = []
+            capturing = True
+            continue
+
+        if marker_mode and _is_comment_marker(line):
+            if pending_agency and pending_age <= 3:
+                if current_agency:
+                    _commit()
+                current_agency = pending_agency
+                current_lines = []
+                capturing = True
+            pending_agency = None
+            continue
+
+        if capturing and current_agency:
+            current_lines.append(line)
+
+    if current_agency:
+        _commit()
+
+    log.info(
+        "Parsed %d agency comment rows from %s (%s)",
+        len(records),
+        pdf_name,
+        year,
+    )
+    return list(records.values())
 
 # ------------------------------------------------------------------------------
 # Combine all extracted DataFrame assets into one JSON and DataFrame
@@ -126,3 +288,64 @@ def combine_reports(context, **extracted_reports: dict[str, pd.DataFrame]) -> pd
 )
 def combine_all_reports(**extracted_reports: pd.DataFrame) -> pd.DataFrame:
     return combine_reports(**extracted_reports)
+
+
+@op(out=Out(pd.DataFrame), required_resource_keys={"data_dir_source", "data_dir_processed"})
+def parse_agency_comments(context) -> pd.DataFrame:
+    out_dir = Path(context.resources.data_dir_source.get_path()) / "agency_comments"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    records: list[dict] = []
+    for year, url in AGENCY_COMMENTS_URLS.items():
+        pdf_path = out_dir / f"VSR_agency_comments_{year}.pdf"
+        if not pdf_path.exists():
+            context.log.info("Downloading agency comments %s → %s", url, pdf_path)
+            resp = requests.get(url, timeout=(10, 300))
+            resp.raise_for_status()
+            pdf_path.write_bytes(resp.content)
+        else:
+            context.log.debug("Using cached %s", pdf_path)
+
+        text_path = _ensure_pdftotext(pdf_path, context.log)
+        if text_path is None:
+            context.log.error("Skipping agency comments for %s (pdftotext failed)", year)
+            continue
+        try:
+            lines = text_path.read_text(encoding="utf-8", errors="ignore").splitlines()
+        except Exception as exc:
+            context.log.error("Failed reading %s: %s", text_path, exc)
+            continue
+        records.extend(
+            _parse_agency_comments(
+                lines,
+                year=year,
+                pdf_name=pdf_path.name,
+                url=url,
+                log=context.log,
+            )
+        )
+
+    comments = pd.DataFrame(records)
+    processed_dir = Path(context.resources.data_dir_processed.get_path())
+    out_path = processed_dir / "agency_comments.parquet"
+    comments.to_parquet(out_path, index=False, engine="pyarrow")
+    context.log.info("Wrote agency comments Parquet → %s (%d rows)", out_path, len(comments))
+
+    try:
+        meta = {"local_path": str(out_path), "row_count": len(comments)}
+        if not comments.empty:
+            meta["agency_count"] = int(comments["agency"].nunique(dropna=True))
+            meta["year_count"] = int(comments["year"].nunique(dropna=True))
+        context.add_output_metadata(meta)
+    except Exception:
+        pass
+    return comments
+
+
+@graph_asset(
+    name="agency_comments",
+    group_name="processed",
+    description="Parse agency response PDFs into a per-agency comment table.",
+)
+def agency_comments() -> pd.DataFrame:
+    return parse_agency_comments()
