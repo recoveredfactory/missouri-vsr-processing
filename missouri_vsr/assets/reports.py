@@ -381,7 +381,7 @@ def parse_agency_comments(context, **response_paths: dict[str, str]) -> pd.DataF
 
 @graph_asset(
     name="agency_comments",
-    group_name="responses",
+    group_name="processed",
     ins={f"agency_response_{year}": AssetIn(key=AssetKey(f"agency_response_{year}")) for year in AGENCY_RESPONSE_URLS},
     description="Parse agency response PDFs into a per-agency comment table.",
 )
