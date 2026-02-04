@@ -70,16 +70,23 @@ def _parse_agency_header(line: str) -> str | None:
 
 
 def _collapse_comment_lines(lines: list[str]) -> str:
-    parts: list[str] = []
+    paragraphs: list[list[str]] = []
+    current: list[str] = []
     for line in lines:
         text = line.strip()
         if not text:
+            if current:
+                paragraphs.append(current)
+                current = []
             continue
-        parts.append(text)
-    if not parts:
+        current.append(text)
+    if current:
+        paragraphs.append(current)
+    if not paragraphs:
         return ""
-    text = " ".join(parts).strip()
-    text = re.sub(r"\s{2,}", " ", text)
+    joined = [" ".join(part).strip() for part in paragraphs if part]
+    text = "\n\n".join(joined).strip()
+    text = re.sub(r"[ \t]{2,}", " ", text)
     return text
 
 
