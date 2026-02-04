@@ -49,6 +49,7 @@ build-backend = "hatchling.build"
 
 [dependency-groups]
 dev = [
+    "altair>=6.0.0",
     "ipdb>=0.13.13",
     "marimo>=0.19.7",
     "pytest>=9.0.2",
