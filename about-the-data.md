@@ -248,4 +248,3 @@ Some metrics appear only in certain years (e.g., disparity index was discontinue
 | search-statistics | search-statistics--what-searched--car-property |
 | search-statistics | search-statistics--what-searched--driver |
 | search-statistics | search-statistics--what-searched--driver-property |
-```
