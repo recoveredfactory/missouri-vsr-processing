@@ -73,6 +73,8 @@ This will provide an interface to run and monitor assets, typically running at h
 
 The main entry point is the "asset catalog" (the "assets" tab in the UI) where you can "materialize" assets to create a local versions of the data for use downstream.
 
+See `about-the-data.md` for a full narrative description of sources, formats, and metrics.
+
 You can also materialize these assets via the command line:
 
 ```sh
