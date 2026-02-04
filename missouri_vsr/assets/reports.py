@@ -61,6 +61,8 @@ def _parse_agency_header(line: str) -> str | None:
         tokens = tokens[:-1]
     if not tokens:
         return None
+    if tokens[0] and tokens[0][0].islower():
+        return None
     if any(re.fullmatch(r"\d+", tok) for tok in tokens):
         return None
     name = " ".join(tokens).strip()
