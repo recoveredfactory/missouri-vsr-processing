@@ -74,14 +74,12 @@ def _collapse_comment_lines(lines: list[str]) -> str:
     for line in lines:
         text = line.strip()
         if not text:
-            if parts and parts[-1] != "":
-                parts.append("")
             continue
         parts.append(text)
     if not parts:
         return ""
-    text = "\n".join(parts).strip()
-    text = re.sub(r"\n{3,}", "\n\n", text)
+    text = " ".join(parts).strip()
+    text = re.sub(r"\s{2,}", " ", text)
     return text
 
 
