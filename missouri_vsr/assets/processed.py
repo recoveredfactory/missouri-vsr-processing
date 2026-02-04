@@ -30,6 +30,33 @@ METRIC_YEAR_SUBSET_KEYS = [
     "rates-by-race--totals--resident-stops",
     "rates-by-race--population--acs-pop",
 ]
+STATEWIDE_RATE_SPECS = [
+    {
+        "row_key": "rates-by-race--rates--citation-rate",
+        "numerator": "rates-by-race--totals--citations",
+        "denominator": "rates-by-race--totals--all-stops",
+    },
+    {
+        "row_key": "rates-by-race--rates--search-rate",
+        "numerator": "rates-by-race--totals--searches",
+        "denominator": "rates-by-race--totals--all-stops",
+    },
+    {
+        "row_key": "rates-by-race--rates--contraband-hit-rate",
+        "numerator": "rates-by-race--totals--contraband",
+        "denominator": "rates-by-race--totals--searches",
+    },
+    {
+        "row_key": "rates-by-race--rates--stop-rate",
+        "numerator": "rates-by-race--totals--all-stops",
+        "denominator": "rates-by-race--population--acs-pop",
+    },
+    {
+        "row_key": "rates-by-race--rates--stop-rate-residents",
+        "numerator": "rates-by-race--totals--resident-stops",
+        "denominator": "rates-by-race--population--acs-pop",
+    },
+]
 
 
 def _build_rank_percentile_frame(
@@ -959,7 +986,17 @@ def write_statewide_year_sums_json(context, combined: pd.DataFrame) -> str:
     if not value_cols:
         raise ValueError("Cannot write statewide sums JSON – no numeric value columns were found.")
 
-    subset = combined[["year", "row_key", *value_cols]].copy()
+    subset_all = combined[["year", "row_key", *value_cols]].copy()
+    for col in value_cols:
+        subset_all[col] = pd.to_numeric(subset_all[col], errors="coerce")
+
+    grouped_all = (
+        subset_all.groupby(["year", "row_key"], dropna=True)[value_cols]
+        .sum(min_count=1)
+        .reset_index()
+    )
+
+    subset = grouped_all.copy()
     if "row_key" in subset.columns:
         rate_mask = subset["row_key"].astype(str).str.endswith("-rate", na=False)
         if rate_mask.any():
@@ -969,17 +1006,31 @@ def write_statewide_year_sums_json(context, combined: pd.DataFrame) -> str:
         )
         if pop_mask.any():
             subset = subset.loc[~pop_mask].copy()
-    for col in value_cols:
-        subset[col] = pd.to_numeric(subset[col], errors="coerce")
 
-    grouped = (
-        subset.groupby(["year", "row_key"], dropna=True)[value_cols]
-        .sum(min_count=1)
-        .reset_index()
-        .sort_values(["year", "row_key"], na_position="last")
-    )
+    lookup = grouped_all.set_index(["year", "row_key"])[value_cols]
+    derived_rows: list[dict] = []
+    for year in grouped_all["year"].dropna().unique().tolist():
+        for spec in STATEWIDE_RATE_SPECS:
+            num_key = spec["numerator"]
+            den_key = spec["denominator"]
+            if (year, num_key) not in lookup.index or (year, den_key) not in lookup.index:
+                continue
+            num = lookup.loc[(year, num_key)]
+            den = lookup.loc[(year, den_key)]
+            rates = num / den
+            rates = rates.where(den != 0)
+            record = {"year": year, "row_key": spec["row_key"]}
+            for col in value_cols:
+                record[col] = rates.get(col)
+            derived_rows.append(record)
 
-    records = [_json_safe_record(item) for item in grouped.to_dict(orient="records")]
+    derived = pd.DataFrame(derived_rows)
+    if not derived.empty:
+        subset = pd.concat([subset, derived], ignore_index=True)
+
+    subset = subset.sort_values(["year", "row_key"], na_position="last")
+
+    records = [_json_safe_record(item) for item in subset.to_dict(orient="records")]
 
     out_root = Path(context.resources.data_dir_out.get_path())
     out_root.mkdir(parents=True, exist_ok=True)
@@ -996,8 +1047,8 @@ def write_statewide_year_sums_json(context, combined: pd.DataFrame) -> str:
         metadata = {
             "local_path": str(out_path),
             "row_count": len(records),
-            "row_key_count": int(grouped["row_key"].nunique(dropna=True)),
-            "year_count": int(grouped["year"].nunique(dropna=True)),
+            "row_key_count": int(subset["row_key"].nunique(dropna=True)),
+            "year_count": int(subset["year"].nunique(dropna=True)),
         }
         s3_path = s3_uri_for_path(context, out_path, base_dir)
         if s3_path:
