@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Iterable, Optional
 
 
-def _resolve_s3_target(context) -> tuple[str, str, object] | None:
+def _resolve_s3_target(context, *, prefix_override: str | None = None) -> tuple[str, str, object] | None:
     s3_res = getattr(context.resources, "s3", None)
     if s3_res is None:
         return None
@@ -18,8 +18,9 @@ def _resolve_s3_target(context) -> tuple[str, str, object] | None:
     resolver_prefix = getattr(s3_res, "resolved_prefix", None)
     prefix_clean = resolver_prefix() if callable(resolver_prefix) else (getattr(s3_res, "s3_prefix", "") or "")
     prefix_clean = prefix_clean.strip("/")
-    dist_prefix = f"{prefix_clean}/dist" if prefix_clean else "dist"
-    return bucket, dist_prefix, s3_res
+    leaf = (prefix_override or "dist").strip("/")
+    target_prefix = f"{prefix_clean}/{leaf}" if prefix_clean else leaf
+    return bucket, target_prefix, s3_res
 
 
 def upload_file_to_s3(
@@ -71,8 +72,8 @@ def upload_file_to_s3(
     return meta
 
 
-def s3_uri_for_path(context, path: Path, base_dir: Path) -> Optional[str]:
-    target = _resolve_s3_target(context)
+def s3_uri_for_path(context, path: Path, base_dir: Path, *, prefix_override: str | None = None) -> Optional[str]:
+    target = _resolve_s3_target(context, prefix_override=prefix_override)
     if not target:
         return None
     bucket, dist_prefix, _ = target
@@ -85,16 +86,22 @@ def s3_uri_for_path(context, path: Path, base_dir: Path) -> Optional[str]:
     return f"s3://{bucket}/{key}"
 
 
-def s3_uri_for_dir(context, path: Path, base_dir: Path) -> Optional[str]:
-    uri = s3_uri_for_path(context, path, base_dir)
+def s3_uri_for_dir(context, path: Path, base_dir: Path, *, prefix_override: str | None = None) -> Optional[str]:
+    uri = s3_uri_for_path(context, path, base_dir, prefix_override=prefix_override)
     if uri and not uri.endswith("/"):
         return f"{uri}/"
     return uri
 
 
-def upload_paths(context, paths: Iterable[Path], base_dir: Path) -> list[str]:
+def upload_paths(
+    context,
+    paths: Iterable[Path],
+    base_dir: Path,
+    *,
+    prefix_override: str | None = None,
+) -> list[str]:
     """Upload paths to S3 under <prefix>/dist/<relative_path>, if S3 is configured."""
-    target = _resolve_s3_target(context)
+    target = _resolve_s3_target(context, prefix_override=prefix_override)
     if not target:
         return []
     bucket, dist_prefix, s3_res = target

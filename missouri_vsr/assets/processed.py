@@ -8,7 +8,7 @@ from typing import List
 import pandas as pd
 from slugify import slugify
 
-from dagster import AssetIn, AssetKey, Out, graph_asset, op
+from dagster import AssetIn, AssetKey, Out, asset, graph_asset, op
 
 from missouri_vsr.assets.extract import PIVOT_VALUE_COLUMNS, YEAR_URLS, _slugify_simple
 from missouri_vsr.assets.s3_utils import (
@@ -1059,16 +1059,23 @@ def _write_download_bundle(
     out_dir.mkdir(parents=True, exist_ok=True)
     parquet_path = out_dir / f"{DOWNLOAD_PREFIX}{base_name}.parquet"
     csv_path = out_dir / f"{DOWNLOAD_PREFIX}{base_name}.csv"
+    legacy_json = out_dir / f"{DOWNLOAD_PREFIX}{base_name}.json"
 
     df.to_parquet(parquet_path, index=False, engine="pyarrow")
     df.to_csv(csv_path, index=False)
+    if legacy_json.exists():
+        try:
+            legacy_json.unlink()
+        except OSError:
+            pass
 
     s3_meta = {}
     try:
         s3_meta = upload_paths(
             context,
             [parquet_path, csv_path],
-            base_dir=Path(context.resources.data_dir_out.get_path()),
+            base_dir=out_dir,
+            prefix_override="downloads",
         )
     except Exception:
         pass
@@ -1529,7 +1536,8 @@ def write_downloads_combined(
     uploaded = upload_paths(
         context,
         [combined_json],
-        base_dir=Path(context.resources.data_dir_out.get_path()),
+        base_dir=out_dir,
+        prefix_override="downloads",
     )
 
     return {
@@ -1608,7 +1616,18 @@ def downloads_combined(
     )
 
 
-@op(out=Out(str), required_resource_keys={"data_dir_out", "s3"})
+@asset(
+    name="downloads_manifest",
+    group_name="downloads",
+    required_resource_keys={"data_dir_out", "s3"},
+    deps=[
+        AssetKey("downloads_vsr_statistics"),
+        AssetKey("downloads_agency_index"),
+        AssetKey("downloads_agency_comments"),
+        AssetKey("downloads_combined"),
+    ],
+    description="Manifest of download bundle files with sizes.",
+)
 def write_downloads_manifest(context) -> str:
     downloads_dir = Path(context.resources.data_dir_out.get_path()) / "downloads"
     downloads_dir.mkdir(parents=True, exist_ok=True)
@@ -1620,12 +1639,19 @@ def write_downloads_manifest(context) -> str:
             continue
         if path.name == manifest_path.name:
             continue
+        if path.suffix.lower() == ".json" and path.name != f"{DOWNLOAD_PREFIX}downloads.json":
+            continue
         rel = path.relative_to(downloads_dir).as_posix()
         try:
             size = path.stat().st_size
         except OSError:
             size = None
-        entries.append({"path": rel, "size_bytes": size})
+        suffix = path.suffix.lower().lstrip(".")
+        entries.append({"path": rel, "size_bytes": size, "group": suffix or "unknown"})
+
+    entries.sort(
+        key=lambda item: (item["size_bytes"] is None, -(item["size_bytes"] or 0))
+    )
 
     payload = {
         "prefix": DOWNLOAD_PREFIX,
@@ -1638,7 +1664,8 @@ def write_downloads_manifest(context) -> str:
     uploaded = upload_paths(
         context,
         [manifest_path],
-        base_dir=Path(context.resources.data_dir_out.get_path()),
+        base_dir=downloads_dir,
+        prefix_override="downloads",
     )
 
     try:
@@ -1652,23 +1679,3 @@ def write_downloads_manifest(context) -> str:
     except Exception:
         pass
     return str(manifest_path)
-
-
-@graph_asset(
-    name="downloads_manifest",
-    group_name="downloads",
-    ins={
-        "downloads_vsr_statistics": AssetIn(key=AssetKey("downloads_vsr_statistics")),
-        "downloads_agency_index": AssetIn(key=AssetKey("downloads_agency_index")),
-        "downloads_agency_comments": AssetIn(key=AssetKey("downloads_agency_comments")),
-        "downloads_combined": AssetIn(key=AssetKey("downloads_combined")),
-    },
-    description="Manifest of download bundle files with sizes.",
-)
-def downloads_manifest(
-    downloads_vsr_statistics: dict,
-    downloads_agency_index: dict,
-    downloads_agency_comments: dict,
-    downloads_combined: dict,
-) -> str:
-    return write_downloads_manifest()
