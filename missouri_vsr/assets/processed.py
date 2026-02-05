@@ -1606,3 +1606,69 @@ def downloads_combined(
         combine_all_reports,
         agency_comments,
     )
+
+
+@op(out=Out(str), required_resource_keys={"data_dir_out", "s3"})
+def write_downloads_manifest(context) -> str:
+    downloads_dir = Path(context.resources.data_dir_out.get_path()) / "downloads"
+    downloads_dir.mkdir(parents=True, exist_ok=True)
+    manifest_path = downloads_dir / f"{DOWNLOAD_PREFIX}downloads_manifest.json"
+
+    entries = []
+    for path in sorted(downloads_dir.rglob("*")):
+        if not path.is_file():
+            continue
+        if path.name == manifest_path.name:
+            continue
+        rel = path.relative_to(downloads_dir).as_posix()
+        try:
+            size = path.stat().st_size
+        except OSError:
+            size = None
+        entries.append({"path": rel, "size_bytes": size})
+
+    payload = {
+        "prefix": DOWNLOAD_PREFIX,
+        "base_dir": "data/out/downloads",
+        "file_count": len(entries),
+        "files": entries,
+    }
+    manifest_path.write_text(json.dumps(payload, indent=2))
+
+    uploaded = upload_paths(
+        context,
+        [manifest_path],
+        base_dir=Path(context.resources.data_dir_out.get_path()),
+    )
+
+    try:
+        metadata = {
+            "local_path": str(manifest_path),
+            "file_count": len(entries),
+        }
+        if uploaded:
+            metadata["s3_paths"] = uploaded
+        context.add_output_metadata(metadata)
+    except Exception:
+        pass
+    return str(manifest_path)
+
+
+@graph_asset(
+    name="downloads_manifest",
+    group_name="downloads",
+    ins={
+        "downloads_vsr_statistics": AssetIn(key=AssetKey("downloads_vsr_statistics")),
+        "downloads_agency_index": AssetIn(key=AssetKey("downloads_agency_index")),
+        "downloads_agency_comments": AssetIn(key=AssetKey("downloads_agency_comments")),
+        "downloads_combined": AssetIn(key=AssetKey("downloads_combined")),
+    },
+    description="Manifest of download bundle files with sizes.",
+)
+def downloads_manifest(
+    downloads_vsr_statistics: dict,
+    downloads_agency_index: dict,
+    downloads_agency_comments: dict,
+    downloads_combined: dict,
+) -> str:
+    return write_downloads_manifest()
