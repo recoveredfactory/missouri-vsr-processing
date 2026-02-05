@@ -1524,7 +1524,7 @@ def write_downloads_combined(
         key: df.to_dict(orient="records") if not df.empty else []
         for key, df in datasets.items()
     }
-    combined_json.write_text(json.dumps(json_payload, indent=2))
+    combined_json.write_text(json.dumps(json_payload, separators=(",", ":")))
 
     uploaded = upload_paths(
         context,
