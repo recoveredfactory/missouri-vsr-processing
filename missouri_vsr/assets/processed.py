@@ -190,7 +190,7 @@ def add_rank_percentile_rows(context, combined: pd.DataFrame) -> pd.DataFrame:
     )
 
     out_dir = Path(context.resources.data_dir_processed.get_path())
-    out_path = out_dir / "vsr_statistics.parquet"
+    out_path = out_dir / "reports_with_rank_percentile.parquet"
     augmented.to_parquet(out_path, index=False, engine="pyarrow")
     context.log.info("Wrote rank/percentile Parquet → %s (%d rows)", out_path, len(augmented))
 
@@ -215,12 +215,12 @@ def add_rank_percentile_rows(context, combined: pd.DataFrame) -> pd.DataFrame:
 
 
 @graph_asset(
-    name="vsr_statistics",
+    name="reports_with_rank_percentile",
     group_name="processed",
     ins={"combine_all_reports": AssetIn(key=AssetKey("combine_all_reports"))},
     description="Add rank/percentile rows per row_key/year across agencies.",
 )
-def vsr_statistics(combine_all_reports: pd.DataFrame) -> pd.DataFrame:
+def reports_with_rank_percentile(combine_all_reports: pd.DataFrame) -> pd.DataFrame:
     return add_rank_percentile_rows(combine_all_reports)
 
 
@@ -385,11 +385,11 @@ def pivot_reports_by_slug_op(context, combined: pd.DataFrame) -> pd.DataFrame:
 @graph_asset(
     name="pivot_reports_by_slug",
     group_name="processed",
-    ins={"vsr_statistics": AssetIn(key=AssetKey("vsr_statistics"))},
+    ins={"reports_with_rank_percentile": AssetIn(key=AssetKey("reports_with_rank_percentile"))},
     description="Pivot combined report data so each agency/year row has row_key-derived columns.",
 )
-def pivot_reports_by_slug(vsr_statistics: pd.DataFrame) -> pd.DataFrame:
-    return pivot_reports_by_slug_op(vsr_statistics)
+def pivot_reports_by_slug(reports_with_rank_percentile: pd.DataFrame) -> pd.DataFrame:
+    return pivot_reports_by_slug_op(reports_with_rank_percentile)
 
 
 def _is_null(value) -> bool:
@@ -1347,19 +1347,19 @@ def write_report_dimension_index_json(context, combined: pd.DataFrame) -> str:
     name="agency_year_json_exports",
     group_name="dist",
     ins={
-        "vsr_statistics": AssetIn(key=AssetKey("vsr_statistics")),
+        "reports_with_rank_percentile": AssetIn(key=AssetKey("reports_with_rank_percentile")),
         "agency_reference_geocoded": AssetIn(key=AssetKey("agency_reference_geocoded")),
         "agency_comments": AssetIn(key=AssetKey("agency_comments")),
     },
     description="Generate per-agency JSON files containing year-by-year row_key data.",
 )
 def agency_year_json_exports(
-    vsr_statistics: pd.DataFrame,
+    reports_with_rank_percentile: pd.DataFrame,
     agency_reference_geocoded: pd.DataFrame,
     agency_comments: pd.DataFrame,
 ) -> List[str]:
     return write_agency_year_json(
-        vsr_statistics,
+        reports_with_rank_percentile,
         agency_reference_geocoded,
         agency_comments,
     )
@@ -1492,11 +1492,11 @@ def write_download_agency_comments(context, agency_comments: pd.DataFrame) -> di
 @graph_asset(
     name="downloads_vsr_statistics",
     group_name="downloads",
-    ins={"vsr_statistics": AssetIn(key=AssetKey("vsr_statistics"))},
+    ins={"reports_with_rank_percentile": AssetIn(key=AssetKey("reports_with_rank_percentile"))},
     description="Download bundle for VSR statistics (parquet/json/csv).",
 )
-def downloads_vsr_statistics(vsr_statistics: pd.DataFrame) -> dict:
-    return write_download_vsr_statistics(vsr_statistics)
+def downloads_vsr_statistics(reports_with_rank_percentile: pd.DataFrame) -> dict:
+    return write_download_vsr_statistics(reports_with_rank_percentile)
 
 
 @graph_asset(

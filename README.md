@@ -91,7 +91,7 @@ Dagster caches materialized assets, but they don't persist between runs of the w
 
 - Per-year extracts: `data/processed/combined_output_<year>.parquet`
 - Combined extract: `data/processed/all_combined_output.parquet`
-- VSR statistics (rank/percentile/percentage rows): `data/processed/vsr_statistics.parquet`
+- VSR statistics (rank/percentile/percentage rows): `data/processed/reports_with_rank_percentile.parquet`
 - Agency comments (parsed): `data/processed/agency_comments.parquet`
 - Per-agency JSON (row-based): `data/out/agency_year/<agency_slug>.json`
 - Metric-year JSON (per row_key): `data/out/metric_year/<row_key>.json`

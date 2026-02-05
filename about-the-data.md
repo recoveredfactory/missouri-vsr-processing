@@ -99,7 +99,7 @@ Each agency has a JSON file with all years of data, plus metadata and (if availa
 
 - **Full combined table**: `data/processed/all_combined_output.parquet`
   Row‑based, includes `row_key`, `table_id`, `section_id`, `metric_id`, and race columns.
-- **VSR statistics (with rank/percentile/percentage rows)**: `data/processed/vsr_statistics.parquet`
+- **VSR statistics (with rank/percentile/percentage rows)**: `data/processed/reports_with_rank_percentile.parquet`
 - **Agency comments**: `data/processed/agency_comments.parquet`
 - **Per‑agency JSON**: `data/out/agency_year/<agency_slug>.json`
 - **Per‑metric JSON**: `data/out/metric_year/<row_key>.json`
