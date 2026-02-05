@@ -10,7 +10,7 @@ from slugify import slugify
 
 from dagster import AssetIn, AssetKey, Out, graph_asset, op
 
-from missouri_vsr.assets.extract import PIVOT_VALUE_COLUMNS, _slugify_simple
+from missouri_vsr.assets.extract import PIVOT_VALUE_COLUMNS, YEAR_URLS, _slugify_simple
 from missouri_vsr.assets.s3_utils import (
     upload_paths,
     s3_uri_for_dir,
@@ -22,6 +22,7 @@ from missouri_vsr.assets.s3_utils import (
 # Pivoted outputs & per-agency JSON exports
 # ------------------------------------------------------------------------------
 MSHP_DEPARTMENT_NAME = "Missouri State Highway Patrol"
+DOWNLOAD_PREFIX = f"missouri_vsr_{min(YEAR_URLS)}_{max(YEAR_URLS)}_"
 METRIC_YEAR_SUBSET_KEYS = [
     "rates-by-race--totals--all-stops",
     "rates-by-race--totals--arrests",
@@ -198,7 +199,7 @@ def add_rank_percentile_rows(context, combined: pd.DataFrame) -> pd.DataFrame:
         s3_meta = upload_file_to_s3(
             context,
             out_path,
-            "downloads/reports_with_rank_percentile.parquet",
+            f"downloads/{DOWNLOAD_PREFIX}reports_with_rank_percentile.parquet",
             content_type="application/vnd.apache.parquet",
         )
         if s3_meta:
@@ -300,7 +301,7 @@ def compute_statewide_slug_baselines(context, combined: pd.DataFrame) -> pd.Data
         s3_meta = upload_file_to_s3(
             context,
             out_path,
-            "downloads/statewide_slug_baselines.parquet",
+            f"downloads/{DOWNLOAD_PREFIX}statewide_slug_baselines.parquet",
             content_type="application/vnd.apache.parquet",
         )
         if s3_meta:
@@ -451,6 +452,142 @@ def _json_safe_record(record: dict) -> dict:
         else:
             cleaned[key] = _json_safe_value(value)
     return cleaned
+
+
+def build_agency_index_records(
+    pivoted: pd.DataFrame,
+    agency_reference_geocoded: pd.DataFrame,
+    combined: pd.DataFrame | None = None,
+) -> list[dict]:
+    """Build agency index records with optional filtering for agencies with data."""
+    names_by_key: dict[str, dict] = {}
+    name_cols = [
+        "Department",
+        "Canonical",
+        "AgencyName",
+        "Agency Name",
+        "Agency",
+        "DepartmentName",
+        "Name",
+        "Raw",
+    ]
+    city_cols = ["AddressCity", "City"]
+    zip_cols = ["AddressZip", "Zip", "ZipCode"]
+    phone_cols = ["Phone", "PhoneNumber", "Phone #"]
+    county_cols = ["geocode_jurisdiction_county", "geocode_address_county", "County"]
+    metric_row_key = "rates-by-race--totals--all-stops"
+    metric_col = f"{metric_row_key}__Total"
+    metric_alias = "all_stops_total"
+
+    if not agency_reference_geocoded.empty:
+        for _, row in agency_reference_geocoded.iterrows():
+            display_name = _first_non_empty(row, name_cols)
+            if not display_name:
+                continue
+            canonical = _first_non_empty(row, ["Department", "Canonical"])
+            key = canonical or display_name
+            entry = names_by_key.get(key)
+            if entry is None:
+                entry = {
+                    "agency_slug": _agency_slug(canonical or display_name),
+                    "canonical_name": canonical,
+                    "names": [],
+                    "city": None,
+                    "zip": None,
+                    "phone": None,
+                    "county": None,
+                    metric_row_key: None,
+                    metric_alias: None,
+                }
+                names_by_key[key] = entry
+
+            new_names = _collect_names(row, name_cols)
+            for name in new_names:
+                if name not in entry["names"]:
+                    entry["names"].append(name)
+            if not entry["city"]:
+                entry["city"] = _first_non_empty(row, city_cols)
+            if not entry["zip"]:
+                entry["zip"] = _first_non_empty(row, zip_cols)
+            if not entry["phone"]:
+                entry["phone"] = _first_non_empty(row, phone_cols)
+            if not entry["county"]:
+                entry["county"] = _first_non_empty(row, county_cols)
+
+    if not pivoted.empty and "agency" in pivoted.columns:
+        for agency in (
+            pivoted["agency"].dropna().astype(str).str.strip().replace("", pd.NA).dropna().unique()
+        ):
+            entry = names_by_key.get(agency)
+            if entry is None:
+                entry = {
+                    "agency_slug": _agency_slug(agency),
+                    "canonical_name": agency,
+                    "names": [agency],
+                    "city": None,
+                    "zip": None,
+                    "phone": None,
+                    "county": None,
+                    metric_row_key: None,
+                    metric_alias: None,
+                }
+                names_by_key[agency] = entry
+            else:
+                if agency not in entry["names"]:
+                    entry["names"].append(agency)
+
+    if not pivoted.empty and "agency" in pivoted.columns and metric_col in pivoted.columns:
+        subset = pivoted[["agency", "year", metric_col]].copy()
+        subset = subset[pd.notna(subset["agency"])]
+        subset["agency"] = subset["agency"].astype(str).str.strip()
+        subset = subset[subset["agency"].ne("")]
+        subset["year"] = pd.to_numeric(subset["year"], errors="coerce")
+        subset = subset.sort_values(["agency", "year"], ascending=[True, False])
+        for agency, group in subset.groupby("agency", sort=False):
+            value = None
+            for item in group[metric_col].tolist():
+                if _is_null(item):
+                    continue
+                value = _json_safe_value(item)
+                break
+            if value is None:
+                continue
+            entry = names_by_key.get(agency)
+            if entry is None:
+                entry = {
+                    "agency_slug": _agency_slug(agency),
+                    "canonical_name": agency,
+                    "names": [agency],
+                    "city": None,
+                    "zip": None,
+                    "phone": None,
+                    "county": None,
+                    metric_row_key: None,
+                    metric_alias: None,
+                }
+                names_by_key[agency] = entry
+            entry[metric_row_key] = value
+            entry[metric_alias] = value
+
+    allowed_keys: set[str] | None = None
+    if combined is not None and not combined.empty:
+        value_cols = [c for c in PIVOT_VALUE_COLUMNS if c in combined.columns]
+        if value_cols and "agency" in combined.columns:
+            mask = combined[value_cols].notna().any(axis=1)
+            agencies = combined.loc[mask, "agency"].dropna().astype(str)
+            allowed_keys = {_normalize_agency_key(a) for a in agencies if a.strip()}
+
+    records = sorted(names_by_key.values(), key=lambda item: item["agency_slug"])
+    if allowed_keys is None:
+        return records
+    filtered: list[dict] = []
+    for record in records:
+        names = record.get("names") or []
+        keys = {_normalize_agency_key(record.get("canonical_name") or "")}
+        keys.update({_normalize_agency_key(name) for name in names})
+        if any(key and key in allowed_keys for key in keys):
+            filtered.append(record)
+    return filtered
 
 
 def _normalize_agency_key(value: str | None) -> str:
@@ -850,122 +987,18 @@ def write_agency_index_json(
     context,
     pivoted: pd.DataFrame,
     agency_reference_geocoded: pd.DataFrame,
+    combined: pd.DataFrame | None = None,
 ) -> str:
     """Write a JSON index of agencies for search/discovery."""
     out_root = Path(context.resources.data_dir_out.get_path())
     out_root.mkdir(parents=True, exist_ok=True)
     out_path = out_root / "agency_index.json"
 
-    names_by_key: dict[str, dict] = {}
-    name_cols = [
-        "Department",
-        "Canonical",
-        "AgencyName",
-        "Agency Name",
-        "Agency",
-        "DepartmentName",
-        "Name",
-        "Raw",
-    ]
-    city_cols = ["AddressCity", "City"]
-    zip_cols = ["AddressZip", "Zip", "ZipCode"]
-    phone_cols = ["Phone", "PhoneNumber", "Phone #"]
-    county_cols = ["geocode_jurisdiction_county", "geocode_address_county", "County"]
-    metric_row_key = "rates-by-race--totals--all-stops"
-    metric_col = f"{metric_row_key}__Total"
-    metric_alias = "all_stops_total"
-
-    if not agency_reference_geocoded.empty:
-        for _, row in agency_reference_geocoded.iterrows():
-            display_name = _first_non_empty(row, name_cols)
-            if not display_name:
-                continue
-            canonical = _first_non_empty(row, ["Department", "Canonical"])
-            key = canonical or display_name
-            entry = names_by_key.get(key)
-            if entry is None:
-                entry = {
-                    "agency_slug": _agency_slug(canonical or display_name),
-                    "canonical_name": canonical,
-                    "names": [],
-                    "city": None,
-                    "zip": None,
-                    "phone": None,
-                    "county": None,
-                    metric_row_key: None,
-                    metric_alias: None,
-                }
-                names_by_key[key] = entry
-
-            new_names = _collect_names(row, name_cols)
-            for name in new_names:
-                if name not in entry["names"]:
-                    entry["names"].append(name)
-            if not entry["city"]:
-                entry["city"] = _first_non_empty(row, city_cols)
-            if not entry["zip"]:
-                entry["zip"] = _first_non_empty(row, zip_cols)
-            if not entry["phone"]:
-                entry["phone"] = _first_non_empty(row, phone_cols)
-            if not entry["county"]:
-                entry["county"] = _first_non_empty(row, county_cols)
-
-    if not pivoted.empty and "agency" in pivoted.columns:
-        for agency in (
-            pivoted["agency"].dropna().astype(str).str.strip().replace("", pd.NA).dropna().unique()
-        ):
-            entry = names_by_key.get(agency)
-            if entry is None:
-                entry = {
-                    "agency_slug": _agency_slug(agency),
-                    "canonical_name": agency,
-                    "names": [agency],
-                    "city": None,
-                    "zip": None,
-                    "phone": None,
-                    "county": None,
-                    metric_row_key: None,
-                    metric_alias: None,
-                }
-                names_by_key[agency] = entry
-            else:
-                if agency not in entry["names"]:
-                    entry["names"].append(agency)
-
-    if not pivoted.empty and "agency" in pivoted.columns and metric_col in pivoted.columns:
-        subset = pivoted[["agency", "year", metric_col]].copy()
-        subset = subset[pd.notna(subset["agency"])]
-        subset["agency"] = subset["agency"].astype(str).str.strip()
-        subset = subset[subset["agency"].ne("")]
-        subset["year"] = pd.to_numeric(subset["year"], errors="coerce")
-        subset = subset.sort_values(["agency", "year"], ascending=[True, False])
-        for agency, group in subset.groupby("agency", sort=False):
-            value = None
-            for item in group[metric_col].tolist():
-                if _is_null(item):
-                    continue
-                value = _json_safe_value(item)
-                break
-            if value is None:
-                continue
-            entry = names_by_key.get(agency)
-            if entry is None:
-                entry = {
-                    "agency_slug": _agency_slug(agency),
-                    "canonical_name": agency,
-                    "names": [agency],
-                    "city": None,
-                    "zip": None,
-                    "phone": None,
-                    "county": None,
-                    metric_row_key: None,
-                    metric_alias: None,
-                }
-                names_by_key[agency] = entry
-            entry[metric_row_key] = value
-            entry[metric_alias] = value
-
-    records = sorted(names_by_key.values(), key=lambda item: item["agency_slug"])
+    records = build_agency_index_records(
+        pivoted,
+        agency_reference_geocoded,
+        combined=combined,
+    )
     out_path.write_text(json.dumps(records, indent=2))
     context.log.info("Wrote agency index JSON → %s (%d rows)", out_path, len(records))
     base_dir = Path(context.resources.data_dir_out.get_path())
@@ -1014,6 +1047,54 @@ def write_statewide_baselines_json(context, baselines: pd.DataFrame) -> str:
     except Exception:
         pass
     return str(out_path)
+
+
+def _metric_year_table(combined: pd.DataFrame) -> pd.DataFrame:
+    required_cols = {"agency", "year", "row_key"}
+    missing = required_cols - set(combined.columns)
+    if missing:
+        raise ValueError(f"Cannot build metric-year table – missing columns: {sorted(missing)}")
+    value_cols = [c for c in PIVOT_VALUE_COLUMNS if c in combined.columns]
+    if not value_cols:
+        raise ValueError("Cannot build metric-year table – no numeric value columns were found.")
+    cols = ["agency", "year", "row_key", *value_cols]
+    return combined[cols].copy()
+
+
+def _write_download_bundle(
+    context,
+    df: pd.DataFrame,
+    *,
+    base_name: str,
+    json_key: str,
+    out_dir: Path,
+) -> dict:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    parquet_path = out_dir / f"{DOWNLOAD_PREFIX}{base_name}.parquet"
+    json_path = out_dir / f"{DOWNLOAD_PREFIX}{base_name}.json"
+    csv_path = out_dir / f"{DOWNLOAD_PREFIX}{base_name}.csv"
+
+    df.to_parquet(parquet_path, index=False, engine="pyarrow")
+    records = df.to_dict(orient="records")
+    json_path.write_text(json.dumps({json_key: records}, indent=2))
+    df.to_csv(csv_path, index=False)
+
+    s3_meta = {}
+    try:
+        s3_meta = upload_paths(
+            context,
+            [parquet_path, json_path, csv_path],
+            base_dir=Path(context.resources.data_dir_out.get_path()),
+        )
+    except Exception:
+        pass
+
+    return {
+        "parquet_path": str(parquet_path),
+        "json_path": str(json_path),
+        "csv_path": str(csv_path),
+        "s3_paths": s3_meta or [],
+    }
 
 
 @op(out=Out(str), required_resource_keys={"data_dir_out", "s3"})
@@ -1276,7 +1357,7 @@ def write_report_dimension_index_json(context, combined: pd.DataFrame) -> str:
 
 @graph_asset(
     name="agency_year_json_exports",
-    group_name="output",
+    group_name="dist",
     ins={
         "reports_with_rank_percentile": AssetIn(key=AssetKey("reports_with_rank_percentile")),
         "agency_reference_geocoded": AssetIn(key=AssetKey("agency_reference_geocoded")),
@@ -1298,7 +1379,7 @@ def agency_year_json_exports(
 
 @graph_asset(
     name="metric_year_json_exports",
-    group_name="output",
+    group_name="dist",
     ins={"combine_all_reports": AssetIn(key=AssetKey("combine_all_reports"))},
     description="Generate per-row_key JSON files with agency/year/race values.",
 )
@@ -1308,7 +1389,7 @@ def metric_year_json_exports(combine_all_reports: pd.DataFrame) -> List[str]:
 
 @graph_asset(
     name="metric_year_subset_json",
-    group_name="output",
+    group_name="dist",
     ins={"combine_all_reports": AssetIn(key=AssetKey("combine_all_reports"))},
     description="Write a compact JSON file with selected row_keys across agencies/years.",
 )
@@ -1318,23 +1399,29 @@ def metric_year_subset_json(combine_all_reports: pd.DataFrame) -> str:
 
 @graph_asset(
     name="agency_index_json",
-    group_name="output",
+    group_name="dist",
     ins={
         "pivot_reports_by_slug": AssetIn(key=AssetKey("pivot_reports_by_slug")),
         "agency_reference_geocoded": AssetIn(key=AssetKey("agency_reference_geocoded")),
+        "combine_all_reports": AssetIn(key=AssetKey("combine_all_reports")),
     },
     description="Generate an agency index JSON for search and lookup.",
 )
 def agency_index_json(
     pivot_reports_by_slug: pd.DataFrame,
     agency_reference_geocoded: pd.DataFrame,
+    combine_all_reports: pd.DataFrame,
 ) -> str:
-    return write_agency_index_json(pivot_reports_by_slug, agency_reference_geocoded)
+    return write_agency_index_json(
+        pivot_reports_by_slug,
+        agency_reference_geocoded,
+        combined=combine_all_reports,
+    )
 
 
 @graph_asset(
     name="statewide_slug_baselines_json",
-    group_name="output",
+    group_name="dist",
     ins={"statewide_slug_baselines": AssetIn(key=AssetKey("statewide_slug_baselines"))},
     description="Generate statewide baselines JSON for downstream consumers.",
 )
@@ -1344,7 +1431,7 @@ def statewide_slug_baselines_json(statewide_slug_baselines: pd.DataFrame) -> str
 
 @graph_asset(
     name="statewide_year_sums_json",
-    group_name="output",
+    group_name="dist",
     ins={"combine_all_reports": AssetIn(key=AssetKey("combine_all_reports"))},
     description="Write statewide per-year sums for each row_key and race column.",
 )
@@ -1354,9 +1441,129 @@ def statewide_year_sums_json(combine_all_reports: pd.DataFrame) -> str:
 
 @graph_asset(
     name="report_dimension_index_json",
-    group_name="output",
+    group_name="dist",
     ins={"combine_all_reports": AssetIn(key=AssetKey("combine_all_reports"))},
     description="Write unique table/section/metric identifiers for translations.",
 )
 def report_dimension_index_json(combine_all_reports: pd.DataFrame) -> str:
     return write_report_dimension_index_json(combine_all_reports)
+
+
+@op(out=Out(dict), required_resource_keys={"data_dir_out", "s3"})
+def write_download_reports_with_rank_percentile(context, reports: pd.DataFrame) -> dict:
+    out_dir = Path(context.resources.data_dir_out.get_path()) / "downloads"
+    if reports.empty:
+        context.log.warning("Rank/percentile DataFrame empty; no download outputs created.")
+        return {}
+    return _write_download_bundle(
+        context,
+        reports,
+        base_name="reports_with_rank_percentile",
+        json_key="reports_with_rank_percentile",
+        out_dir=out_dir,
+    )
+
+
+@op(out=Out(dict), required_resource_keys={"data_dir_out", "s3"})
+def write_download_metric_year(context, combined: pd.DataFrame) -> dict:
+    out_dir = Path(context.resources.data_dir_out.get_path()) / "downloads"
+    if combined.empty:
+        context.log.warning("Combined DataFrame empty; no metric-year download outputs created.")
+        return {}
+    df = _metric_year_table(combined)
+    return _write_download_bundle(
+        context,
+        df,
+        base_name="metric_year",
+        json_key="metric_year",
+        out_dir=out_dir,
+    )
+
+
+@op(out=Out(dict), required_resource_keys={"data_dir_out", "s3"})
+def write_download_agency_index(
+    context,
+    pivoted: pd.DataFrame,
+    agency_reference_geocoded: pd.DataFrame,
+    combined: pd.DataFrame,
+) -> dict:
+    out_dir = Path(context.resources.data_dir_out.get_path()) / "downloads"
+    records = build_agency_index_records(pivoted, agency_reference_geocoded, combined=combined)
+    if not records:
+        context.log.warning("No agency index records; no download outputs created.")
+        return {}
+    df = pd.DataFrame(records)
+    return _write_download_bundle(
+        context,
+        df,
+        base_name="agency_index",
+        json_key="agency_index",
+        out_dir=out_dir,
+    )
+
+
+@op(out=Out(dict), required_resource_keys={"data_dir_out", "s3"})
+def write_download_agency_comments(context, agency_comments: pd.DataFrame) -> dict:
+    out_dir = Path(context.resources.data_dir_out.get_path()) / "downloads"
+    if agency_comments.empty:
+        context.log.warning("Agency comments empty; no download outputs created.")
+        return {}
+    return _write_download_bundle(
+        context,
+        agency_comments,
+        base_name="agency_comments",
+        json_key="agency_comments",
+        out_dir=out_dir,
+    )
+
+
+@graph_asset(
+    name="downloads_reports_with_rank_percentile",
+    group_name="downloads",
+    ins={"reports_with_rank_percentile": AssetIn(key=AssetKey("reports_with_rank_percentile"))},
+    description="Download bundle for reports_with_rank_percentile (parquet/json/csv).",
+)
+def downloads_reports_with_rank_percentile(reports_with_rank_percentile: pd.DataFrame) -> dict:
+    return write_download_reports_with_rank_percentile(reports_with_rank_percentile)
+
+
+@graph_asset(
+    name="downloads_metric_year",
+    group_name="downloads",
+    ins={"combine_all_reports": AssetIn(key=AssetKey("combine_all_reports"))},
+    description="Download bundle for metric_year (parquet/json/csv).",
+)
+def downloads_metric_year(combine_all_reports: pd.DataFrame) -> dict:
+    return write_download_metric_year(combine_all_reports)
+
+
+@graph_asset(
+    name="downloads_agency_index",
+    group_name="downloads",
+    ins={
+        "pivot_reports_by_slug": AssetIn(key=AssetKey("pivot_reports_by_slug")),
+        "agency_reference_geocoded": AssetIn(key=AssetKey("agency_reference_geocoded")),
+        "combine_all_reports": AssetIn(key=AssetKey("combine_all_reports")),
+    },
+    description="Download bundle for agency_index (parquet/json/csv).",
+)
+def downloads_agency_index(
+    pivot_reports_by_slug: pd.DataFrame,
+    agency_reference_geocoded: pd.DataFrame,
+    combine_all_reports: pd.DataFrame,
+) -> dict:
+    return write_download_agency_index(
+        pivot_reports_by_slug,
+        agency_reference_geocoded,
+        combine_all_reports,
+    )
+
+
+@graph_asset(
+    name="downloads_agency_comments",
+    group_name="downloads",
+    ins={"agency_comments": AssetIn(key=AssetKey("agency_comments"))},
+    description="Download bundle for agency comments (parquet/json/csv).",
+)
+def downloads_agency_comments(agency_comments: pd.DataFrame) -> dict:
+    return write_download_agency_comments(agency_comments)

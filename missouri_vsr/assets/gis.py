@@ -659,7 +659,7 @@ def map_agencies_to_boundaries(
         "mo_jurisdictions_pmtiles": AssetOut(),
         "mo_jurisdictions_manifest": AssetOut(),
     },
-    group_name="output",
+    group_name="dist",
     required_resource_keys={"data_dir_processed", "data_dir_out", "s3"},
     description="Build PMTiles for Missouri jurisdictions and write a manifest.",
 )
@@ -983,7 +983,7 @@ def build_agency_relationships(
 
 @graph_asset(
     name="agency_relationships",
-    group_name="output",
+    group_name="dist",
     ins={
         "agency_boundary_matches": AssetIn(key=AssetKey("agency_boundary_matches")),
         "mo_counties": AssetIn(key=AssetKey("mo_counties")),

@@ -20,6 +20,8 @@ AGENCY_RESPONSE_URLS = {
     2020: "https://ago.mo.gov/wp-content/uploads/2020-VSR-Agency-Comments.pdf",
 }
 
+DOWNLOAD_PREFIX = f"missouri_vsr_{min(YEAR_URLS)}_{max(YEAR_URLS)}_"
+
 _COMMENT_MARKER_RE = re.compile(r"agency public comments?|public agency comments", re.IGNORECASE)
 
 
@@ -263,7 +265,7 @@ def combine_reports(context, **extracted_reports: dict[str, pd.DataFrame]) -> pd
         s3_meta = upload_file_to_s3(
             context,
             out_file,
-            "downloads/all_combined_output.parquet",
+            f"downloads/{DOWNLOAD_PREFIX}all_combined_output.parquet",
             content_type="application/vnd.apache.parquet",
         )
         if s3_meta:
