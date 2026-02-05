@@ -112,12 +112,19 @@ Each agency has a JSON file with all years of data, plus metadata and (if availa
 - **Agency boundaries**: `data/out/agency_boundaries/<agency_id>.geojson`
 - **PMTiles**: `data/out/tiles/mo_jurisdictions_2024_500k.pmtiles`
 
-**Download bundles (parquet/json/csv)** live in `data/out/downloads/` and are prefixed with
-`missouri_vsr_<min_year>_<max_year>_` (for the current data: `missouri_vsr_2020_2024_`):
+**Download bundles** live in `data/out/downloads/` and are prefixed with
+`missouri_vsr_<min_year>_<max_year>_` (for the current data: `missouri_vsr_2020_2024_`).
 
-- `missouri_vsr_2020_2024_vsr_statistics.*`
-- `missouri_vsr_2020_2024_agency_index.*`
-- `missouri_vsr_2020_2024_agency_comments.*`
+One **combined** download file is provided:
+
+- `missouri_vsr_2020_2024_downloads.json`
+- `missouri_vsr_2020_2024_downloads.parquet` (tabular, with a `dataset` column)
+
+CSV + Parquet are also provided for each dataset:
+
+- `missouri_vsr_2020_2024_vsr_statistics.{csv,parquet}`
+- `missouri_vsr_2020_2024_agency_index.{csv,parquet}`
+- `missouri_vsr_2020_2024_agency_comments.{csv,parquet}`
 
 ## Metric definitions (rates)
 

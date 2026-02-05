@@ -1054,24 +1054,20 @@ def _write_download_bundle(
     df: pd.DataFrame,
     *,
     base_name: str,
-    json_key: str,
     out_dir: Path,
 ) -> dict:
     out_dir.mkdir(parents=True, exist_ok=True)
     parquet_path = out_dir / f"{DOWNLOAD_PREFIX}{base_name}.parquet"
-    json_path = out_dir / f"{DOWNLOAD_PREFIX}{base_name}.json"
     csv_path = out_dir / f"{DOWNLOAD_PREFIX}{base_name}.csv"
 
     df.to_parquet(parquet_path, index=False, engine="pyarrow")
-    records = df.to_dict(orient="records")
-    json_path.write_text(json.dumps({json_key: records}, indent=2))
     df.to_csv(csv_path, index=False)
 
     s3_meta = {}
     try:
         s3_meta = upload_paths(
             context,
-            [parquet_path, json_path, csv_path],
+            [parquet_path, csv_path],
             base_dir=Path(context.resources.data_dir_out.get_path()),
         )
     except Exception:
@@ -1079,10 +1075,22 @@ def _write_download_bundle(
 
     return {
         "parquet_path": str(parquet_path),
-        "json_path": str(json_path),
         "csv_path": str(csv_path),
         "s3_paths": s3_meta or [],
     }
+
+
+def _combine_download_parquet(named_frames: dict[str, pd.DataFrame]) -> pd.DataFrame:
+    frames: list[pd.DataFrame] = []
+    for name, df in named_frames.items():
+        if df.empty:
+            continue
+        frame = df.copy()
+        frame["dataset"] = name
+        frames.append(frame)
+    if not frames:
+        return pd.DataFrame()
+    return pd.concat(frames, ignore_index=True, sort=False)
 
 
 @op(out=Out(str), required_resource_keys={"data_dir_out", "s3"})
@@ -1447,7 +1455,6 @@ def write_download_vsr_statistics(context, reports: pd.DataFrame) -> dict:
         context,
         reports,
         base_name="vsr_statistics",
-        json_key="vsr_statistics",
         out_dir=out_dir,
     )
 
@@ -1469,7 +1476,6 @@ def write_download_agency_index(
         context,
         df,
         base_name="agency_index",
-        json_key="agency_index",
         out_dir=out_dir,
     )
 
@@ -1484,9 +1490,59 @@ def write_download_agency_comments(context, agency_comments: pd.DataFrame) -> di
         context,
         agency_comments,
         base_name="agency_comments",
-        json_key="agency_comments",
         out_dir=out_dir,
     )
+
+
+@op(out=Out(dict), required_resource_keys={"data_dir_out", "s3"})
+def write_downloads_combined(
+    context,
+    vsr_statistics: pd.DataFrame,
+    pivoted: pd.DataFrame,
+    agency_reference_geocoded: pd.DataFrame,
+    combined: pd.DataFrame,
+    agency_comments: pd.DataFrame,
+) -> dict:
+    out_dir = Path(context.resources.data_dir_out.get_path()) / "downloads"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    agency_index_records = build_agency_index_records(
+        pivoted, agency_reference_geocoded, combined=combined
+    )
+    agency_index_df = pd.DataFrame(agency_index_records)
+
+    datasets = {
+        "vsr_statistics": vsr_statistics,
+        "agency_index": agency_index_df,
+        "agency_comments": agency_comments,
+    }
+
+    combined_json = out_dir / f"{DOWNLOAD_PREFIX}downloads.json"
+    combined_parquet = out_dir / f"{DOWNLOAD_PREFIX}downloads.parquet"
+
+    json_payload = {
+        key: df.to_dict(orient="records") if not df.empty else []
+        for key, df in datasets.items()
+    }
+    combined_json.write_text(json.dumps(json_payload, indent=2))
+
+    combined_df = _combine_download_parquet(datasets)
+    if not combined_df.empty:
+        combined_df.to_parquet(combined_parquet, index=False, engine="pyarrow")
+    else:
+        combined_parquet.write_bytes(b"")
+
+    uploaded = upload_paths(
+        context,
+        [combined_json, combined_parquet],
+        base_dir=Path(context.resources.data_dir_out.get_path()),
+    )
+
+    return {
+        "json_path": str(combined_json),
+        "parquet_path": str(combined_parquet),
+        "s3_paths": uploaded or [],
+    }
 
 
 @graph_asset(
@@ -1529,3 +1585,31 @@ def downloads_agency_index(
 )
 def downloads_agency_comments(agency_comments: pd.DataFrame) -> dict:
     return write_download_agency_comments(agency_comments)
+
+
+@graph_asset(
+    name="downloads_combined",
+    group_name="downloads",
+    ins={
+        "reports_with_rank_percentile": AssetIn(key=AssetKey("reports_with_rank_percentile")),
+        "pivot_reports_by_slug": AssetIn(key=AssetKey("pivot_reports_by_slug")),
+        "agency_reference_geocoded": AssetIn(key=AssetKey("agency_reference_geocoded")),
+        "combine_all_reports": AssetIn(key=AssetKey("combine_all_reports")),
+        "agency_comments": AssetIn(key=AssetKey("agency_comments")),
+    },
+    description="Combined downloads bundle (json + parquet).",
+)
+def downloads_combined(
+    reports_with_rank_percentile: pd.DataFrame,
+    pivot_reports_by_slug: pd.DataFrame,
+    agency_reference_geocoded: pd.DataFrame,
+    combine_all_reports: pd.DataFrame,
+    agency_comments: pd.DataFrame,
+) -> dict:
+    return write_downloads_combined(
+        reports_with_rank_percentile,
+        pivot_reports_by_slug,
+        agency_reference_geocoded,
+        combine_all_reports,
+        agency_comments,
+    )
