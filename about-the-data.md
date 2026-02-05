@@ -118,7 +118,6 @@ Each agency has a JSON file with all years of data, plus metadata and (if availa
 One **combined** download file is provided:
 
 - `missouri_vsr_2020_2024_downloads.json`
-- `missouri_vsr_2020_2024_downloads.parquet` (tabular, with a `dataset` column)
 
 CSV + Parquet are also provided for each dataset:
 

@@ -1526,21 +1526,14 @@ def write_downloads_combined(
     }
     combined_json.write_text(json.dumps(json_payload, indent=2))
 
-    combined_df = _combine_download_parquet(datasets)
-    if not combined_df.empty:
-        combined_df.to_parquet(combined_parquet, index=False, engine="pyarrow")
-    else:
-        combined_parquet.write_bytes(b"")
-
     uploaded = upload_paths(
         context,
-        [combined_json, combined_parquet],
+        [combined_json],
         base_dir=Path(context.resources.data_dir_out.get_path()),
     )
 
     return {
         "json_path": str(combined_json),
-        "parquet_path": str(combined_parquet),
         "s3_paths": uploaded or [],
     }
 
