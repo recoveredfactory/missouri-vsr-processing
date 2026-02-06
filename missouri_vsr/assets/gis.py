@@ -1062,7 +1062,7 @@ def agency_boundaries_index(context) -> str:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(payload, indent=2))
 
-    base_dir = Path(context.resources.data_dir_out.get_path())
+    base_dir = Path(context.resources.data_dir_out.get_path()) / "dist"
     uploaded = upload_paths(context, [out_path], base_dir=base_dir)
     if uploaded:
         context.log.info("Uploaded agency boundaries index to S3")
