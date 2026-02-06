@@ -15,6 +15,7 @@ from slugify import slugify
 
 from dagster import AssetIn, AssetKey, AssetOut, Output, graph_asset, multi_asset, op, Out
 
+from missouri_vsr.assets.extract import PIVOT_VALUE_COLUMNS
 from missouri_vsr.assets.s3_utils import upload_paths, s3_uri_for_dir, s3_uri_for_path
 GENZ_GPKG_URL = "https://www2.census.gov/geo/tiger/GENZ2024/gpkg/cb_2024_us_all_500k.zip"
 
@@ -338,6 +339,31 @@ def _agency_slug(value: str) -> str:
     return slugify(text, lowercase=True) or "agency"
 
 
+def _normalize_agency_key(value: Any) -> str:
+    if value is None:
+        return ""
+    text = (
+        str(value)
+        .replace("’", "'")
+        .replace("‘", "'")
+        .replace("`", "'")
+    )
+    text = text.strip()
+    text = re.sub(r"\s+'s\b", "'s", text)
+    text = re.sub(r"\s{2,}", " ", text)
+    return text.lower()
+
+
+def _collect_agency_names(row: pd.Series) -> list[str]:
+    names: list[str] = []
+    for col in ("Department", "Canonical", "AgencyName", "Agency Name", "Agency"):
+        if col in row and pd.notna(row[col]):
+            value = str(row[col]).strip()
+            if value and value.lower() != "nan":
+                names.append(value)
+    return names
+
+
 def agency_to_boundary(row: pd.Series) -> Tuple[str | None, str | None]:
     agency_type = _normalize_agency_type(row.get("AgencyType") or row.get("agency_type"))
     census = _extract_census_identifiers(row)
@@ -522,6 +548,14 @@ def map_agencies_to_boundaries(
 
     total_stops_lookup = _build_total_stops_lookup(combine_all_reports)
 
+    allowed_names: set[str] | None = None
+    if not combine_all_reports.empty and "agency" in combine_all_reports.columns:
+        value_cols = [c for c in PIVOT_VALUE_COLUMNS if c in combine_all_reports.columns]
+        if value_cols:
+            mask = combine_all_reports[value_cols].notna().any(axis=1)
+            agencies = combine_all_reports.loc[mask, "agency"].dropna().astype(str)
+            allowed_names = {_normalize_agency_key(a) for a in agencies if a.strip()}
+
     records: List[Dict[str, Any]] = []
     for _, row in agency_reference_geocoded.iterrows():
         agency_id = _pick_agency_id(row)
@@ -529,6 +563,11 @@ def map_agencies_to_boundaries(
         agency_type = str(row.get("AgencyType") or "")
         boundary_type, boundary_geoid = agency_to_boundary(row)
         total_stops = total_stops_lookup.get(agency_name or "")
+        has_data = None
+        if allowed_names is not None:
+            names = _collect_agency_names(row)
+            keys = {_normalize_agency_key(name) for name in names}
+            has_data = any(key and key in allowed_names for key in keys)
         records.append(
             {
                 "agency_id": agency_id,
@@ -538,6 +577,7 @@ def map_agencies_to_boundaries(
                 "boundary_geoid": boundary_geoid,
                 "total_stops": total_stops,
                 "matched": boundary_type is not None and boundary_geoid is not None,
+                "has_data": has_data,
             }
         )
 
@@ -861,6 +901,8 @@ def build_agency_relationships(
     matches = agency_boundary_matches.copy()
     matched_flag = matches["matched"] if "matched" in matches.columns else True
     matches = matches[matched_flag == True]  # noqa: E712
+    if "has_data" in matches.columns:
+        matches = matches[matches["has_data"] != False]  # noqa: E712
     matches = matches.dropna(subset=["boundary_geoid", "boundary_type", "agency_id"])
 
     county_matches = matches[matches["boundary_type"] == "county"].copy()
