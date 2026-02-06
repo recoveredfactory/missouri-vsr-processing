@@ -155,6 +155,41 @@ def _rank_and_percentile(
     return rank_full, percentile_full
 
 
+def _rank_dense_counts(
+    base: pd.DataFrame,
+    *,
+    value_col: str = "Total",
+    exclude_mask: pd.Series | None = None,
+) -> tuple[pd.Series, pd.Series]:
+    if value_col not in base.columns:
+        blank = pd.Series(index=base.index, dtype="float")
+        return blank.copy(), blank.copy()
+
+    working = base.loc[~exclude_mask] if exclude_mask is not None else base
+    if working.empty:
+        blank = pd.Series(index=base.index, dtype="float")
+        return blank.copy(), blank.copy()
+
+    values = pd.to_numeric(working[value_col], errors="coerce")
+    working = working.copy()
+    working["_rank_value"] = values
+    working = working[pd.notna(working["_rank_value"])]
+
+    if working.empty:
+        blank = pd.Series(index=base.index, dtype="float")
+        return blank.copy(), blank.copy()
+
+    grouped = working.groupby(["year", "row_key"])["_rank_value"]
+    rank_series = grouped.rank(method="dense", ascending=False)
+    count_series = grouped.transform("count")
+
+    rank_full = pd.Series(index=base.index, dtype="float")
+    count_full = pd.Series(index=base.index, dtype="float")
+    rank_full.loc[working.index] = rank_series
+    count_full.loc[working.index] = count_series
+    return rank_full, count_full
+
+
 @op(out=Out(pd.DataFrame), required_resource_keys={"data_dir_processed", "s3"})
 def add_rank_percentile_rows(context, combined: pd.DataFrame) -> pd.DataFrame:
     """Add rank/percentile rows per row_key/year across agencies."""
@@ -175,6 +210,17 @@ def add_rank_percentile_rows(context, combined: pd.DataFrame) -> pd.DataFrame:
     metric_col = "metric"
     percentage_rows = _build_percentage_frame(base, value_cols, metric_col=metric_col)
     rank_all, percentile_all = _rank_and_percentile(base, value_cols)
+    rank_dense, rank_count = _rank_dense_counts(base, value_col="Total")
+
+    base["rank_dense"] = rank_dense
+    base["rank_count"] = rank_count
+    base["rank_method"] = pd.NA
+    base.loc[base["rank_dense"].notna(), "rank_method"] = "dense"
+    try:
+        base["rank_dense"] = base["rank_dense"].astype("Int64")
+        base["rank_count"] = base["rank_count"].astype("Int64")
+    except Exception:
+        pass
 
     derived = [
         percentage_rows,

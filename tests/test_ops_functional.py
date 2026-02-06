@@ -63,6 +63,14 @@ def test_add_rank_percentile_rows_op(tmp_path):
     ]
     assert rank_row["Total"].iloc[0] == 1
 
+    base_row = augmented[
+        (augmented["row_key"] == base_row_key)
+        & (augmented["agency"] == "Agency B")
+    ].iloc[0]
+    assert base_row["rank_dense"] == 1
+    assert base_row["rank_count"] == 3
+    assert base_row["rank_method"] == "dense"
+
 
 def test_compute_statewide_baselines_op(tmp_path):
     df = _sample_combined_df()
