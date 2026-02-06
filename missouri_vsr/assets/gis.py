@@ -13,7 +13,7 @@ import pandas as pd
 import requests
 from slugify import slugify
 
-from dagster import AssetIn, AssetKey, AssetOut, Output, graph_asset, multi_asset, op, Out
+from dagster import AssetIn, AssetKey, AssetOut, Output, asset, graph_asset, multi_asset, op, Out
 
 from missouri_vsr.assets.extract import PIVOT_VALUE_COLUMNS
 from missouri_vsr.assets.s3_utils import upload_paths, s3_uri_for_dir, s3_uri_for_path
@@ -1039,3 +1039,41 @@ def agency_relationships(
     mo_places: pd.DataFrame,
 ) -> pd.DataFrame:
     return build_agency_relationships(agency_boundary_matches, mo_counties, mo_places)
+
+
+@asset(
+    name="agency_boundaries_index",
+    group_name="dist",
+    deps=[AssetKey("agency_relationships")],
+    required_resource_keys={"data_dir_out", "s3"},
+    description="Index of available agency boundary GeoJSON files for the frontend.",
+)
+def agency_boundaries_index(context) -> str:
+    boundaries_dir = _out_agency_boundaries_dir(context)
+    if not boundaries_dir.exists():
+        context.log.warning("Agency boundaries dir not found at %s", boundaries_dir)
+        slugs: list[str] = []
+    else:
+        slugs = sorted([path.stem for path in boundaries_dir.glob("*.geojson")])
+
+    payload = {"count": len(slugs), "slugs": slugs}
+
+    out_path = Path(context.resources.data_dir_out.get_path()) / "dist" / "agency_boundaries_index.json"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps(payload, indent=2))
+
+    base_dir = Path(context.resources.data_dir_out.get_path())
+    uploaded = upload_paths(context, [out_path], base_dir=base_dir)
+    if uploaded:
+        context.log.info("Uploaded agency boundaries index to S3")
+
+    try:
+        metadata = {"local_path": str(out_path), "count": len(slugs)}
+        s3_path = s3_uri_for_path(context, out_path, base_dir)
+        if s3_path:
+            metadata["s3_path"] = s3_path
+        context.add_output_metadata(metadata)
+    except Exception:
+        pass
+
+    return str(out_path)

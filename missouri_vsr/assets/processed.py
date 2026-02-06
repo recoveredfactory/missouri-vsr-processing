@@ -760,6 +760,7 @@ def write_agency_year_json(
         raise ValueError(f"Cannot write agency JSON – missing columns: {sorted(missing)}")
 
     value_cols = [c for c in PIVOT_VALUE_COLUMNS if c in combined.columns]
+    rank_cols = [c for c in ["rank_dense", "rank_count", "rank_method"] if c in combined.columns]
     row_cols = [
         "year",
         "row_key",
@@ -771,12 +772,16 @@ def write_agency_year_json(
         "metric_id",
         "row_id",
         *value_cols,
+        *rank_cols,
     ]
+    row_cols = [col for col in row_cols if col in combined.columns]
+    subset_cols = ["agency", *row_cols]
+    working = combined[subset_cols].copy()
 
     output_paths: List[str] = []
-    for agency, group in combined.groupby("agency"):
+    for agency, group in working.groupby("agency", sort=False):
         records: List[dict] = []
-        for _, row in group.sort_values(["year", "row_key"]).iterrows():
+        for _, row in group.sort_values(["year", "row_key"], kind="mergesort").iterrows():
             payload = {col: row.get(col) for col in row_cols if col in row.index}
             year_val = payload.get("year")
             payload["year"] = int(year_val) if pd.notna(year_val) else None
