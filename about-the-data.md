@@ -134,6 +134,16 @@ The manifest includes file sizes for dynamic download UIs:
 
 - https://vsr.recoveredfactory.net/data/downloads/missouri_vsr_2020_2024_downloads_manifest.json
 
+### Per‑agency downloads (convenience)
+
+These files are convenient for single‑agency use, but the **primary** way to get the data is still the combined downloads above.
+
+| Resource | URL pattern | Notes |
+|---|---|---|
+| Agency year JSON | https://vsr.recoveredfactory.net/data/agency_year/{agency_slug}.json | All rows, metadata, and comments for one agency |
+| Agency boundary GeoJSON | https://vsr.recoveredfactory.net/data/agency_boundaries/{agency_id}.geojson | Single FeatureCollection with boundary + neighbors |
+| Agency boundary index | https://vsr.recoveredfactory.net/data/dist/agency_boundaries_index.json | Lists which boundary files exist (by slug) |
+
 ## Format quirks and implementation notes
 
 ### Agency index (`agency_index`)
@@ -183,123 +193,127 @@ Rates are defined according to the VSR documentation:
 
 Some metrics appear only in certain years (e.g., disparity index was discontinued after 2022). Misspellings from the original reports are preserved (e.g., “parol”, “equpiment”).
 
+For convenience, each row key has a per‑metric JSON file at:
+`https://vsr.recoveredfactory.net/data/metric_year/{row_key}.json`
+These are handy for single‑metric use, but the combined downloads are the primary interface.
+
 **All row_keys currently present:**
 
-| Category | Row key |
-|---|---|
-| disparity-index-by-race | disparity-index-by-race--disparity-index--all-stops |
-| disparity-index-by-race | disparity-index-by-race--disparity-index--all-stops-acs |
-| disparity-index-by-race | disparity-index-by-race--disparity-index--all-stops-dec |
-| disparity-index-by-race | disparity-index-by-race--disparity-index--resident-stops |
-| disparity-index-by-race | disparity-index-by-race--disparity-index--resident-stops-acs |
-| disparity-index-by-race | disparity-index-by-race--disparity-index--resident-stops-dec |
-| disparity-index-by-race | disparity-index-by-race--population--2019-population |
-| disparity-index-by-race | disparity-index-by-race--population--2019-population-pct |
-| disparity-index-by-race | disparity-index-by-race--population--2020-decennial-pop |
-| disparity-index-by-race | disparity-index-by-race--population--2020-decennial-pop-pct |
-| disparity-index-by-race | disparity-index-by-race--population--2020-population |
-| disparity-index-by-race | disparity-index-by-race--population--2020-population-pct |
-| disparity-index-by-race | disparity-index-by-race--population--acs-pop |
-| disparity-index-by-race | disparity-index-by-race--population--acs-pop-pct |
-| disparity-index-by-race | disparity-index-by-race--resident-stops-acs--all-stops-dec |
-| disparity-index-by-race | disparity-index-by-race--resident-stops-acs--resident-stops-dec |
-| disparity-index-by-race | disparity-index-by-race--stops--all-stops |
-| disparity-index-by-race | disparity-index-by-race--stops--resident-stops |
-| number-of-stops-by-race | number-of-stops-by-race--all-stops |
-| number-of-stops-by-race | number-of-stops-by-race--arrest-violation--drug-violation |
-| number-of-stops-by-race | number-of-stops-by-race--arrest-violation--dwi-bac |
-| number-of-stops-by-race | number-of-stops-by-race--arrest-violation--off-against-person |
-| number-of-stops-by-race | number-of-stops-by-race--arrest-violation--other |
-| number-of-stops-by-race | number-of-stops-by-race--arrest-violation--outstanding-warrent |
-| number-of-stops-by-race | number-of-stops-by-race--arrest-violation--property |
-| number-of-stops-by-race | number-of-stops-by-race--arrest-violation--resist-arrest |
-| number-of-stops-by-race | number-of-stops-by-race--arrest-violation--traffic |
-| number-of-stops-by-race | number-of-stops-by-race--citation-warning-violation--equipment |
-| number-of-stops-by-race | number-of-stops-by-race--citation-warning-violation--license-registration |
-| number-of-stops-by-race | number-of-stops-by-race--citation-warning-violation--moving |
-| number-of-stops-by-race | number-of-stops-by-race--driver-age--17-and-under |
-| number-of-stops-by-race | number-of-stops-by-race--driver-age--18-29 |
-| number-of-stops-by-race | number-of-stops-by-race--driver-age--30-39 |
-| number-of-stops-by-race | number-of-stops-by-race--driver-age--40-64 |
-| number-of-stops-by-race | number-of-stops-by-race--driver-age--40-and-over |
-| number-of-stops-by-race | number-of-stops-by-race--driver-age--65-and-over |
-| number-of-stops-by-race | number-of-stops-by-race--driver-gender--female |
-| number-of-stops-by-race | number-of-stops-by-race--driver-gender--male |
-| number-of-stops-by-race | number-of-stops-by-race--location-of-stop--city-street |
-| number-of-stops-by-race | number-of-stops-by-race--location-of-stop--county-road |
-| number-of-stops-by-race | number-of-stops-by-race--location-of-stop--interstate-hwy |
-| number-of-stops-by-race | number-of-stops-by-race--location-of-stop--other |
-| number-of-stops-by-race | number-of-stops-by-race--location-of-stop--state-hwy |
-| number-of-stops-by-race | number-of-stops-by-race--location-of-stop--us-hwy |
-| number-of-stops-by-race | number-of-stops-by-race--non-resident-stops |
-| number-of-stops-by-race | number-of-stops-by-race--officer-assignment--dedicated-traffic |
-| number-of-stops-by-race | number-of-stops-by-race--officer-assignment--general-parol |
-| number-of-stops-by-race | number-of-stops-by-race--officer-assignment--special-assignment |
-| number-of-stops-by-race | number-of-stops-by-race--reason-for-stop--called-for-service |
-| number-of-stops-by-race | number-of-stops-by-race--reason-for-stop--det-crime-bulletin |
-| number-of-stops-by-race | number-of-stops-by-race--reason-for-stop--equpiment |
-| number-of-stops-by-race | number-of-stops-by-race--reason-for-stop--investigative |
-| number-of-stops-by-race | number-of-stops-by-race--reason-for-stop--license |
-| number-of-stops-by-race | number-of-stops-by-race--reason-for-stop--moving |
-| number-of-stops-by-race | number-of-stops-by-race--reason-for-stop--officer-initiative |
-| number-of-stops-by-race | number-of-stops-by-race--reason-for-stop--other |
-| number-of-stops-by-race | number-of-stops-by-race--resident-stops |
-| number-of-stops-by-race | number-of-stops-by-race--stop-outcome--arrests |
-| number-of-stops-by-race | number-of-stops-by-race--stop-outcome--citation |
-| number-of-stops-by-race | number-of-stops-by-race--stop-outcome--contraband |
-| number-of-stops-by-race | number-of-stops-by-race--stop-outcome--no-action |
-| number-of-stops-by-race | number-of-stops-by-race--stop-outcome--searches |
-| number-of-stops-by-race | number-of-stops-by-race--stop-outcome--warning |
-| rates-by-race | rates-by-race--contraband-hit-rate--arrest-rate |
-| rates-by-race | rates-by-race--contraband-hit-rate--citation-rate |
-| rates-by-race | rates-by-race--population--2019-population |
-| rates-by-race | rates-by-race--population--2019-population-pct |
-| rates-by-race | rates-by-race--population--2020-decennial-pop |
-| rates-by-race | rates-by-race--population--2020-decennial-pop-pct |
-| rates-by-race | rates-by-race--population--2020-population |
-| rates-by-race | rates-by-race--population--2020-population-pct |
-| rates-by-race | rates-by-race--population--acs-pop |
-| rates-by-race | rates-by-race--population--acs-pop-pct |
-| rates-by-race | rates-by-race--rates--arrest-rate |
-| rates-by-race | rates-by-race--rates--citation-rate |
-| rates-by-race | rates-by-race--rates--contraband-hit-rate |
-| rates-by-race | rates-by-race--rates--search-rate |
-| rates-by-race | rates-by-race--rates--stop-rate |
-| rates-by-race | rates-by-race--rates--stop-rate-residents |
-| rates-by-race | rates-by-race--stop-rate-residents--arrest-rate |
-| rates-by-race | rates-by-race--stop-rate-residents--citation-rate |
-| rates-by-race | rates-by-race--stop-rate-residents--contraband-hit-rate |
-| rates-by-race | rates-by-race--stop-rate-residents--search-rate |
-| rates-by-race | rates-by-race--totals--all-stops |
-| rates-by-race | rates-by-race--totals--arrests |
-| rates-by-race | rates-by-race--totals--citations |
-| rates-by-race | rates-by-race--totals--contraband |
-| rates-by-race | rates-by-race--totals--resident-stops |
-| rates-by-race | rates-by-race--totals--searches |
-| search-statistics | search-statistics--arrest-charge--drug-violation |
-| search-statistics | search-statistics--arrest-charge--dwi-bac |
-| search-statistics | search-statistics--arrest-charge--off-against-person |
-| search-statistics | search-statistics--arrest-charge--other |
-| search-statistics | search-statistics--arrest-charge--outstanding-warrant |
-| search-statistics | search-statistics--contraband-found--alcohol |
-| search-statistics | search-statistics--contraband-found--drugs |
-| search-statistics | search-statistics--contraband-found--other |
-| search-statistics | search-statistics--contraband-found--weapons |
-| search-statistics | search-statistics--search-duration--0-15-min |
-| search-statistics | search-statistics--search-duration--16-30-min |
-| search-statistics | search-statistics--search-duration--31-min-or-more |
-| search-statistics | search-statistics--search-duration--unknown |
-| search-statistics | search-statistics--search-reason--consent |
-| search-statistics | search-statistics--search-reason--frisked |
-| search-statistics | search-statistics--search-reason--incident-to-arrest |
-| search-statistics | search-statistics--search-reason--inventory |
-| search-statistics | search-statistics--search-reason--other |
-| search-statistics | search-statistics--search-reason--probable-cause |
-| search-statistics | search-statistics--search-reason--probable-cause-vehicle |
-| search-statistics | search-statistics--search-reason--probable-cause-vehicle-person |
-| search-statistics | search-statistics--search-reason--search-warrant |
-| search-statistics | search-statistics--search-reason--special-circumstances |
-| search-statistics | search-statistics--searched--driver |
-| search-statistics | search-statistics--searched--driver-property |
-| search-statistics | search-statistics--searched--vehicle |
-| search-statistics | search-statistics--searched--vehicle-property |
+| Category | Row key | Metric file |
+|---|---|---|
+| disparity-index-by-race | disparity-index-by-race--disparity-index--all-stops | https://vsr.recoveredfactory.net/data/metric_year/disparity-index-by-race--disparity-index--all-stops.json |
+| disparity-index-by-race | disparity-index-by-race--disparity-index--all-stops-acs | https://vsr.recoveredfactory.net/data/metric_year/disparity-index-by-race--disparity-index--all-stops-acs.json |
+| disparity-index-by-race | disparity-index-by-race--disparity-index--all-stops-dec | https://vsr.recoveredfactory.net/data/metric_year/disparity-index-by-race--disparity-index--all-stops-dec.json |
+| disparity-index-by-race | disparity-index-by-race--disparity-index--resident-stops | https://vsr.recoveredfactory.net/data/metric_year/disparity-index-by-race--disparity-index--resident-stops.json |
+| disparity-index-by-race | disparity-index-by-race--disparity-index--resident-stops-acs | https://vsr.recoveredfactory.net/data/metric_year/disparity-index-by-race--disparity-index--resident-stops-acs.json |
+| disparity-index-by-race | disparity-index-by-race--disparity-index--resident-stops-dec | https://vsr.recoveredfactory.net/data/metric_year/disparity-index-by-race--disparity-index--resident-stops-dec.json |
+| disparity-index-by-race | disparity-index-by-race--population--2019-population | https://vsr.recoveredfactory.net/data/metric_year/disparity-index-by-race--population--2019-population.json |
+| disparity-index-by-race | disparity-index-by-race--population--2019-population-pct | https://vsr.recoveredfactory.net/data/metric_year/disparity-index-by-race--population--2019-population-pct.json |
+| disparity-index-by-race | disparity-index-by-race--population--2020-decennial-pop | https://vsr.recoveredfactory.net/data/metric_year/disparity-index-by-race--population--2020-decennial-pop.json |
+| disparity-index-by-race | disparity-index-by-race--population--2020-decennial-pop-pct | https://vsr.recoveredfactory.net/data/metric_year/disparity-index-by-race--population--2020-decennial-pop-pct.json |
+| disparity-index-by-race | disparity-index-by-race--population--2020-population | https://vsr.recoveredfactory.net/data/metric_year/disparity-index-by-race--population--2020-population.json |
+| disparity-index-by-race | disparity-index-by-race--population--2020-population-pct | https://vsr.recoveredfactory.net/data/metric_year/disparity-index-by-race--population--2020-population-pct.json |
+| disparity-index-by-race | disparity-index-by-race--population--acs-pop | https://vsr.recoveredfactory.net/data/metric_year/disparity-index-by-race--population--acs-pop.json |
+| disparity-index-by-race | disparity-index-by-race--population--acs-pop-pct | https://vsr.recoveredfactory.net/data/metric_year/disparity-index-by-race--population--acs-pop-pct.json |
+| disparity-index-by-race | disparity-index-by-race--resident-stops-acs--all-stops-dec | https://vsr.recoveredfactory.net/data/metric_year/disparity-index-by-race--resident-stops-acs--all-stops-dec.json |
+| disparity-index-by-race | disparity-index-by-race--resident-stops-acs--resident-stops-dec | https://vsr.recoveredfactory.net/data/metric_year/disparity-index-by-race--resident-stops-acs--resident-stops-dec.json |
+| disparity-index-by-race | disparity-index-by-race--stops--all-stops | https://vsr.recoveredfactory.net/data/metric_year/disparity-index-by-race--stops--all-stops.json |
+| disparity-index-by-race | disparity-index-by-race--stops--resident-stops | https://vsr.recoveredfactory.net/data/metric_year/disparity-index-by-race--stops--resident-stops.json |
+| number-of-stops-by-race | number-of-stops-by-race--all-stops | https://vsr.recoveredfactory.net/data/metric_year/number-of-stops-by-race--all-stops.json |
+| number-of-stops-by-race | number-of-stops-by-race--arrest-violation--drug-violation | https://vsr.recoveredfactory.net/data/metric_year/number-of-stops-by-race--arrest-violation--drug-violation.json |
+| number-of-stops-by-race | number-of-stops-by-race--arrest-violation--dwi-bac | https://vsr.recoveredfactory.net/data/metric_year/number-of-stops-by-race--arrest-violation--dwi-bac.json |
+| number-of-stops-by-race | number-of-stops-by-race--arrest-violation--off-against-person | https://vsr.recoveredfactory.net/data/metric_year/number-of-stops-by-race--arrest-violation--off-against-person.json |
+| number-of-stops-by-race | number-of-stops-by-race--arrest-violation--other | https://vsr.recoveredfactory.net/data/metric_year/number-of-stops-by-race--arrest-violation--other.json |
+| number-of-stops-by-race | number-of-stops-by-race--arrest-violation--outstanding-warrent | https://vsr.recoveredfactory.net/data/metric_year/number-of-stops-by-race--arrest-violation--outstanding-warrent.json |
+| number-of-stops-by-race | number-of-stops-by-race--arrest-violation--property | https://vsr.recoveredfactory.net/data/metric_year/number-of-stops-by-race--arrest-violation--property.json |
+| number-of-stops-by-race | number-of-stops-by-race--arrest-violation--resist-arrest | https://vsr.recoveredfactory.net/data/metric_year/number-of-stops-by-race--arrest-violation--resist-arrest.json |
+| number-of-stops-by-race | number-of-stops-by-race--arrest-violation--traffic | https://vsr.recoveredfactory.net/data/metric_year/number-of-stops-by-race--arrest-violation--traffic.json |
+| number-of-stops-by-race | number-of-stops-by-race--citation-warning-violation--equipment | https://vsr.recoveredfactory.net/data/metric_year/number-of-stops-by-race--citation-warning-violation--equipment.json |
+| number-of-stops-by-race | number-of-stops-by-race--citation-warning-violation--license-registration | https://vsr.recoveredfactory.net/data/metric_year/number-of-stops-by-race--citation-warning-violation--license-registration.json |
+| number-of-stops-by-race | number-of-stops-by-race--citation-warning-violation--moving | https://vsr.recoveredfactory.net/data/metric_year/number-of-stops-by-race--citation-warning-violation--moving.json |
+| number-of-stops-by-race | number-of-stops-by-race--driver-age--17-and-under | https://vsr.recoveredfactory.net/data/metric_year/number-of-stops-by-race--driver-age--17-and-under.json |
+| number-of-stops-by-race | number-of-stops-by-race--driver-age--18-29 | https://vsr.recoveredfactory.net/data/metric_year/number-of-stops-by-race--driver-age--18-29.json |
+| number-of-stops-by-race | number-of-stops-by-race--driver-age--30-39 | https://vsr.recoveredfactory.net/data/metric_year/number-of-stops-by-race--driver-age--30-39.json |
+| number-of-stops-by-race | number-of-stops-by-race--driver-age--40-64 | https://vsr.recoveredfactory.net/data/metric_year/number-of-stops-by-race--driver-age--40-64.json |
+| number-of-stops-by-race | number-of-stops-by-race--driver-age--40-and-over | https://vsr.recoveredfactory.net/data/metric_year/number-of-stops-by-race--driver-age--40-and-over.json |
+| number-of-stops-by-race | number-of-stops-by-race--driver-age--65-and-over | https://vsr.recoveredfactory.net/data/metric_year/number-of-stops-by-race--driver-age--65-and-over.json |
+| number-of-stops-by-race | number-of-stops-by-race--driver-gender--female | https://vsr.recoveredfactory.net/data/metric_year/number-of-stops-by-race--driver-gender--female.json |
+| number-of-stops-by-race | number-of-stops-by-race--driver-gender--male | https://vsr.recoveredfactory.net/data/metric_year/number-of-stops-by-race--driver-gender--male.json |
+| number-of-stops-by-race | number-of-stops-by-race--location-of-stop--city-street | https://vsr.recoveredfactory.net/data/metric_year/number-of-stops-by-race--location-of-stop--city-street.json |
+| number-of-stops-by-race | number-of-stops-by-race--location-of-stop--county-road | https://vsr.recoveredfactory.net/data/metric_year/number-of-stops-by-race--location-of-stop--county-road.json |
+| number-of-stops-by-race | number-of-stops-by-race--location-of-stop--interstate-hwy | https://vsr.recoveredfactory.net/data/metric_year/number-of-stops-by-race--location-of-stop--interstate-hwy.json |
+| number-of-stops-by-race | number-of-stops-by-race--location-of-stop--other | https://vsr.recoveredfactory.net/data/metric_year/number-of-stops-by-race--location-of-stop--other.json |
+| number-of-stops-by-race | number-of-stops-by-race--location-of-stop--state-hwy | https://vsr.recoveredfactory.net/data/metric_year/number-of-stops-by-race--location-of-stop--state-hwy.json |
+| number-of-stops-by-race | number-of-stops-by-race--location-of-stop--us-hwy | https://vsr.recoveredfactory.net/data/metric_year/number-of-stops-by-race--location-of-stop--us-hwy.json |
+| number-of-stops-by-race | number-of-stops-by-race--non-resident-stops | https://vsr.recoveredfactory.net/data/metric_year/number-of-stops-by-race--non-resident-stops.json |
+| number-of-stops-by-race | number-of-stops-by-race--officer-assignment--dedicated-traffic | https://vsr.recoveredfactory.net/data/metric_year/number-of-stops-by-race--officer-assignment--dedicated-traffic.json |
+| number-of-stops-by-race | number-of-stops-by-race--officer-assignment--general-parol | https://vsr.recoveredfactory.net/data/metric_year/number-of-stops-by-race--officer-assignment--general-parol.json |
+| number-of-stops-by-race | number-of-stops-by-race--officer-assignment--special-assignment | https://vsr.recoveredfactory.net/data/metric_year/number-of-stops-by-race--officer-assignment--special-assignment.json |
+| number-of-stops-by-race | number-of-stops-by-race--reason-for-stop--called-for-service | https://vsr.recoveredfactory.net/data/metric_year/number-of-stops-by-race--reason-for-stop--called-for-service.json |
+| number-of-stops-by-race | number-of-stops-by-race--reason-for-stop--det-crime-bulletin | https://vsr.recoveredfactory.net/data/metric_year/number-of-stops-by-race--reason-for-stop--det-crime-bulletin.json |
+| number-of-stops-by-race | number-of-stops-by-race--reason-for-stop--equpiment | https://vsr.recoveredfactory.net/data/metric_year/number-of-stops-by-race--reason-for-stop--equpiment.json |
+| number-of-stops-by-race | number-of-stops-by-race--reason-for-stop--investigative | https://vsr.recoveredfactory.net/data/metric_year/number-of-stops-by-race--reason-for-stop--investigative.json |
+| number-of-stops-by-race | number-of-stops-by-race--reason-for-stop--license | https://vsr.recoveredfactory.net/data/metric_year/number-of-stops-by-race--reason-for-stop--license.json |
+| number-of-stops-by-race | number-of-stops-by-race--reason-for-stop--moving | https://vsr.recoveredfactory.net/data/metric_year/number-of-stops-by-race--reason-for-stop--moving.json |
+| number-of-stops-by-race | number-of-stops-by-race--reason-for-stop--officer-initiative | https://vsr.recoveredfactory.net/data/metric_year/number-of-stops-by-race--reason-for-stop--officer-initiative.json |
+| number-of-stops-by-race | number-of-stops-by-race--reason-for-stop--other | https://vsr.recoveredfactory.net/data/metric_year/number-of-stops-by-race--reason-for-stop--other.json |
+| number-of-stops-by-race | number-of-stops-by-race--resident-stops | https://vsr.recoveredfactory.net/data/metric_year/number-of-stops-by-race--resident-stops.json |
+| number-of-stops-by-race | number-of-stops-by-race--stop-outcome--arrests | https://vsr.recoveredfactory.net/data/metric_year/number-of-stops-by-race--stop-outcome--arrests.json |
+| number-of-stops-by-race | number-of-stops-by-race--stop-outcome--citation | https://vsr.recoveredfactory.net/data/metric_year/number-of-stops-by-race--stop-outcome--citation.json |
+| number-of-stops-by-race | number-of-stops-by-race--stop-outcome--contraband | https://vsr.recoveredfactory.net/data/metric_year/number-of-stops-by-race--stop-outcome--contraband.json |
+| number-of-stops-by-race | number-of-stops-by-race--stop-outcome--no-action | https://vsr.recoveredfactory.net/data/metric_year/number-of-stops-by-race--stop-outcome--no-action.json |
+| number-of-stops-by-race | number-of-stops-by-race--stop-outcome--searches | https://vsr.recoveredfactory.net/data/metric_year/number-of-stops-by-race--stop-outcome--searches.json |
+| number-of-stops-by-race | number-of-stops-by-race--stop-outcome--warning | https://vsr.recoveredfactory.net/data/metric_year/number-of-stops-by-race--stop-outcome--warning.json |
+| rates-by-race | rates-by-race--contraband-hit-rate--arrest-rate | https://vsr.recoveredfactory.net/data/metric_year/rates-by-race--contraband-hit-rate--arrest-rate.json |
+| rates-by-race | rates-by-race--contraband-hit-rate--citation-rate | https://vsr.recoveredfactory.net/data/metric_year/rates-by-race--contraband-hit-rate--citation-rate.json |
+| rates-by-race | rates-by-race--population--2019-population | https://vsr.recoveredfactory.net/data/metric_year/rates-by-race--population--2019-population.json |
+| rates-by-race | rates-by-race--population--2019-population-pct | https://vsr.recoveredfactory.net/data/metric_year/rates-by-race--population--2019-population-pct.json |
+| rates-by-race | rates-by-race--population--2020-decennial-pop | https://vsr.recoveredfactory.net/data/metric_year/rates-by-race--population--2020-decennial-pop.json |
+| rates-by-race | rates-by-race--population--2020-decennial-pop-pct | https://vsr.recoveredfactory.net/data/metric_year/rates-by-race--population--2020-decennial-pop-pct.json |
+| rates-by-race | rates-by-race--population--2020-population | https://vsr.recoveredfactory.net/data/metric_year/rates-by-race--population--2020-population.json |
+| rates-by-race | rates-by-race--population--2020-population-pct | https://vsr.recoveredfactory.net/data/metric_year/rates-by-race--population--2020-population-pct.json |
+| rates-by-race | rates-by-race--population--acs-pop | https://vsr.recoveredfactory.net/data/metric_year/rates-by-race--population--acs-pop.json |
+| rates-by-race | rates-by-race--population--acs-pop-pct | https://vsr.recoveredfactory.net/data/metric_year/rates-by-race--population--acs-pop-pct.json |
+| rates-by-race | rates-by-race--rates--arrest-rate | https://vsr.recoveredfactory.net/data/metric_year/rates-by-race--rates--arrest-rate.json |
+| rates-by-race | rates-by-race--rates--citation-rate | https://vsr.recoveredfactory.net/data/metric_year/rates-by-race--rates--citation-rate.json |
+| rates-by-race | rates-by-race--rates--contraband-hit-rate | https://vsr.recoveredfactory.net/data/metric_year/rates-by-race--rates--contraband-hit-rate.json |
+| rates-by-race | rates-by-race--rates--search-rate | https://vsr.recoveredfactory.net/data/metric_year/rates-by-race--rates--search-rate.json |
+| rates-by-race | rates-by-race--rates--stop-rate | https://vsr.recoveredfactory.net/data/metric_year/rates-by-race--rates--stop-rate.json |
+| rates-by-race | rates-by-race--rates--stop-rate-residents | https://vsr.recoveredfactory.net/data/metric_year/rates-by-race--rates--stop-rate-residents.json |
+| rates-by-race | rates-by-race--stop-rate-residents--arrest-rate | https://vsr.recoveredfactory.net/data/metric_year/rates-by-race--stop-rate-residents--arrest-rate.json |
+| rates-by-race | rates-by-race--stop-rate-residents--citation-rate | https://vsr.recoveredfactory.net/data/metric_year/rates-by-race--stop-rate-residents--citation-rate.json |
+| rates-by-race | rates-by-race--stop-rate-residents--contraband-hit-rate | https://vsr.recoveredfactory.net/data/metric_year/rates-by-race--stop-rate-residents--contraband-hit-rate.json |
+| rates-by-race | rates-by-race--stop-rate-residents--search-rate | https://vsr.recoveredfactory.net/data/metric_year/rates-by-race--stop-rate-residents--search-rate.json |
+| rates-by-race | rates-by-race--totals--all-stops | https://vsr.recoveredfactory.net/data/metric_year/rates-by-race--totals--all-stops.json |
+| rates-by-race | rates-by-race--totals--arrests | https://vsr.recoveredfactory.net/data/metric_year/rates-by-race--totals--arrests.json |
+| rates-by-race | rates-by-race--totals--citations | https://vsr.recoveredfactory.net/data/metric_year/rates-by-race--totals--citations.json |
+| rates-by-race | rates-by-race--totals--contraband | https://vsr.recoveredfactory.net/data/metric_year/rates-by-race--totals--contraband.json |
+| rates-by-race | rates-by-race--totals--resident-stops | https://vsr.recoveredfactory.net/data/metric_year/rates-by-race--totals--resident-stops.json |
+| rates-by-race | rates-by-race--totals--searches | https://vsr.recoveredfactory.net/data/metric_year/rates-by-race--totals--searches.json |
+| search-statistics | search-statistics--arrest-charge--drug-violation | https://vsr.recoveredfactory.net/data/metric_year/search-statistics--arrest-charge--drug-violation.json |
+| search-statistics | search-statistics--arrest-charge--dwi-bac | https://vsr.recoveredfactory.net/data/metric_year/search-statistics--arrest-charge--dwi-bac.json |
+| search-statistics | search-statistics--arrest-charge--off-against-person | https://vsr.recoveredfactory.net/data/metric_year/search-statistics--arrest-charge--off-against-person.json |
+| search-statistics | search-statistics--arrest-charge--other | https://vsr.recoveredfactory.net/data/metric_year/search-statistics--arrest-charge--other.json |
+| search-statistics | search-statistics--arrest-charge--outstanding-warrant | https://vsr.recoveredfactory.net/data/metric_year/search-statistics--arrest-charge--outstanding-warrant.json |
+| search-statistics | search-statistics--contraband-found--alcohol | https://vsr.recoveredfactory.net/data/metric_year/search-statistics--contraband-found--alcohol.json |
+| search-statistics | search-statistics--contraband-found--drugs | https://vsr.recoveredfactory.net/data/metric_year/search-statistics--contraband-found--drugs.json |
+| search-statistics | search-statistics--contraband-found--other | https://vsr.recoveredfactory.net/data/metric_year/search-statistics--contraband-found--other.json |
+| search-statistics | search-statistics--contraband-found--weapons | https://vsr.recoveredfactory.net/data/metric_year/search-statistics--contraband-found--weapons.json |
+| search-statistics | search-statistics--search-duration--0-15-min | https://vsr.recoveredfactory.net/data/metric_year/search-statistics--search-duration--0-15-min.json |
+| search-statistics | search-statistics--search-duration--16-30-min | https://vsr.recoveredfactory.net/data/metric_year/search-statistics--search-duration--16-30-min.json |
+| search-statistics | search-statistics--search-duration--31-min-or-more | https://vsr.recoveredfactory.net/data/metric_year/search-statistics--search-duration--31-min-or-more.json |
+| search-statistics | search-statistics--search-duration--unknown | https://vsr.recoveredfactory.net/data/metric_year/search-statistics--search-duration--unknown.json |
+| search-statistics | search-statistics--search-reason--consent | https://vsr.recoveredfactory.net/data/metric_year/search-statistics--search-reason--consent.json |
+| search-statistics | search-statistics--search-reason--frisked | https://vsr.recoveredfactory.net/data/metric_year/search-statistics--search-reason--frisked.json |
+| search-statistics | search-statistics--search-reason--incident-to-arrest | https://vsr.recoveredfactory.net/data/metric_year/search-statistics--search-reason--incident-to-arrest.json |
+| search-statistics | search-statistics--search-reason--inventory | https://vsr.recoveredfactory.net/data/metric_year/search-statistics--search-reason--inventory.json |
+| search-statistics | search-statistics--search-reason--other | https://vsr.recoveredfactory.net/data/metric_year/search-statistics--search-reason--other.json |
+| search-statistics | search-statistics--search-reason--probable-cause | https://vsr.recoveredfactory.net/data/metric_year/search-statistics--search-reason--probable-cause.json |
+| search-statistics | search-statistics--search-reason--probable-cause-vehicle | https://vsr.recoveredfactory.net/data/metric_year/search-statistics--search-reason--probable-cause-vehicle.json |
+| search-statistics | search-statistics--search-reason--probable-cause-vehicle-person | https://vsr.recoveredfactory.net/data/metric_year/search-statistics--search-reason--probable-cause-vehicle-person.json |
+| search-statistics | search-statistics--search-reason--search-warrant | https://vsr.recoveredfactory.net/data/metric_year/search-statistics--search-reason--search-warrant.json |
+| search-statistics | search-statistics--search-reason--special-circumstances | https://vsr.recoveredfactory.net/data/metric_year/search-statistics--search-reason--special-circumstances.json |
+| search-statistics | search-statistics--searched--driver | https://vsr.recoveredfactory.net/data/metric_year/search-statistics--searched--driver.json |
+| search-statistics | search-statistics--searched--driver-property | https://vsr.recoveredfactory.net/data/metric_year/search-statistics--searched--driver-property.json |
+| search-statistics | search-statistics--searched--vehicle | https://vsr.recoveredfactory.net/data/metric_year/search-statistics--searched--vehicle.json |
+| search-statistics | search-statistics--searched--vehicle-property | https://vsr.recoveredfactory.net/data/metric_year/search-statistics--searched--vehicle-property.json |
