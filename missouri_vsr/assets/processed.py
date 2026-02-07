@@ -30,8 +30,21 @@ METRIC_YEAR_SUBSET_KEYS = [
     "rates-by-race--totals--searches",
     "rates-by-race--totals--contraband",
     "rates-by-race--totals--resident-stops",
+    "rates-by-race--rates--search-rate",
+    "rates-by-race--rates--contraband-hit-rate",
+    "number-of-stops-by-race--stop-outcome--warning",
     "rates-by-race--population--acs-pop",
 ]
+
+HOMEPAGE_STATS_YEAR = max(YEAR_URLS)
+HOMEPAGE_STATS_METRICS = {
+    "all_stops": "rates-by-race--totals--all-stops",
+    "searches": "rates-by-race--totals--searches",
+    "contraband": "rates-by-race--totals--contraband",
+    "citations": "rates-by-race--totals--citations",
+    "arrests": "rates-by-race--totals--arrests",
+    "warnings": "number-of-stops-by-race--stop-outcome--warning",
+}
 STATEWIDE_RATE_SPECS = [
     {
         "row_key": "rates-by-race--rates--citation-rate",
@@ -1332,6 +1345,96 @@ def write_statewide_year_sums_json(context, combined: pd.DataFrame) -> str:
 
 
 @op(out=Out(str), required_resource_keys={"data_dir_out", "s3"})
+def write_homepage_stats_json(context, combined: pd.DataFrame) -> str:
+    """Write homepage stats for the latest report year."""
+    if combined.empty:
+        context.log.warning("Combined DataFrame empty; no homepage stats created.")
+        return ""
+
+    value_cols = [c for c in PIVOT_VALUE_COLUMNS if c in combined.columns]
+    if not value_cols:
+        raise ValueError("Cannot write homepage stats – no numeric value columns were found.")
+
+    subset = combined[
+        (combined["year"] == HOMEPAGE_STATS_YEAR)
+        & (combined["row_key"].isin(HOMEPAGE_STATS_METRICS.values()))
+    ].copy()
+    if subset.empty:
+        context.log.warning(
+            "No rows found for homepage stats (year=%s).",
+            HOMEPAGE_STATS_YEAR,
+        )
+        return ""
+
+    for col in value_cols:
+        subset[col] = pd.to_numeric(subset[col], errors="coerce")
+
+    year_data = {name: {race: 0.0 for race in value_cols} for name in HOMEPAGE_STATS_METRICS}
+    agency_count = 0
+    all_stops_key = HOMEPAGE_STATS_METRICS["all_stops"]
+    all_stops_rows = subset[subset["row_key"] == all_stops_key]
+    if not all_stops_rows.empty:
+        agency_count = all_stops_rows[pd.notna(all_stops_rows["Total"])]["agency"].nunique()
+
+    for metric_name, row_key in HOMEPAGE_STATS_METRICS.items():
+        metric_rows = subset[subset["row_key"] == row_key]
+        if metric_rows.empty:
+            continue
+        sums = metric_rows[value_cols].sum(axis=0, skipna=True)
+        for race in value_cols:
+            year_data[metric_name][race] = float(sums.get(race) or 0.0)
+
+    total_stops = year_data["all_stops"].get("Total", 0.0) or 0.0
+    total_searches = year_data["searches"].get("Total", 0.0) or 0.0
+    total_contraband = year_data["contraband"].get("Total", 0.0) or 0.0
+    total_citations = year_data["citations"].get("Total", 0.0) or 0.0
+    total_arrests = year_data["arrests"].get("Total", 0.0) or 0.0
+    total_warnings = year_data["warnings"].get("Total", 0.0) or 0.0
+
+    def _rate(numer: float, denom: float) -> float:
+        if denom <= 0:
+            return 0.0
+        return float(numer / denom * 100.0)
+
+    output_data = {
+        "year": HOMEPAGE_STATS_YEAR,
+        "total_stops": total_stops,
+        "agency_count": agency_count,
+        "by_race": {key: dict(values) for key, values in year_data.items()},
+        "summary": {
+            "search_rate": _rate(total_searches, total_stops),
+            "hit_rate": _rate(total_contraband, total_searches),
+            "citation_rate": _rate(total_citations, total_stops),
+            "arrest_rate": _rate(total_arrests, total_stops),
+            "warning_rate": _rate(total_warnings, total_stops),
+        },
+    }
+
+    out_path = Path(context.resources.data_dir_out.get_path()) / f"homepage_{HOMEPAGE_STATS_YEAR}_stats.json"
+    out_path.write_text(json.dumps(output_data, indent=2))
+    context.log.info("Wrote homepage stats JSON → %s", out_path)
+
+    base_dir = Path(context.resources.data_dir_out.get_path())
+    uploaded = upload_paths(context, [out_path], base_dir=base_dir)
+    if uploaded:
+        context.log.info("Uploaded homepage stats JSON to S3")
+
+    try:
+        metadata = {
+            "local_path": str(out_path),
+            "year": HOMEPAGE_STATS_YEAR,
+            "agency_count": agency_count,
+        }
+        s3_path = s3_uri_for_path(context, out_path, base_dir)
+        if s3_path:
+            metadata["s3_path"] = s3_path
+        context.add_output_metadata(metadata)
+    except Exception:
+        pass
+    return str(out_path)
+
+
+@op(out=Out(str), required_resource_keys={"data_dir_out", "s3"})
 def write_report_dimension_index_json(context, combined: pd.DataFrame) -> str:
     """Write unique table/section/metric identifiers to JSON for translations."""
     out_root = Path(context.resources.data_dir_out.get_path())
@@ -1501,6 +1604,16 @@ def statewide_year_sums_json(combine_all_reports: pd.DataFrame) -> str:
 )
 def report_dimension_index_json(combine_all_reports: pd.DataFrame) -> str:
     return write_report_dimension_index_json(combine_all_reports)
+
+
+@graph_asset(
+    name="homepage_stats_json",
+    group_name="dist",
+    ins={"combine_all_reports": AssetIn(key=AssetKey("combine_all_reports"))},
+    description="Generate homepage stats JSON for the latest report year.",
+)
+def homepage_stats_json(combine_all_reports: pd.DataFrame) -> str:
+    return write_homepage_stats_json(combine_all_reports)
 
 
 @op(out=Out(dict), required_resource_keys={"data_dir_out", "s3"})
