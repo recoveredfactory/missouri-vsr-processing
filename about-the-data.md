@@ -134,6 +134,12 @@ The manifest includes file sizes for dynamic download UIs:
 
 - https://vsr.recoveredfactory.net/data/downloads/missouri_vsr_2020_2024_downloads_manifest.json
 
+### Statewide sums (subset)
+
+A slim statewide summary used for homepage charts:
+
+- https://vsr.recoveredfactory.net/data/statewide_year_sums_subset.json
+
 ### Per‑agency downloads (convenience)
 
 These files are convenient for single‑agency use, but the **primary** way to get the data is still the combined downloads above.
