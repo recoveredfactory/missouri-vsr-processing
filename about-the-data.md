@@ -142,7 +142,7 @@ A slim statewide summary used for homepage charts:
 
 Included row_keys:
 - rates-by-race--totals--all-stops
-- search-statistics--search-reason--consent
+- search-statistics--probable-cause--consent
 - number-of-stops-by-race--stop-outcome--arrests
 - number-of-stops-by-race--stop-outcome--citation
 - number-of-stops-by-race--stop-outcome--warning
