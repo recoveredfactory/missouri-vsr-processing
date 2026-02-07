@@ -140,6 +140,14 @@ A slim statewide summary used for homepage charts:
 
 - https://data.vsr.recoveredfactory.net/statewide_year_sums_subset.json
 
+Included row_keys:
+- rates-by-race--totals--all-stops
+- search-statistics--search-reason--consent
+- number-of-stops-by-race--stop-outcome--arrests
+- number-of-stops-by-race--stop-outcome--citation
+- number-of-stops-by-race--stop-outcome--warning
+- number-of-stops-by-race--stop-outcome--no-action
+
 ### Per‑agency downloads (convenience)
 
 These files are convenient for single‑agency use, but the **primary** way to get the data is still the combined downloads above.
