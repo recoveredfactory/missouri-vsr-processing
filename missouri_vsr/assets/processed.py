@@ -49,8 +49,8 @@ HOMEPAGE_STATS_METRICS = {
     "all_stops": "rates-by-race--totals--all-stops",
     "searches": "rates-by-race--totals--searches",
     "contraband": "rates-by-race--totals--contraband",
-    "citations": "rates-by-race--totals--citations",
-    "arrests": "rates-by-race--totals--arrests",
+    "citations": "number-of-stops-by-race--stop-outcome--citation",
+    "arrests": "number-of-stops-by-race--stop-outcome--arrests",
     "warnings": "number-of-stops-by-race--stop-outcome--warning",
 }
 STATEWIDE_RATE_SPECS = [
