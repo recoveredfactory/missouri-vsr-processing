@@ -1,0 +1,613 @@
+agency,agency_type,census_geo_type,census_match_name,needs_manual_review,census_match_uncertain
+Adair County Sheriff's Dept,county_sheriff,county,"Adair County, Missouri",0,0
+Adrian Police Dept,municipal_police,place,"Adrian city, Missouri",0,0
+Advance Police Dept,municipal_police,place,"Advance city, Missouri",0,0
+Alma Police Dept,municipal_police,place,"Alma city, Missouri",0,0
+Alton Police Dept,municipal_police,place,"Alton city, Missouri",0,0
+Anderson Police Dept,municipal_police,place,"Anderson city, Missouri",0,0
+Andrew County Sheriff's Dept,county_sheriff,county,"Andrew County, Missouri",0,0
+Annapolis Police Dept,municipal_police,place,"Annapolis city, Missouri",0,0
+Appleton City Police Dept,municipal_police,place,"Appleton City city, Missouri",0,0
+Arbyrd Police Dept,municipal_police,place,"Arbyrd city, Missouri",0,0
+Arcadia Police Dept,municipal_police,place,"Arcadia city, Missouri",0,0
+Archie Police Dept,municipal_police,place,"Archie city, Missouri",0,0
+Arnold Police Dept,municipal_police,place,"Arnold city, Missouri",0,0
+Ash Grove Police Dept,municipal_police,place,"Ash Grove city, Missouri",0,0
+Ashland Police Dept,municipal_police,place,"Ashland city, Missouri",0,0
+Atchison County Sheriff's Dept,county_sheriff,county,"Atchison County, Missouri",0,0
+Audrain County Sheriff's Dept,county_sheriff,county,"Audrain County, Missouri",0,0
+Aurora Police Dept,municipal_police,place,"Aurora city, Missouri",0,0
+Auxvasse Police Dept,municipal_police,place,"Auxvasse city, Missouri",0,0
+Ava Police Dept,municipal_police,place,"Ava city, Missouri",0,0
+Ballwin Police Dept,municipal_police,place,"Ballwin city, Missouri",0,0
+Barry County Sheriff's Dept,county_sheriff,county,"Barry County, Missouri",0,0
+Barton County Sheriff's Dept,county_sheriff,county,"Barton County, Missouri",0,0
+Bates City Police Dept,municipal_police,place,"Bates City city, Missouri",0,0
+Bates County Sheriff's Dept,county_sheriff,county,"Bates County, Missouri",0,0
+Battlefield Police Dept,municipal_police,place,"Battlefield city, Missouri",0,0
+Bel-Nor Police Dept,municipal_police,place,"Bel-Nor city, Missouri",0,0
+Bel-Ridge Police Dept,municipal_police,place,"Bel-Ridge city, Missouri",0,0
+Bella Villa Police Dept,municipal_police,place,"Bella Villa city, Missouri",0,0
+Belle Police Dept,municipal_police,place,"Belle city, Missouri",0,0
+Bellefontaine Neighbors Police Dept,municipal_police,place,"Bellefontaine Neighbors city, Missouri",0,0
+Bellflower Police Dept,municipal_police,place,"Bellflower city, Missouri",0,0
+Belton Police Dept,municipal_police,place,"Belton city, Missouri",0,0
+Benton County Sheriff's Dept,county_sheriff,county,"Benton County, Missouri",0,0
+Benton Police Dept,municipal_police,place,"Benton city, Missouri",0,0
+Berger Police Dept,municipal_police,place,"Berger city, Missouri",0,0
+Berkeley Police Dept,municipal_police,place,"Berkeley city, Missouri",0,0
+Bernie Police Dept,municipal_police,place,"Bernie city, Missouri",0,0
+Bertrand Police Dept,municipal_police,place,"Bertrand city, Missouri",0,0
+Bethany Police Dept,municipal_police,place,"Bethany city, Missouri",0,0
+Beverly Hills Police Dept,municipal_police,place,"Beverly Hills city, Missouri",0,0
+Billings Police Dept,municipal_police,place,"Billings city, Missouri",0,0
+Birch Tree Police Dept,municipal_police,place,"Birch Tree city, Missouri",0,0
+Bismarck Police Dept,municipal_police,place,"Bismarck city, Missouri",0,0
+Bland Police Dept,municipal_police,place,"Bland city, Missouri",0,0
+Bloomfield Police Dept,municipal_police,place,"Bloomfield city, Missouri",0,0
+Blue Springs Police Dept,municipal_police,place,"Blue Springs city, Missouri",0,0
+Bolivar Police Dept,municipal_police,place,"Bolivar city, Missouri",0,0
+Bollinger County Sheriff's Dept,county_sheriff,county,"Bollinger County, Missouri",0,0
+Bonne Terre Police Dept,municipal_police,place,"Bonne Terre city, Missouri",0,0
+Boone County Sheriff's Dept,county_sheriff,county,"Boone County, Missouri",0,0
+Boonville Police Dept,municipal_police,place,"Boonville city, Missouri",0,0
+Bourbon-Dept of Public Safety,municipal_police,place,"Bourbon city, Missouri",0,0
+Bowling Green Police Dept,municipal_police,place,"Bowling Green city, Missouri",0,0
+Branson Police Dept,municipal_police,place,"Branson city, Missouri",0,0
+Branson West Police Dept,municipal_police,place,"Branson West city, Missouri",0,0
+Braymer Police Dept,municipal_police,place,"Braymer city, Missouri",0,0
+Breckenridge Hills Police Dept,municipal_police,place,"Breckenridge Hills city, Missouri",0,0
+Brentwood Police Dept,municipal_police,place,"Brentwood city, Missouri",0,0
+Bridgeton Police Dept,municipal_police,place,"Bridgeton city, Missouri",0,0
+Brookfield Police Dept,municipal_police,place,"Brookfield city, Missouri",0,0
+Brunswick Police Dept,municipal_police,place,"Brunswick city, Missouri",0,0
+Buchanan County Sheriff's Dept,county_sheriff,county,"Buchanan County, Missouri",0,0
+Buckner Police Dept,municipal_police,place,"Buckner city, Missouri",0,0
+Buffalo Police Dept,municipal_police,place,"Buffalo city, Missouri",0,0
+Butler County Sheriff's Dept,county_sheriff,county,"Butler County, Missouri",0,0
+Butler Police Dept,municipal_police,place,"Butler city, Missouri",0,0
+Butterfield Police Dept,municipal_police,place,"Butterfield city, Missouri",0,0
+Byrnes Mill Police Dept,municipal_police,place,"Byrnes Mill city, Missouri",0,0
+Cabool Police Dept,municipal_police,place,"Cabool city, Missouri",0,0
+Caldwell County Sheriff's Dept,county_sheriff,county,"Caldwell County, Missouri",0,0
+Callaway County Sheriff's Dept,county_sheriff,county,"Callaway County, Missouri",0,0
+Calverton Park Police Dept,municipal_police,place,"Calverton Park city, Missouri",0,0
+Camden County Sheriff's Dept,county_sheriff,county,"Camden County, Missouri",0,0
+Camden Police Dept,municipal_police,place,"Camden city, Missouri",0,0
+Camdenton Police Dept,municipal_police,place,"Camdenton city, Missouri",0,0
+Cameron Police Dept,municipal_police,place,"Cameron city, Missouri",0,0
+Campbell Police Dept,municipal_police,place,"Campbell city, Missouri",0,0
+Canadian Pacific Kansas City Ltd Police Dept,municipal_police,place,"Canadian Pacific Kansas City Ltd city, Missouri",0,1
+Canalou Police Dept,municipal_police,place,"Canalou city, Missouri",0,0
+Canton Police Dept,municipal_police,place,"Canton city, Missouri",0,0
+Cape Girardeau Co Sheriff's Dept,county_sheriff,county,"Cape Girardeau County, Missouri",0,0
+Cape Girardeau Police Dept,municipal_police,place,"Cape Girardeau city, Missouri",0,0
+Cardwell Police Dept,municipal_police,place,"Cardwell city, Missouri",0,0
+Carl Junction Police Dept,municipal_police,place,"Carl Junction city, Missouri",0,0
+Carroll County Sheriff's Dept,county_sheriff,county,"Carroll County, Missouri",0,0
+Carrollton Police Dept,municipal_police,place,"Carrollton city, Missouri",0,0
+Carter County Sheriff's Dept,county_sheriff,county,"Carter County, Missouri",0,0
+Carterville Police Dept,municipal_police,place,"Carterville city, Missouri",0,0
+Carthage Police Dept,municipal_police,place,"Carthage city, Missouri",0,0
+Caruthersville Police Dept,municipal_police,place,"Caruthersville city, Missouri",0,0
+Cass County Sheriff's Dept,county_sheriff,county,"Cass County, Missouri",0,0
+Cassville Police Dept,municipal_police,place,"Cassville city, Missouri",0,0
+Cedar County Sheriff's Dept,county_sheriff,county,"Cedar County, Missouri",0,0
+Center Police Dept,municipal_police,place,"Center city, Missouri",0,0
+Centralia Police Dept,municipal_police,place,"Centralia city, Missouri",0,0
+Chaffee Police Dept,municipal_police,place,"Chaffee city, Missouri",0,0
+Chariton County Sheriff's Dept,county_sheriff,county,"Chariton County, Missouri",0,0
+Charleston Police Dept,municipal_police,place,"Charleston city, Missouri",0,0
+Chesterfield Police Dept,municipal_police,place,"Chesterfield city, Missouri",0,0
+Chillicothe Police Dept,municipal_police,place,"Chillicothe city, Missouri",0,0
+Christian County Sheriff's Dept,county_sheriff,county,"Christian County, Missouri",0,0
+City of Bellerive Acres,municipal_police,place,"Bellefontaine Neighbors city, Missouri",1,0
+City of Bellerive Acres Police Dept,municipal_police,place,"City of Bellerive Acres city, Missouri",0,0
+City of California Police Dept,municipal_police,place,"City of California city, Missouri",0,0
+City of Oakland Police Dept,municipal_police,place,"City of Oakland city, Missouri",0,0
+Clarence Police Dept,municipal_police,place,"Clarence city, Missouri",0,0
+Clark County Sheriff's Dept,county_sheriff,county,"Clark County, Missouri",0,0
+Clark Police Dept,municipal_police,place,"Clark city, Missouri",0,0
+Clarkton Police Dept,municipal_police,place,"Clarkton city, Missouri",0,0
+Clay County Parks Dept,park_ranger,county,"Clay County, Missouri",0,0
+Clay County Sheriff's Dept,county_sheriff,county,"Clay County, Missouri",0,0
+Claycomo Police Dept,municipal_police,place,"Claycomo city, Missouri",0,0
+Clayton Police Dept,municipal_police,place,"Clayton city, Missouri",0,0
+Cleveland Police Dept,municipal_police,place,"Cleveland city, Missouri",0,0
+Clever Police Dept,municipal_police,place,"Clever city, Missouri",0,0
+Clinton County Sheriff's Dept,county_sheriff,county,"Clinton County, Missouri",0,0
+Clinton Police Dept,municipal_police,place,"Clinton city, Missouri",0,0
+Cole Camp Police Dept,municipal_police,place,"Cole Camp city, Missouri",0,0
+Cole County Sheriff's Dept,county_sheriff,county,"Cole County, Missouri",0,0
+Columbia Police Dept,municipal_police,place,"Columbia city, Missouri",0,0
+Concordia Police Dept,municipal_police,place,"Concordia city, Missouri",0,0
+Cool Valley Police Dept,municipal_police,place,"Cool Valley city, Missouri",0,0
+Cooper County Sheriff's Dept,county_sheriff,county,"Cooper County, Missouri",0,0
+Corder Police Dept,municipal_police,place,"Corder city, Missouri",0,0
+Cottleville Police Dept,municipal_police,place,"Cottleville city, Missouri",0,0
+Country Club Hills Police Dept,municipal_police,place,"Country Club Hills city, Missouri",0,0
+Country Club Village Police Dept,municipal_police,place,"Country Club Village city, Missouri",0,0
+Crane Police Dept,municipal_police,place,"Crane city, Missouri",0,0
+Crawford County Sheriff's Dept,county_sheriff,county,"Crawford County, Missouri",0,0
+Crestwood Police Dept,municipal_police,place,"Crestwood city, Missouri",0,0
+Creve Coeur Police Dept,municipal_police,place,"Creve Coeur city, Missouri",0,0
+Crocker Police Dept,municipal_police,place,"Crocker city, Missouri",0,0
+Crystal City Police Dept,municipal_police,place,"Crystal City city, Missouri",0,0
+Crystal Lakes Police Dept,municipal_police,place,"Crystal Lakes city, Missouri",0,0
+Cuba Police Dept,municipal_police,place,"Cuba city, Missouri",0,0
+Dade County Sheriff's Dept,county_sheriff,county,"Dade County, Missouri",0,0
+Dallas County Sheriff's Dept,county_sheriff,county,"Dallas County, Missouri",0,0
+Dardenne Prairie Police Dept,municipal_police,place,"Dardenne Prairie city, Missouri",0,0
+Daviess County Sheriff's Dept,county_sheriff,county,"Daviess County, Missouri",0,0
+DeKalb County Sheriff's Dept,county_sheriff,county,"DeKalb County, Missouri",0,0
+DeSoto Police Dept,municipal_police,place,"DeSoto city, Missouri",0,0
+Dellwood Police Dept,municipal_police,place,"Dellwood city, Missouri",0,0
+Delta Police Dept,municipal_police,place,"Delta city, Missouri",0,0
+Dent County Sheriff's Dept,county_sheriff,county,"Dent County, Missouri",0,0
+Des Peres Police Dept,municipal_police,place,"Des Peres city, Missouri",0,0
+Desloge Police Dept,municipal_police,place,"Desloge city, Missouri",0,0
+Dexter Police Dept,municipal_police,place,"Dexter city, Missouri",0,0
+Diamond Police Dept,municipal_police,place,"Diamond city, Missouri",0,0
+Dixon Police Dept,municipal_police,place,"Dixon city, Missouri",0,0
+Doniphan Police Dept,municipal_police,place,"Doniphan city, Missouri",0,0
+Doolittle Police Dept,municipal_police,place,"Doolittle city, Missouri",0,0
+Douglas County Sheriff's Dept,county_sheriff,county,"Douglas County, Missouri",0,0
+Drexel Police Dept,municipal_police,place,"Drexel city, Missouri",0,0
+Duenweg Police Dept,municipal_police,place,"Duenweg city, Missouri",0,0
+Dunklin County Sheriff's Dept,county_sheriff,county,"Dunklin County, Missouri",0,0
+Duquesne Police Dept,municipal_police,place,"Duquesne city, Missouri",0,0
+East Lynne Police Dept,municipal_police,place,"East Lynne city, Missouri",0,0
+East Prairie Police Dept,municipal_police,place,"East Prairie city, Missouri",0,0
+Easton Police Dept,municipal_police,place,"Easton city, Missouri",0,0
+Edgar Springs Police Dept,municipal_police,place,"Edgar Springs city, Missouri",0,0
+Edgerton Police Dept,municipal_police,place,"Edgerton city, Missouri",0,0
+Edina Police Dept,municipal_police,place,"Edina city, Missouri",0,0
+Edmundson Police Dept,municipal_police,place,"Edmundson city, Missouri",0,0
+El Dorado Springs Police Dept,municipal_police,place,"El Dorado Springs city, Missouri",0,0
+Eldon Police Dept,municipal_police,place,"Eldon city, Missouri",0,0
+Ellisville Police Dept,municipal_police,place,"Ellisville city, Missouri",0,0
+Ellsinore Police Dept,municipal_police,place,"Ellsinore city, Missouri",0,0
+Elsberry Police Dept,municipal_police,place,"Elsberry city, Missouri",0,0
+Emma Police Dept,municipal_police,place,"Emma city, Missouri",0,0
+Eureka Police Dept,municipal_police,place,"Eureka city, Missouri",0,0
+Excelsior Springs Police Dept,municipal_police,place,"Excelsior Springs city, Missouri",0,0
+Exeter Police Dept,municipal_police,place,"Exeter city, Missouri",0,0
+Fair Grove Police Dept,municipal_police,place,"Fair Grove city, Missouri",0,0
+Fair Play Police Dept,municipal_police,place,"Fair Play city, Missouri",0,0
+Fairview Police Dept,municipal_police,place,"Fairview city, Missouri",0,0
+Farber Police Dept,municipal_police,place,"Farber city, Missouri",0,0
+Farmington Police Dept,municipal_police,place,"Farmington city, Missouri",0,0
+Fayette Police Dept,municipal_police,place,"Fayette city, Missouri",0,0
+Ferguson Police Dept,municipal_police,place,"Ferguson city, Missouri",0,0
+Ferrelview Police Dept,municipal_police,place,"Ferrelview city, Missouri",0,0
+Festus Police Dept,municipal_police,place,"Festus city, Missouri",0,0
+Fleming Police Dept,municipal_police,place,"Fleming city, Missouri",0,0
+Flordell Hills Police Dept,municipal_police,place,"Flordell Hills city, Missouri",0,0
+Florissant Police Dept,municipal_police,place,"Florissant city, Missouri",0,0
+Foley Police Dept,municipal_police,place,"Foley city, Missouri",0,0
+Fordland Police Dept,municipal_police,place,"Fordland city, Missouri",0,0
+Foristell Police Dept,municipal_police,place,"Foristell city, Missouri",0,0
+Forsyth Police Dept,municipal_police,place,"Forsyth city, Missouri",0,0
+Frankford Police Dept,municipal_police,place,"Frankford city, Missouri",0,0
+Franklin County Sheriff's Dept,county_sheriff,county,"Franklin County, Missouri",0,0
+Fredericktown Police Dept,municipal_police,place,"Fredericktown city, Missouri",0,0
+Frontenac Police Dept,municipal_police,place,"Frontenac city, Missouri",0,0
+Fulton Police Dept,municipal_police,place,"Fulton city, Missouri",0,0
+Galena Police Dept,municipal_police,place,"Galena city, Missouri",0,0
+Gallatin Police Dept,municipal_police,place,"Gallatin city, Missouri",0,0
+Garden City Police Dept,municipal_police,place,"Garden City city, Missouri",0,0
+Gasconade County Sheriff's Dept,county_sheriff,county,"Gasconade County, Missouri",0,0
+Gasconade Police Dept,municipal_police,place,"Gasconade city, Missouri",0,0
+Gentry County Sheriff's Dept,county_sheriff,county,"Gentry County, Missouri",0,0
+Gerald Police Dept,municipal_police,place,"Gerald city, Missouri",0,0
+Gideon Police Dept,municipal_police,place,"Gideon city, Missouri",0,0
+Gladstone Dept of Public Safety,municipal_police,place,"Gladstone city, Missouri",0,0
+Glasgow Police Dept,municipal_police,place,"Glasgow city, Missouri",0,0
+Glen Echo Park Police Dept,municipal_police,place,"Glen Echo Park city, Missouri",0,0
+Glendale Police Dept,municipal_police,place,"Glendale city, Missouri",0,0
+Goodman Police Dept,municipal_police,place,"Goodman city, Missouri",0,0
+Gower Police Dept,municipal_police,place,"Gower city, Missouri",0,0
+Grain Valley Police Dept,municipal_police,place,"Grain Valley city, Missouri",0,0
+Granby Police Dept,municipal_police,place,"Granby city, Missouri",0,0
+Grandview Police Dept,municipal_police,place,"Grandview city, Missouri",0,0
+Greene County Sheriff's Dept,county_sheriff,county,"Greene County, Missouri",0,0
+Greenfield Police Dept,municipal_police,place,"Greenfield city, Missouri",0,0
+Greenwood Police Dept,municipal_police,place,"Greenwood city, Missouri",0,0
+Grundy County Sheriff's Dept,county_sheriff,county,"Grundy County, Missouri",0,0
+Hallsville Police Dept,municipal_police,place,"Hallsville city, Missouri",0,0
+Hamilton Police Dept,municipal_police,place,"Hamilton city, Missouri",0,0
+Hannibal Police Dept,municipal_police,place,"Hannibal city, Missouri",0,0
+Hardin Police Dept,municipal_police,place,"Hardin city, Missouri",0,0
+Harrison County Sheriff's Dept,county_sheriff,county,"Harrison County, Missouri",0,0
+Harrisonville Police Dept,municipal_police,place,"Harrisonville city, Missouri",0,0
+Hartville Police Dept,municipal_police,place,"Hartville city, Missouri",0,0
+Hawk Point Police Dept,municipal_police,place,"Hawk Point city, Missouri",0,0
+Hayti Police Dept,municipal_police,place,"Hayti city, Missouri",0,0
+Hazelwood Police Dept,municipal_police,place,"Hazelwood city, Missouri",0,0
+Henrietta Police Dept,municipal_police,place,"Henrietta city, Missouri",0,0
+Henry County Sheriff's Dept,county_sheriff,county,"Henry County, Missouri",0,0
+Herculaneum Police Dept,municipal_police,place,"Herculaneum city, Missouri",0,0
+Hermann Police Dept,municipal_police,place,"Hermann city, Missouri",0,0
+Hickory County Sheriff's Dept,county_sheriff,county,"Hickory County, Missouri",0,0
+Higginsville Police Dept,municipal_police,place,"Higginsville city, Missouri",0,0
+High Hill Police Dept,municipal_police,place,"High Hill city, Missouri",0,0
+Highlandville Police Dept,municipal_police,place,"Highlandville city, Missouri",0,0
+Hillsboro Police Dept,municipal_police,place,"Hillsboro city, Missouri",0,0
+Hillsdale Police Dept,municipal_police,place,"Hillsdale city, Missouri",0,0
+Holcomb Police Dept,municipal_police,place,"Holcomb city, Missouri",0,0
+Holden Police Dept,municipal_police,place,"Holden city, Missouri",0,0
+Hollister Police Dept,municipal_police,place,"Hollister city, Missouri",0,0
+Holt County Sheriff's Dept,county_sheriff,county,"Holt County, Missouri",0,0
+Holts Summit Police Dept,municipal_police,place,"Holts Summit city, Missouri",0,0
+Hornersville Police Dept,municipal_police,place,"Hornersville city, Missouri",0,0
+Houston Police Dept,municipal_police,place,"Houston city, Missouri",0,0
+Howard County Sheriff's Dept,county_sheriff,county,"Howard County, Missouri",0,0
+Howardville Police Dept,municipal_police,place,"Howardville city, Missouri",0,0
+Howell County Sheriff's Dept,county_sheriff,county,"Howell County, Missouri",0,0
+Humansville Police Dept,municipal_police,place,"Humansville city, Missouri",0,0
+Huntsville Police Dept,municipal_police,place,"Huntsville city, Missouri",0,0
+Iberia Police Dept,municipal_police,place,"Iberia city, Missouri",0,0
+Independence Police Dept,municipal_police,place,"Independence city, Missouri",0,0
+Indian Point Police Dept,municipal_police,place,"Indian Point city, Missouri",0,0
+Iron County Sheriff's Dept,county_sheriff,county,"Iron County, Missouri",0,0
+Iron Mountain Lake Police Dept,municipal_police,place,"Iron Mountain Lake city, Missouri",0,0
+Ironton Police Dept,municipal_police,place,"Ironton city, Missouri",0,0
+Jackson County Sheriff's Dept,county_sheriff,county,"Jackson County, Missouri",0,0
+Jackson Police Dept,municipal_police,place,"Jackson city, Missouri",0,0
+Jamestown Police Dept,municipal_police,place,"Jamestown city, Missouri",0,0
+Jasper County Sheriff's Dept,county_sheriff,county,"Jasper County, Missouri",0,0
+Jasper Police Dept,municipal_police,place,"Jasper city, Missouri",0,0
+Jefferson City Police Dept,municipal_police,place,"Jefferson City city, Missouri",0,0
+Jefferson College Police Dept,university,place,"Hillsboro city, Missouri",0,0
+Jefferson County Sheriff's Dept,county_sheriff,county,"Jefferson County, Missouri",0,0
+Johnson County Sheriff's Dept,county_sheriff,county,"Johnson County, Missouri",0,0
+Jonesburg Police Dept,municipal_police,place,"Jonesburg city, Missouri",0,0
+Joplin Police Dept,municipal_police,place,"Joplin city, Missouri",0,0
+Kahoka Police Dept,municipal_police,place,"Kahoka city, Missouri",0,0
+Kansas City Int'l Airport Police,municipal_police,place,"Kansas City Int'l Airport Police city, Missouri",0,1
+Kansas City Police Dept,municipal_police,place,"Kansas City city, Missouri",0,0
+Kearney Police Dept,municipal_police,place,"Kearney city, Missouri",0,0
+Kelso Police Dept,municipal_police,place,"Kelso city, Missouri",0,0
+Kennett Police Dept,municipal_police,place,"Kennett city, Missouri",0,0
+Kimberling City Police Dept,municipal_police,place,"Kimberling City city, Missouri",0,0
+Kimmswick Police Dept,municipal_police,place,"Kimmswick city, Missouri",0,0
+Kimmwsick Police Dept,municipal_police,place,"Kimmswick city, Missouri",0,0
+Kingsville Police Dept,municipal_police,place,"Kingsville city, Missouri",0,0
+Kirksville Police Dept,municipal_police,place,"Kirksville city, Missouri",0,0
+Kirkwood Police Dept,municipal_police,place,"Kirkwood city, Missouri",0,0
+Knob Noster Police Dept,municipal_police,place,"Knob Noster city, Missouri",0,0
+Knox County Sheriff's Dept,county_sheriff,county,"Knox County, Missouri",0,0
+La Grange Police Dept,municipal_police,place,"La Grange city, Missouri",0,0
+LaPlata Police Dept,municipal_police,place,"LaPlata city, Missouri",0,0
+Laclede County Sheriff's Dept,county_sheriff,county,"Laclede County, Missouri",0,0
+Laddonia Police Dept,municipal_police,place,"Laddonia city, Missouri",0,0
+Ladue Police Dept,municipal_police,place,"Ladue city, Missouri",0,0
+Lafayette County Sheriff's Dept,county_sheriff,county,"Lafayette County, Missouri",0,0
+Lake Lafayette Police Dept,municipal_police,place,"Lake Lafayette city, Missouri",0,0
+Lake Lotawana Police Dept,municipal_police,place,"Lake Lotawana city, Missouri",0,0
+Lake Ozark Police Dept,municipal_police,place,"Lake Ozark city, Missouri",0,0
+Lake St Louis Police Dept,municipal_police,place,"Lake St Louis city, Missouri",0,0
+Lake Tapawingo Police Dept,municipal_police,place,"Lake Tapawingo city, Missouri",0,0
+Lake Winnebago Police Dept,municipal_police,place,"Lake Winnebago city, Missouri",0,0
+Lakeshire Police Dept,municipal_police,place,"Lakeshire city, Missouri",0,0
+Lamar Police Dept,municipal_police,place,"Lamar city, Missouri",0,0
+Lambert Airport Police Dept,municipal_police,place,"Lambert Airport city, Missouri",0,1
+Lanagan Police Dept,municipal_police,place,"Lanagan city, Missouri",0,0
+Lancaster Police Dept,municipal_police,place,"Lancaster city, Missouri",0,0
+Lathrop Police Dept,municipal_police,place,"Lathrop city, Missouri",0,0
+Laurie Police Dept,municipal_police,place,"Laurie city, Missouri",0,0
+Lawrence County Sheriff's Dept,county_sheriff,county,"Lawrence County, Missouri",0,0
+Lawson Police Dept,municipal_police,place,"Lawson city, Missouri",0,0
+Leadington Police Dept,municipal_police,place,"Leadington city, Missouri",0,0
+Leadwood Police Dept,municipal_police,place,"Leadwood city, Missouri",0,0
+Lebanon Police Dept,municipal_police,place,"Lebanon city, Missouri",0,0
+Lee's Summit Police Dept,municipal_police,place,"Lee's Summit city, Missouri",0,0
+Leeton Police Dept,municipal_police,place,"Leeton city, Missouri",0,0
+Lewis County Sheriff's Dept,county_sheriff,county,"Lewis County, Missouri",0,0
+Lexington Police Dept,municipal_police,place,"Lexington city, Missouri",0,0
+Liberal Police Dept,municipal_police,place,"Liberal city, Missouri",0,0
+Liberty Police Dept,municipal_police,place,"Liberty city, Missouri",0,0
+Licking Police Dept,municipal_police,place,"Licking city, Missouri",0,0
+Lincoln County Sheriff's Dept,county_sheriff,county,"Lincoln County, Missouri",0,0
+Lincoln Police Dept,municipal_police,place,"Lincoln city, Missouri",0,0
+Lincoln University Police Dept,university,place,"Jefferson City city, Missouri",0,0
+Linn County Sheriff's Dept,county_sheriff,county,"Linn County, Missouri",0,0
+Linn Creek Police Dept,municipal_police,place,"Linn Creek city, Missouri",0,0
+Linn Police Dept,municipal_police,place,"Linn city, Missouri",0,0
+Livingston County Sheriff's Dept,county_sheriff,county,"Livingston County, Missouri",0,0
+Logan-Rogersville School Police Dept,municipal_police,place,"Logan-Rogersville School city, Missouri",0,1
+Lone Jack Police Dept,municipal_police,place,"Lone Jack city, Missouri",0,0
+Louisiana Police Dept,municipal_police,place,"Louisiana city, Missouri",0,0
+Lowry City Police Dept,municipal_police,place,"Lowry City city, Missouri",0,0
+Macon County Sheriff's Dept,county_sheriff,county,"Macon County, Missouri",0,0
+Macon Police Dept,municipal_police,place,"Macon city, Missouri",0,0
+Madison County Sheriff's Dept,county_sheriff,county,"Madison County, Missouri",0,0
+Malden Police Dept,municipal_police,place,"Malden city, Missouri",0,0
+Manchester Police Dept,municipal_police,place,"Manchester city, Missouri",0,0
+Mansfield Police Dept,municipal_police,place,"Mansfield city, Missouri",0,0
+Maplewood Police Dept,municipal_police,place,"Maplewood city, Missouri",0,0
+Marble Hill Police Dept,municipal_police,place,"Marble Hill city, Missouri",0,0
+Marceline Police Dept,municipal_police,place,"Marceline city, Missouri",0,0
+Maries County Sheriff's Dept,county_sheriff,county,"Maries County, Missouri",0,0
+Marion County Sheriff's Dept,county_sheriff,county,"Marion County, Missouri",0,0
+Marionville Police Dept,municipal_police,place,"Marionville city, Missouri",0,0
+Marquand Police Dept,municipal_police,place,"Marquand city, Missouri",0,0
+Marshall Police Dept,municipal_police,place,"Marshall city, Missouri",0,0
+Marshfield Police Dept,municipal_police,place,"Marshfield city, Missouri",0,0
+Marston Police Dept,municipal_police,place,"Marston city, Missouri",0,0
+Martinsburg Police Dept,municipal_police,place,"Martinsburg city, Missouri",0,0
+Maryland Heights Police Dept,municipal_police,place,"Maryland Heights city, Missouri",0,0
+Maryville Dept of Public Safety,municipal_police,place,"Maryville city, Missouri",0,0
+Matthews Police Dept,municipal_police,place,"Matthews city, Missouri",0,0
+Maysville Police Dept,municipal_police,place,"Maysville city, Missouri",0,0
+McDonald County Sheriff's Dept,county_sheriff,county,"McDonald County, Missouri",0,0
+Memphis Police Dept,municipal_police,place,"Memphis city, Missouri",0,0
+Mercer County Sheriff's Dept,county_sheriff,county,"Mercer County, Missouri",0,0
+Merriam Woods Police Dept,municipal_police,place,"Merriam Woods city, Missouri",0,0
+Metropolitan Community College Police Dept,university,place,"Kansas City city, Missouri",0,0
+Mexico Police Dept,municipal_police,place,"Mexico city, Missouri",0,0
+Milan Police Dept,municipal_police,place,"Milan city, Missouri",0,0
+Miller County Sheriff's Dept,county_sheriff,county,"Miller County, Missouri",0,0
+Miner Police Dept,municipal_police,place,"Miner city, Missouri",0,0
+Mississippi County Sheriff's Dept,county_sheriff,county,"Mississippi County, Missouri",0,0
+Missouri Capitol Police,municipal_police,place,"Missouri Capitol Police city, Missouri",0,1
+Missouri Dept Natural Resources-Park Rangers,park_ranger,state,Missouri,0,0
+Missouri Dept of Conservation Protection Branch,other,state,Missouri,0,0
+Missouri Southern State University,university,place,"Joplin city, Missouri",0,0
+Missouri State Highway Patrol,state_patrol,state,Missouri,0,0
+Missouri Univ SandT Police Dept,municipal_police,place,"Rolla city, Missouri",0,0
+Missouri Western State University Police Dept,university,place,"St Joseph city, Missouri",0,0
+Moberly Police Dept,municipal_police,place,"Moberly city, Missouri",0,0
+Moline Acres Police Dept,municipal_police,place,"Moline Acres city, Missouri",0,0
+Monett Police Dept,municipal_police,place,"Monett city, Missouri",0,0
+Moniteau County Sheriff's Dept,county_sheriff,county,"Moniteau County, Missouri",0,0
+Monroe City Police Dept,municipal_police,place,"Monroe City city, Missouri",0,0
+Monroe County Sheriff's Dept,county_sheriff,county,"Monroe County, Missouri",0,0
+Montgomery City Police Dept,municipal_police,place,"Montgomery City city, Missouri",0,0
+Montgomery County Sheriff's Dept,county_sheriff,county,"Montgomery County, Missouri",0,0
+Morehouse Police Dept,municipal_police,place,"Morehouse city, Missouri",0,0
+Morgan County Sheriff's Dept,county_sheriff,county,"Morgan County, Missouri",0,0
+Morley Police Dept,municipal_police,place,"Morley city, Missouri",0,0
+Morrisville Police Dept,municipal_police,place,"Morrisville city, Missouri",0,0
+Moscow Mills Police Dept,municipal_police,place,"Moscow Mills city, Missouri",0,0
+Mound City Police Dept,municipal_police,place,"Mound City city, Missouri",0,0
+Mount Vernon Police Dept,municipal_police,place,"Mount Vernon city, Missouri",0,0
+Mountain Grove Police Dept,municipal_police,place,"Mountain Grove city, Missouri",0,0
+Mountain View Police Dept,municipal_police,place,"Mountain View city, Missouri",0,0
+NW MO State University Police Dept,university,place,"Maryville city, Missouri",0,0
+Napoleon Police Dept,municipal_police,place,"Napoleon city, Missouri",0,0
+Neosho Police Dept,municipal_police,place,"Neosho city, Missouri",0,0
+Nevada Police Dept,municipal_police,place,"Nevada city, Missouri",0,0
+New Bloomfield Police Dept,municipal_police,place,"New Bloomfield city, Missouri",0,0
+New Florence Police Dept,municipal_police,place,"New Florence city, Missouri",0,0
+New Haven Police Dept,municipal_police,place,"New Haven city, Missouri",0,0
+New London Police Dept,municipal_police,place,"New London city, Missouri",0,0
+New Madrid County Sheriff's Dept,county_sheriff,county,"New Madrid County, Missouri",0,0
+New Madrid Police Dept,municipal_police,place,"New Madrid city, Missouri",0,0
+Newburg Police Dept,municipal_police,place,"Newburg city, Missouri",0,0
+Newton County Sheriff's Dept,county_sheriff,county,"Newton County, Missouri",0,0
+Niangua Police Dept,municipal_police,place,"Niangua city, Missouri",0,0
+Nixa Police Dept,municipal_police,place,"Nixa city, Missouri",0,0
+Nixa Schools Police Dept,municipal_police,place,"Nixa Schools city, Missouri",0,1
+Nodaway County Sheriff's Dept,county_sheriff,county,"Nodaway County, Missouri",0,0
+Noel Police Dept,municipal_police,place,"Noel city, Missouri",0,0
+Norfolk Southern Railway Police Dept,municipal_police,place,"Norfolk Southern Railway city, Missouri",0,1
+Normandy Police Dept,municipal_police,place,"Normandy city, Missouri",0,0
+North County Police Cooperative,municipal_police,place,"North County Police Cooperative city, Missouri",0,1
+North Kansas City Police Dept,municipal_police,place,"North Kansas City city, Missouri",0,0
+Northmoor Police Dept,municipal_police,place,"Northmoor city, Missouri",0,0
+Northwest MO University Police Dept,university,place,"Maryville city, Missouri",0,0
+Northwoods Police Dept,municipal_police,place,"Northwoods city, Missouri",0,0
+O'Fallon Police Dept,municipal_police,place,"O'Fallon city, Missouri",0,0
+Oak Grove Police Dept,municipal_police,place,"Oak Grove city, Missouri",0,0
+Oakview Police Dept,municipal_police,place,"Oakview city, Missouri",0,0
+Odessa Police Dept,municipal_police,place,"Odessa city, Missouri",0,0
+Old Monroe Police Dept,municipal_police,place,"Old Monroe city, Missouri",0,0
+Olivette Police Dept,municipal_police,place,"Olivette city, Missouri",0,0
+Oran Police Dept,municipal_police,place,"Oran city, Missouri",0,0
+Oregon County Sheriff's Dept,county_sheriff,county,"Oregon County, Missouri",0,0
+Oregon Police Dept,municipal_police,place,"Oregon city, Missouri",0,0
+Oronogo Police Dept,municipal_police,place,"Oronogo city, Missouri",0,0
+Orrick Police Dept,municipal_police,place,"Orrick city, Missouri",0,0
+Osage Beach Police Dept,municipal_police,place,"Osage Beach city, Missouri",0,0
+Osage Co Sheriff's Dept,county_sheriff,county,"Osage County, Missouri",0,0
+Osage County Sheriff's Dept,county_sheriff,county,"Osage County, Missouri",0,0
+Osceola Police Dept,municipal_police,place,"Osceola city, Missouri",0,0
+Otterville Police Dept,municipal_police,place,"Otterville city, Missouri",0,0
+Overland Police Dept,municipal_police,place,"Overland city, Missouri",0,0
+Owensville Police Dept,municipal_police,place,"Owensville city, Missouri",0,0
+Ozark County Sheriff's Dept,county_sheriff,county,"Ozark County, Missouri",0,0
+Ozark Police Dept,municipal_police,place,"Ozark city, Missouri",0,0
+Pacific Police Dept,municipal_police,place,"Pacific city, Missouri",0,0
+Pagedale Police Dept,municipal_police,place,"Pagedale city, Missouri",0,0
+Palmyra Police Dept,municipal_police,place,"Palmyra city, Missouri",0,0
+Park Hills Police Dept,municipal_police,place,"Park Hills city, Missouri",0,0
+Parkville Police Dept,municipal_police,place,"Parkville city, Missouri",0,0
+Parma Police Dept,municipal_police,place,"Parma city, Missouri",0,0
+Pasadena Park Police Dept,municipal_police,place,"Pasadena Park city, Missouri",0,0
+Peculiar Police Dept,municipal_police,place,"Peculiar city, Missouri",0,0
+Pemiscot County Sheriff's Dept,county_sheriff,county,"Pemiscot County, Missouri",0,0
+Perry County Sheriff's Dept,county_sheriff,county,"Perry County, Missouri",0,0
+Perry Police Dept,municipal_police,place,"Perry city, Missouri",0,0
+Perryville Police Dept,municipal_police,place,"Perryville city, Missouri",0,0
+Pettis County Sheriff's Dept,county_sheriff,county,"Pettis County, Missouri",0,0
+Pevely Police Dept,municipal_police,place,"Pevely city, Missouri",0,0
+Phelps County Sheriff's Dept,county_sheriff,county,"Phelps County, Missouri",0,0
+Piedmont Police Dept,municipal_police,place,"Piedmont city, Missouri",0,0
+Pierce City Police Dept,municipal_police,place,"Pierce City city, Missouri",0,0
+Pike County Sheriff's Dept,county_sheriff,county,"Pike County, Missouri",0,0
+Pilot Grove Police Dept,municipal_police,place,"Pilot Grove city, Missouri",0,0
+Pilot Knob Police Dept,municipal_police,place,"Pilot Knob city, Missouri",0,0
+Pine Lawn Police Dept,municipal_police,place,"Pine Lawn city, Missouri",0,0
+Pineville Police Dept,municipal_police,place,"Pineville city, Missouri",0,0
+Platte City Police Dept,municipal_police,place,"Platte City city, Missouri",0,0
+Platte County Sheriff's Dept,county_sheriff,county,"Platte County, Missouri",0,0
+Platte Woods Police Dept,municipal_police,place,"Platte Woods city, Missouri",0,0
+Plattsburg Police Dept,municipal_police,place,"Plattsburg city, Missouri",0,0
+Pleasant Hill Police Dept,municipal_police,place,"Pleasant Hill city, Missouri",0,0
+Pleasant Hope Police Dept,municipal_police,place,"Pleasant Hope city, Missouri",0,0
+Pleasant Valley Police Dept,municipal_police,place,"Pleasant Valley city, Missouri",0,0
+Polk County Sheriff's Dept,county_sheriff,county,"Polk County, Missouri",0,0
+Polo Police Dept,municipal_police,place,"Polo city, Missouri",0,0
+Poplar Bluff Police Dept,municipal_police,place,"Poplar Bluff city, Missouri",0,0
+Portageville Police Dept,municipal_police,place,"Portageville city, Missouri",0,0
+Potosi Police Dept,municipal_police,place,"Potosi city, Missouri",0,0
+Prairie Home Police Dept,municipal_police,place,"Prairie Home city, Missouri",0,0
+Pulaski County Sheriff's Dept,county_sheriff,county,"Pulaski County, Missouri",0,0
+Purdy Police Dept,municipal_police,place,"Purdy city, Missouri",0,0
+Putnam County Sheriff's Dept,county_sheriff,county,"Putnam County, Missouri",0,0
+Puxico Police Dept,municipal_police,place,"Puxico city, Missouri",0,0
+Queen City Police Dept,municipal_police,place,"Queen City city, Missouri",0,0
+Qulin Police Dept,municipal_police,place,"Qulin city, Missouri",0,0
+Ralls County Sheriff's Dept,county_sheriff,county,"Ralls County, Missouri",0,0
+Randolph County Sheriff's Dept,county_sheriff,county,"Randolph County, Missouri",0,0
+Ray County Sheriff's Dept,county_sheriff,county,"Ray County, Missouri",0,0
+Raymore Police Dept,municipal_police,place,"Raymore city, Missouri",0,0
+Raytown Police Dept,municipal_police,place,"Raytown city, Missouri",0,0
+Reeds Spring Police Dept,municipal_police,place,"Reeds Spring city, Missouri",0,0
+Republic Police Dept,municipal_police,place,"Republic city, Missouri",0,0
+Reynolds County Sheriff's Dept,county_sheriff,county,"Reynolds County, Missouri",0,0
+Rich Hill Police Dept,municipal_police,place,"Rich Hill city, Missouri",0,0
+Richland Police Dept,municipal_police,place,"Richland city, Missouri",0,0
+Richmond Heights Police Dept,municipal_police,place,"Richmond Heights city, Missouri",0,0
+Richmond Police Dept,municipal_police,place,"Richmond city, Missouri",0,0
+Ripley County Sheriff's Dept,county_sheriff,county,"Ripley County, Missouri",0,0
+Riverside Police Dept,municipal_police,place,"Riverside city, Missouri",0,0
+Riverview Police Dept,municipal_police,place,"Riverview city, Missouri",0,0
+Rock Hill Police Dept,municipal_police,place,"Rock Hill city, Missouri",0,0
+Rock Port Police Dept,municipal_police,place,"Rock Port city, Missouri",0,0
+Rockaway Beach Police Dept,municipal_police,place,"Rockaway Beach city, Missouri",0,0
+Rogersville Police Dept,municipal_police,place,"Rogersville city, Missouri",0,0
+Rolla Police Dept,municipal_police,place,"Rolla city, Missouri",0,0
+Rosebud Police Dept,municipal_police,place,"Rosebud city, Missouri",0,0
+SE MO State University-Dept of Public Safety,university,place,"Cape Girardeau city, Missouri",0,0
+Salem Police Dept,municipal_police,place,"Salem city, Missouri",0,0
+Saline County Sheriff's Dept,county_sheriff,county,"Saline County, Missouri",0,0
+Salisbury Police Dept,municipal_police,place,"Salisbury city, Missouri",0,0
+Sarcoxie Police Dept,municipal_police,place,"Sarcoxie city, Missouri",0,0
+Savannah Police Dept,municipal_police,place,"Savannah city, Missouri",0,0
+Schuyler County Sheriff's Dept,county_sheriff,county,"Schuyler County, Missouri",0,0
+Scotland County Sheriff's Dept,county_sheriff,county,"Scotland County, Missouri",0,0
+Scott City Police Dept,municipal_police,place,"Scott City city, Missouri",0,0
+Scott County Sheriff's Dept,county_sheriff,county,"Scott County, Missouri",0,0
+Sedalia Police Dept,municipal_police,place,"Sedalia city, Missouri",0,0
+Seligman Police Dept,municipal_police,place,"Seligman city, Missouri",0,0
+Senath Police Dept,municipal_police,place,"Senath city, Missouri",0,0
+Seneca Police Dept,municipal_police,place,"Seneca city, Missouri",0,0
+Seymour Police Dept,municipal_police,place,"Seymour city, Missouri",0,0
+Shannon County Sheriff's Dept,county_sheriff,county,"Shannon County, Missouri",0,0
+Shelbina Police Dept,municipal_police,place,"Shelbina city, Missouri",0,0
+Shelby County Sheriff's Dept,county_sheriff,county,"Shelby County, Missouri",0,0
+Shrewsbury Police Dept,municipal_police,place,"Shrewsbury city, Missouri",0,0
+Sikeston Police Dept,municipal_police,place,"Sikeston city, Missouri",0,0
+Slater Police Dept,municipal_police,place,"Slater city, Missouri",0,0
+Smithton Police Dept,municipal_police,place,"Smithton city, Missouri",0,0
+Smithville Police Dept,municipal_police,place,"Smithville city, Missouri",0,0
+Southwest City Police Dept,municipal_police,place,"Southwest City city, Missouri",0,0
+Sparta Police Dept,municipal_police,place,"Sparta city, Missouri",0,0
+Springfield Police Dept,municipal_police,place,"Springfield city, Missouri",0,0
+Springfield School Police,municipal_police,place,"Springfield School Police city, Missouri",0,1
+Springfield-Branson National Airport Police,municipal_police,place,"Springfield-Branson National Airport Police city, Missouri",0,1
+Springfield-Greene County Park Rangers,park_ranger,county,"Greene County, Missouri",0,0
+St Ann Police Dept,municipal_police,place,"St Ann city, Missouri",0,0
+St Charles City Parks and Recreation Dept,park_ranger,place,"St Charles city, Missouri",0,0
+St Charles Community College Police Dept,university,place,"Cottleville city, Missouri",0,0
+St Charles County Police Dept,municipal_police,county,"St. Charles County, Missouri",0,0
+St Charles County Sheriff's Dept,county_sheriff,county,"St Charles County, Missouri",0,1
+St Charles Police Dept,municipal_police,place,"St Charles city, Missouri",0,0
+St Clair County Sheriff's Dept,county_sheriff,county,"St Clair County, Missouri",0,0
+St Clair Police Dept,municipal_police,place,"St Clair city, Missouri",0,0
+St Francois County Sheriff's Dept,county_sheriff,county,"St Francois County, Missouri",0,0
+St James Police Dept,municipal_police,place,"St James city, Missouri",0,0
+St John Police Dept,municipal_police,place,"St John city, Missouri",0,0
+St Joseph Police Dept,municipal_police,place,"St Joseph city, Missouri",0,0
+St Louis City Police Dept,municipal_police,place,"St. Louis city, Missouri",0,0
+St Louis Community College Police Dept,university,place,"St. Louis city, Missouri",0,0
+St Louis County Park Rangers,park_ranger,county,"St. Louis County, Missouri",0,0
+St Louis County Police Dept,municipal_police,county,"St. Louis County, Missouri",0,0
+St Peters Police Dept,municipal_police,place,"St Peters city, Missouri",0,0
+St Robert Police Dept,municipal_police,place,"St Robert city, Missouri",0,0
+Ste Genevieve Co Sheriff's Dept,county_sheriff,county,"Ste Genevieve County, Missouri",0,0
+Ste Genevieve Police Dept,municipal_police,place,"Ste Genevieve city, Missouri",0,0
+Steele Police Dept,municipal_police,place,"Steele city, Missouri",0,0
+Steelville Police Dept,municipal_police,place,"Steelville city, Missouri",0,0
+Stockton Police Dept,municipal_police,place,"Stockton city, Missouri",0,0
+Stoddard County Sheriff's Dept,county_sheriff,county,"Stoddard County, Missouri",0,0
+Stone County Sheriff's Dept,county_sheriff,county,"Stone County, Missouri",0,0
+Stover Police Dept,municipal_police,place,"Stover city, Missouri",0,0
+Strafford Police Dept,municipal_police,place,"Strafford city, Missouri",0,0
+Strasburg Police Dept,municipal_police,place,"Strasburg city, Missouri",0,0
+Sturgeon Police Dept,municipal_police,place,"Sturgeon city, Missouri",0,0
+Sugar Creek Police Dept,municipal_police,place,"Sugar Creek city, Missouri",0,0
+Sullivan County Sheriff's Dept,county_sheriff,county,"Sullivan County, Missouri",0,0
+Sullivan Police Dept,municipal_police,place,"Sullivan city, Missouri",0,0
+Summersville Police Dept,municipal_police,place,"Summersville city, Missouri",0,0
+Sunrise Beach Police Dept,municipal_police,place,"Sunrise Beach city, Missouri",0,0
+Sunset Hills Police Dept,municipal_police,place,"Sunset Hills city, Missouri",0,0
+Sweet Springs Police Dept,municipal_police,place,"Sweet Springs city, Missouri",0,0
+Sycamore Hills Police Dept,municipal_police,place,"Sycamore Hills city, Missouri",0,0
+Taney County Sheriff's Dept,county_sheriff,county,"Taney County, Missouri",0,0
+Tarkio Police Dept,municipal_police,place,"Tarkio city, Missouri",0,0
+Terre Du Lac Police Dept,municipal_police,place,"Terre Du Lac city, Missouri",0,0
+Texas County Sheriff's Dept,county_sheriff,county,"Texas County, Missouri",0,0
+Thayer Police Dept,municipal_police,place,"Thayer city, Missouri",0,0
+Tipton Police Dept,municipal_police,place,"Tipton city, Missouri",0,0
+Town and Country Police Dept,municipal_police,place,"Town and Country city, Missouri",0,0
+Tracy Police Dept,municipal_police,place,"Tracy city, Missouri",0,0
+Trenton Police Dept,municipal_police,place,"Trenton city, Missouri",0,0
+Troy Police Dept,municipal_police,place,"Troy city, Missouri",0,0
+Truesdale Police Dept,municipal_police,place,"Truesdale city, Missouri",0,0
+Truman State Univ-Dept of PS,university,place,"Kirksville city, Missouri",0,0
+UCM-Dept of Public Safety,university,place,"Warrensburg city, Missouri",0,0
+Union Pacific RR Police-Kansas City-St Louis,municipal_police,place,"Union Pacific RR Police-Kansas City-St Louis city, Missouri",0,1
+Union Police Dept,municipal_police,place,"Union city, Missouri",0,0
+Unionville Police Dept,municipal_police,place,"Unionville city, Missouri",0,0
+University City Police Dept,municipal_police,place,"University City city, Missouri",0,0
+University of Missouri-Columbia Police Dept,university,place,"Columbia city, Missouri",0,0
+University of Missouri-Kansas City Police Dept,university,place,"Kansas City city, Missouri",0,0
+University of Missouri-St Louis Police Dept,university,place,"St. Louis city, Missouri",0,0
+Uplands Park Police Dept,municipal_police,place,"Uplands Park city, Missouri",0,0
+Van Buren Police Dept,municipal_police,place,"Van Buren city, Missouri",0,0
+Velda City Police Dept,municipal_police,place,"Velda City city, Missouri",0,0
+Vernon County Sheriff's Dept,county_sheriff,county,"Vernon County, Missouri",0,0
+Verona Police Dept,municipal_police,place,"Verona city, Missouri",0,0
+Versailles Police Dept,municipal_police,place,"Versailles city, Missouri",0,0
+Viburnum Police Dept,municipal_police,place,"Viburnum city, Missouri",0,0
+Vienna Police Dept,municipal_police,place,"Vienna city, Missouri",0,0
+Vinita Park Police Dept,municipal_police,place,"Vinita Park city, Missouri",0,0
+Walnut Grove Police Dept,municipal_police,place,"Walnut Grove city, Missouri",0,0
+Warren County Sheriff's Dept,county_sheriff,county,"Warren County, Missouri",0,0
+Warrensburg Police Dept,municipal_police,place,"Warrensburg city, Missouri",0,0
+Warrenton Police Dept,municipal_police,place,"Warrenton city, Missouri",0,0
+Warsaw Police Dept,municipal_police,place,"Warsaw city, Missouri",0,0
+Warson Woods Police Dept,municipal_police,place,"Warson Woods city, Missouri",0,0
+Washburn Police Dept,municipal_police,place,"Washburn city, Missouri",0,0
+Washington County Sheriff's Dept,county_sheriff,county,"Washington County, Missouri",0,0
+Washington Police Dept,municipal_police,place,"Washington city, Missouri",0,0
+Washington University Police Dept,university,place,"St. Louis city, Missouri",0,0
+Waverly Police Dept,municipal_police,place,"Waverly city, Missouri",0,0
+Wayne County Sheriff's Dept,county_sheriff,county,"Wayne County, Missouri",0,0
+Waynesville Police Dept,municipal_police,place,"Waynesville city, Missouri",0,0
+Weatherby Lake Police Dept,municipal_police,place,"Weatherby Lake city, Missouri",0,0
+Webb City Police Dept,municipal_police,place,"Webb City city, Missouri",0,0
+Webster County Sheriff's Dept,county_sheriff,county,"Webster County, Missouri",0,0
+Webster Groves Police Dept,municipal_police,place,"Webster Groves city, Missouri",0,0
+Weldon Spring Police Dept,municipal_police,place,"Weldon Spring city, Missouri",0,0
+Wellington Police Dept,municipal_police,place,"Wellington city, Missouri",0,0
+Wellston Police Dept,municipal_police,place,"Wellston city, Missouri",0,0
+Wellsville Police Dept,municipal_police,place,"Wellsville city, Missouri",0,0
+Wentzville Police Dept,municipal_police,place,"Wentzville city, Missouri",0,0
+West Plains Police Dept,municipal_police,place,"West Plains city, Missouri",0,0
+Weston Police Dept,municipal_police,place,"Weston city, Missouri",0,0
+Wheaton Police Dept,municipal_police,place,"Wheaton city, Missouri",0,0
+Willard Police Dept,municipal_police,place,"Willard city, Missouri",0,0
+Willard School Police Dept,municipal_police,place,"Willard School city, Missouri",0,1
+Williamsville Police Dept,municipal_police,place,"Williamsville city, Missouri",0,0
+Willow Springs Police Dept,municipal_police,place,"Willow Springs city, Missouri",0,0
+Winfield Police Dept,municipal_police,place,"Winfield city, Missouri",0,0
+Winona Police Dept,municipal_police,place,"Winona city, Missouri",0,0
+Wood Heights Police Dept,municipal_police,place,"Wood Heights city, Missouri",0,0
+Woodson Terrace Police Dept,municipal_police,place,"Woodson Terrace city, Missouri",0,0
+Worth County Sheriff's Dept,county_sheriff,county,"Worth County, Missouri",0,0
+Wright City Police Dept,municipal_police,place,"Wright City city, Missouri",0,0
+Wright County Sheriff's Dept,county_sheriff,county,"Wright County, Missouri",0,0
