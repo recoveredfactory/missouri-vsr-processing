@@ -3,9 +3,9 @@ title: The Hispanic Surge
 theme: light
 ---
 
-# In 2020, Hispanic drivers had the lowest per-capita stop rate in Missouri. By 2024, they were being searched and arrested at the highest rates.
+# Five years of mandatory state data show a systematic increase in traffic enforcement against Hispanic drivers in Missouri — not just in volume, but in intensity per stop.
 
-An analysis of five years of mandatory state data and Census population estimates shows traffic enforcement against Hispanic drivers rising far faster than population growth — driven by the most officer-discretionary stop categories.
+The pattern emerges from the state's own Vehicle Stops Report, which every law enforcement agency is required to file annually. In 2020, Hispanic drivers were stopped at the lowest per-capita rate of any racial group: 11.3 stops per 100 residents, compared with 18.6 for white drivers and 30.2 for Black drivers. By 2024, the Hispanic rate had climbed to 13.5 — a 19 percent increase that outpaced every other group.
 
 ```js
 const raw = await FileAttachment("data/story_analysis_results.csv").csv({typed: true});
@@ -828,15 +828,34 @@ Nearly all prior coverage of the Missouri VSR has focused on Black-white dispari
 
 - **[Missouri AG criticized for removing racial 'disparity index' from vehicle stops report](https://www.stltoday.com/news/local/government-politics/missouri-ag-criticized-for-removing-racial-disparity-index-from-vehicle-stops-report/article_0f8c58f6-5bdc-11ef-ba59-671894889699.html)** — St. Louis Post-Dispatch. The AG called the disparity index of "limited analytical value."
 
-### People to talk to
+### Sources to pursue
 
-- **Austin Kocher**, Syracuse University — researcher on 287(g), quoted in KBIA/STLPR/KCUR
-- **Missouri NAACP** — just settled the lawsuit over this data
-- **Empower Missouri / Coalition for Fair Policing** — 19 years of VSR advocacy
-- **Defense attorneys** in high-disparity jurisdictions — they see the probable cause affidavits
-- **Hispanic community organizations** in Jackson County, Greene County, Jasper County, St. Charles County — the counties with the largest Hispanic population growth and active 287(g) discussions
-- **The AG's office** — why did agency comment responses drop from 500+ to 18?
-- **MSHP public affairs** — they've never submitted a comment to the AG explaining their disparities
+**Agencies with the worst composite scores across multiple metrics:**
+- **St. Charles PD** — 358 Hispanic stops (+426%), arrest rate 22.9% vs 6.7% White (3.4×), contraband hit rate 6.5%. Never commented.
+- **St. Ann PD** — 275 Hispanic stops (+759%), 32.7% search rate, 29.5% arrest rate. Hit rate 11.1%. Never commented.
+- **Perry County Sheriff** — searching and arresting 16.7% of Hispanic drivers. White arrest rate: 2.8%. 5.9× ratio.
+- **Taney County Sheriff** — Branson area, tourism economy with large Hispanic workforce. +215%, 4.5× arrest ratio.
+- **St. Peters PD, Lake St. Louis PD** — same St. Charles County corridor as St. Charles PD. Possible regional pattern. None ever commented.
+- **Crawford County Sheriff, Jefferson County Sheriff, Moniteau County Sheriff** — rural counties with extreme arrest ratios and no comments.
+
+**Researchers and advocates:**
+- **Austin Kocher**, Syracuse University — 287(g) researcher, already on the record in Missouri (KBIA, STLPR, KCUR). Can contextualize the traffic stop → immigration enforcement pipeline.
+- **Empower Missouri / Coalition for Fair Policing** — 19 years of VSR advocacy, focused on Black disparities. Have not flagged the Hispanic trend.
+- **ACLU of Missouri** — filed 287(g) challenges, can speak to the legal framework.
+- **Missouri NAACP** — just settled the disparity index lawsuit with the AG. They know the data and the politics.
+
+**Community sources:**
+- **Hispanic community organizations** in Jackson County (KC metro), Greene County (Springfield), Jasper County (Joplin), St. Charles County — the counties with the fastest Hispanic population growth and agency-level disparities. Ask what drivers are experiencing.
+- **Defense attorneys** in high-disparity jurisdictions — they see the probable cause affidavits. They know whether "equipment violation" means a real broken taillight or pretext.
+
+**Government sources:**
+- **MSHP public affairs** — 312,976 stops, never submitted a comment to the AG, signed the 287(g). Ask what changed.
+- **The AG's office** — why did agency comment responses drop from 500+ to 18 in 2024? Is that a reporting change or did agencies just stop responding?
+- **Individual agency chiefs/sheriffs** on the reporting targets list — the data is the opening question: "Your Hispanic stops rose X% while your contraband hit rate fell. Can you explain what changed?"
+
+**Records to request:**
+- MSHP 287(g) implementation documents — when it went operational, training materials, number of ICE referrals from traffic stops by month
+- Agency policies on investigative stops or equipment stops — to understand whether the discretionary increase reflects a policy change or individual officer behavior
 
 ---
 
