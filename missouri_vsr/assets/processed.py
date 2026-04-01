@@ -658,8 +658,8 @@ def _add_canonical_names(
         return reports
     lookup: dict[str, str] = {}
     for _, row in agency_reference_geocoded.iterrows():
-        normalized = _first_non_empty(row, ["Normalized"])
-        canonical = _first_non_empty(row, ["Department", "Canonical"])
+        normalized = _first_non_empty(row, ["Normalized"]) or ""
+        canonical = _first_non_empty(row, ["Department", "Canonical"]) or ""
         if normalized and canonical:
             lookup[normalized] = canonical
     if not lookup:

@@ -242,6 +242,17 @@ def test_add_canonical_names_empty_reference():
     assert "canonical_name" not in result.columns
 
 
+def test_add_canonical_names_na_values_in_reference():
+    # pd.NA in Department/Canonical/Normalized columns must not raise
+    reports = pd.DataFrame([{"agency": "Adair County Sheriff's Office", "year": 2023}])
+    ref = pd.DataFrame([
+        {"Normalized": "adair county sheriffs department", "Department": "Adair County Sheriff's Dept", "Canonical": pd.NA},
+        {"Normalized": pd.NA, "Department": pd.NA, "Canonical": pd.NA},
+    ])
+    result = _add_canonical_names(reports, ref)
+    assert result["canonical_name"].iloc[0] == "Adair County Sheriff's Dept"
+
+
 def test_build_agency_index_records_includes_census_geoid():
     pivoted = pd.DataFrame([{
         "agency": "Springfield Police Dept",
