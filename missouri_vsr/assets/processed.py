@@ -11,6 +11,7 @@ from slugify import slugify
 from dagster import AssetIn, AssetKey, Out, asset, graph_asset, op
 
 from missouri_vsr.assets.extract import PIVOT_VALUE_COLUMNS, YEAR_URLS, _slugify_simple
+from missouri_vsr.cli.crosswalk import _normalize_name
 from missouri_vsr.assets.s3_utils import (
     upload_paths,
     s3_uri_for_dir,
@@ -81,6 +82,17 @@ STATEWIDE_RATE_SPECS = [
     },
 ]
 
+STATEWIDE_AGENCY_NAME = "Missouri (all agencies)"
+STATEWIDE_AGENCY_SLUG = "missouri-all-agencies"
+
+# Issue #4: in-group percentage column names (one per non-Total race column)
+RACE_PCT_COLUMNS = [
+    f"{race} Pct"
+    for race in ["White", "Black", "Hispanic", "Native American", "Asian", "Other"]
+]
+# Issue #5: non-white to white ratio column name
+RATIO_COLUMN = "Nonwhite to White Ratio"
+
 
 def _build_rank_percentile_frame(
     base: pd.DataFrame,
@@ -96,6 +108,67 @@ def _build_rank_percentile_frame(
         if col not in frame.columns:
             frame[col] = pd.NA
     return frame[base.columns]
+
+
+def _add_ingroup_pcts_and_ratios(df: pd.DataFrame, value_cols: List[str]) -> None:
+    """Add in-group percentage and ratio columns to non-rate rows in-place.
+
+    For each non-Total race column adds ``{race} Pct`` = race / Total.
+    Also adds ``Nonwhite to White Ratio`` = (Total - White) / White.
+    Rate rows and rows where the denominator is zero receive NaN.
+    """
+    if "metric" in df.columns:
+        rate_mask = (
+            df["metric"]
+            .astype(str)
+            .str.contains(r"\brate\b", case=False, regex=True, na=False)
+        )
+    else:
+        rate_mask = pd.Series(False, index=df.index)
+
+    total = (
+        pd.to_numeric(df["Total"], errors="coerce")
+        if "Total" in df.columns
+        else pd.Series(dtype=float, index=df.index)
+    )
+    valid = ~rate_mask & (total > 0)
+
+    race_cols = [c for c in value_cols if c != "Total" and c in df.columns]
+    for race in race_cols:
+        pct_col = f"{race} Pct"
+        race_vals = pd.to_numeric(df[race], errors="coerce")
+        df[pct_col] = (race_vals / total).where(valid)
+
+    if "White" in df.columns:
+        white = pd.to_numeric(df["White"], errors="coerce")
+        df[RATIO_COLUMN] = ((total - white) / white).where(valid & (white > 0))
+
+
+def _compute_statewide_rates(grouped: pd.DataFrame, value_cols: List[str]) -> pd.DataFrame:
+    """Compute derived rate rows from statewide grouped sums.
+
+    Extracted so it can be used both by ``write_statewide_year_sums_json``
+    and the new statewide agency JSON writer.
+    """
+    if grouped.empty:
+        return pd.DataFrame()
+    lookup = grouped.set_index(["year", "row_key"])[value_cols]
+    derived_rows: List[dict] = []
+    for year in grouped["year"].dropna().unique().tolist():
+        for spec in STATEWIDE_RATE_SPECS:
+            num_key = spec["numerator"]
+            den_key = spec["denominator"]
+            if (year, num_key) not in lookup.index or (year, den_key) not in lookup.index:
+                continue
+            num = lookup.loc[(year, num_key)]
+            den = lookup.loc[(year, den_key)]
+            rates = num / den
+            rates = rates.where(den != 0)
+            record: dict = {"year": year, "row_key": spec["row_key"]}
+            for col in value_cols:
+                record[col] = rates.get(col)
+            derived_rows.append(record)
+    return pd.DataFrame(derived_rows)
 
 
 def _build_percentage_frame(
@@ -248,6 +321,11 @@ def add_rank_percentile_rows(context, combined: pd.DataFrame) -> pd.DataFrame:
         _build_rank_percentile_frame(base, rank_all, value_cols, "-rank"),
         _build_rank_percentile_frame(base, percentile_all, value_cols, "-percentile"),
     ]
+
+    # Issues #4 & #5: add inline pct and ratio columns to base rows only.
+    # Derived rows (rank/percentile/percentage) will receive NaN via pd.concat.
+    _add_ingroup_pcts_and_ratios(base, value_cols)
+
     augmented = pd.concat([base, *derived], ignore_index=True)
     augmented = _rebuild_row_ids(augmented)
     context.log.info(
@@ -521,6 +599,78 @@ def _json_safe_record(record: dict) -> dict:
     return cleaned
 
 
+def _extract_jurisdiction_geoid(row: pd.Series) -> str | None:
+    """Return the Census GEOID for an agency's best-guess jurisdictional boundary.
+
+    Municipal agencies → 7-digit place GEOID; county agencies → 5-digit county GEOID.
+    Returns None when the agency type is unclassified or geocoding data is absent.
+    """
+    agency_type = re.sub(r"\s+", " ", str(row.get("AgencyType") or "").strip().lower())
+    resp_raw = row.get("geocode_jurisdiction_response")
+    if not resp_raw:
+        return None
+    try:
+        resp = json.loads(resp_raw) if isinstance(resp_raw, str) else resp_raw
+    except (json.JSONDecodeError, TypeError):
+        return None
+    results = resp.get("results") if isinstance(resp, dict) else None
+    if not isinstance(results, list) or not results:
+        return None
+    fields = results[0].get("fields")
+    if not isinstance(fields, dict):
+        return None
+    census = fields.get("census")
+    if not isinstance(census, dict):
+        return None
+    years = [int(k) for k in census if str(k).isdigit()]
+    if not years:
+        return None
+    record = census[str(max(years))]
+    if not isinstance(record, dict):
+        return None
+    state_fips = str(record.get("state_fips") or "29").strip().zfill(2)
+    if "county" in agency_type:
+        county_fips = str(record.get("county_fips") or "").strip()
+        if county_fips.isdigit() and len(county_fips) == 3:
+            return f"{state_fips}{county_fips}"
+        if county_fips.isdigit() and len(county_fips) == 5 and county_fips.startswith(state_fips):
+            return county_fips
+        return None
+    if "municipal" in agency_type:
+        place_raw = record.get("place")
+        if isinstance(place_raw, dict):
+            place_raw = place_raw.get("fips") or place_raw.get("geoid") or place_raw.get("place")
+        place = str(place_raw or "").strip()
+        if place.isdigit() and len(place) == 5:
+            return f"{state_fips}{place}"
+        if place.isdigit() and len(place) == 7 and place.startswith(state_fips):
+            return place
+        return None
+    return None
+
+
+def _add_canonical_names(
+    reports: pd.DataFrame,
+    agency_reference_geocoded: pd.DataFrame,
+) -> pd.DataFrame:
+    """Add a canonical_name column to reports by joining against the agency reference."""
+    if reports.empty or agency_reference_geocoded.empty:
+        return reports
+    lookup: dict[str, str] = {}
+    for _, row in agency_reference_geocoded.iterrows():
+        normalized = str(row.get("Normalized") or "").strip()
+        canonical = str(row.get("Department") or row.get("Canonical") or "").strip()
+        if normalized and canonical and canonical.lower() != "nan":
+            lookup[normalized] = canonical
+    if not lookup:
+        return reports
+    result = reports.copy()
+    result["canonical_name"] = result["agency"].apply(
+        lambda a: lookup.get(_normalize_name(str(a))) if pd.notna(a) else None
+    )
+    return result
+
+
 def build_agency_index_records(
     pivoted: pd.DataFrame,
     agency_reference_geocoded: pd.DataFrame,
@@ -563,10 +713,13 @@ def build_agency_index_records(
                     "zip": None,
                     "phone": None,
                     "county": None,
+                    "census_geoid": _extract_jurisdiction_geoid(row),
                     metric_row_key: None,
                     metric_alias: None,
                 }
                 names_by_key[key] = entry
+            elif not entry.get("census_geoid"):
+                entry["census_geoid"] = _extract_jurisdiction_geoid(row)
 
             new_names = _collect_names(row, name_cols)
             for name in new_names:
@@ -595,6 +748,7 @@ def build_agency_index_records(
                     "zip": None,
                     "phone": None,
                     "county": None,
+                    "census_geoid": None,
                     metric_row_key: None,
                     metric_alias: None,
                 }
@@ -629,12 +783,29 @@ def build_agency_index_records(
                     "zip": None,
                     "phone": None,
                     "county": None,
+                    "census_geoid": None,
                     metric_row_key: None,
                     metric_alias: None,
                 }
                 names_by_key[agency] = entry
             entry[metric_row_key] = value
             entry[metric_alias] = value
+
+    # Issue #6: always include the statewide aggregate entry when there is data.
+    if combined is not None and not combined.empty:
+        if STATEWIDE_AGENCY_NAME not in names_by_key:
+            names_by_key[STATEWIDE_AGENCY_NAME] = {
+                "agency_slug": STATEWIDE_AGENCY_SLUG,
+                "canonical_name": STATEWIDE_AGENCY_NAME,
+                "names": [STATEWIDE_AGENCY_NAME],
+                "city": None,
+                "zip": None,
+                "phone": None,
+                "county": None,
+                "census_geoid": None,
+                metric_row_key: None,
+                metric_alias: None,
+            }
 
     allowed_keys: set[str] | None = None
     if combined is not None and not combined.empty:
@@ -643,6 +814,8 @@ def build_agency_index_records(
             mask = combined[value_cols].notna().any(axis=1)
             agencies = combined.loc[mask, "agency"].dropna().astype(str)
             allowed_keys = {_normalize_agency_key(a) for a in agencies if a.strip()}
+            # Always keep the statewide aggregate entry even though it is synthetic.
+            allowed_keys.add(_normalize_agency_key(STATEWIDE_AGENCY_NAME))
 
     records = sorted(names_by_key.values(), key=lambda item: item["agency_slug"])
     if allowed_keys is None:
@@ -781,6 +954,8 @@ def write_agency_year_json(
         raise ValueError(f"Cannot write agency JSON – missing columns: {sorted(missing)}")
 
     value_cols = [c for c in PIVOT_VALUE_COLUMNS if c in combined.columns]
+    pct_cols = [c for c in RACE_PCT_COLUMNS if c in combined.columns]
+    ratio_cols = [RATIO_COLUMN] if RATIO_COLUMN in combined.columns else []
     rank_cols = [c for c in ["rank_dense", "rank_count", "rank_method"] if c in combined.columns]
     row_cols = [
         "year",
@@ -793,6 +968,8 @@ def write_agency_year_json(
         "metric_id",
         "row_id",
         *value_cols,
+        *pct_cols,
+        *ratio_cols,
         *rank_cols,
     ]
     row_cols = [col for col in row_cols if col in combined.columns]
@@ -1215,26 +1392,7 @@ def write_statewide_year_sums_json(context, combined: pd.DataFrame) -> str:
         if pop_mask.any():
             subset = subset.loc[~pop_mask].copy()
 
-    def _derived_rates_from_grouped(grouped: pd.DataFrame) -> pd.DataFrame:
-        lookup = grouped.set_index(["year", "row_key"])[value_cols]
-        derived_rows: list[dict] = []
-        for year in grouped["year"].dropna().unique().tolist():
-            for spec in STATEWIDE_RATE_SPECS:
-                num_key = spec["numerator"]
-                den_key = spec["denominator"]
-                if (year, num_key) not in lookup.index or (year, den_key) not in lookup.index:
-                    continue
-                num = lookup.loc[(year, num_key)]
-                den = lookup.loc[(year, den_key)]
-                rates = num / den
-                rates = rates.where(den != 0)
-                record = {"year": year, "row_key": spec["row_key"]}
-                for col in value_cols:
-                    record[col] = rates.get(col)
-                derived_rows.append(record)
-        return pd.DataFrame(derived_rows)
-
-    derived = _derived_rates_from_grouped(grouped_all)
+    derived = _compute_statewide_rates(grouped_all, value_cols)
     if not derived.empty:
         subset = pd.concat([subset, derived], ignore_index=True)
 
@@ -1248,7 +1406,7 @@ def write_statewide_year_sums_json(context, combined: pd.DataFrame) -> str:
         )
         if pop_mask.any():
             subset_no_mshp = subset_no_mshp.loc[~pop_mask].copy()
-    derived_no_mshp = _derived_rates_from_grouped(grouped_no_mshp)
+    derived_no_mshp = _compute_statewide_rates(grouped_no_mshp, value_cols)
     if not derived_no_mshp.empty:
         subset_no_mshp = pd.concat([subset_no_mshp, derived_no_mshp], ignore_index=True)
     if not subset_no_mshp.empty:
@@ -1605,6 +1763,104 @@ def agency_year_json_exports(
     )
 
 
+@op(out=Out(str), required_resource_keys={"data_dir_out", "s3"})
+def write_statewide_agency_json(context, combined: pd.DataFrame) -> str:
+    """Write an agency-year-format JSON for the Missouri (all agencies) aggregate."""
+    if combined.empty:
+        context.log.warning("Combined DataFrame is empty; skipping statewide agency JSON.")
+        return ""
+
+    value_cols = [c for c in PIVOT_VALUE_COLUMNS if c in combined.columns]
+    if not value_cols:
+        raise ValueError("Cannot write statewide agency JSON – no numeric value columns found.")
+
+    # Strip any derived rows (rank/percentile/percentage) that may be present.
+    base_mask = ~combined["row_key"].astype(str).str.contains(
+        r"-(?:rank|percentile|percentage)$", regex=True, na=False
+    )
+    base = combined.loc[base_mask].copy()
+    for col in value_cols:
+        base[col] = pd.to_numeric(base[col], errors="coerce")
+
+    # Exclude rows that are themselves computed rates or population denominators;
+    # rates will be re-derived from the statewide sums.
+    exclude_mask = base["row_key"].astype(str).str.endswith("-rate", na=False) | base[
+        "row_key"
+    ].astype(str).str.startswith("rates-by-race--population", na=False)
+    count_base = base.loc[~exclude_mask]
+
+    grouped = (
+        count_base.groupby(["year", "row_key"], dropna=True)[value_cols]
+        .sum(min_count=1)
+        .reset_index()
+    )
+
+    derived_rates = _compute_statewide_rates(grouped, value_cols)
+    all_rows = (
+        pd.concat([grouped, derived_rates], ignore_index=True)
+        if not derived_rates.empty
+        else grouped
+    )
+
+    # Metadata lookup: table/section/metric etc. are the same across all agencies.
+    meta_cols = ["row_key", "table", "table_id", "section", "section_id", "metric", "metric_id"]
+    present_meta_cols = [c for c in meta_cols if c in combined.columns]
+    meta_lookup: dict = {}
+    if len(present_meta_cols) > 1:
+        for _, row in (
+            base[present_meta_cols].drop_duplicates("row_key", keep="first").iterrows()
+        ):
+            rk = str(row["row_key"])
+            meta_lookup[rk] = {
+                c: _json_safe_value(row.get(c)) for c in present_meta_cols if c != "row_key"
+            }
+
+    records: List[dict] = []
+    for _, row in all_rows.sort_values(["year", "row_key"]).iterrows():
+        rk = str(row["row_key"])
+        year_val = row.get("year")
+        year = int(year_val) if pd.notna(year_val) else None
+        record: dict = {"year": year, "row_key": rk}
+        for mc, mv in (meta_lookup.get(rk) or {}).items():
+            record[mc] = mv
+        year_str = str(year) if year is not None else ""
+        record["row_id"] = f"{year_str}-{STATEWIDE_AGENCY_SLUG}-{rk}"
+        for col in value_cols:
+            record[col] = _json_safe_value(row.get(col))
+        records.append(record)
+
+    out_root = Path(context.resources.data_dir_out.get_path()) / "agency_year"
+    out_root.mkdir(parents=True, exist_ok=True)
+    out_path = out_root / f"{STATEWIDE_AGENCY_SLUG}.json"
+    out_path.write_text(json.dumps({"agency": STATEWIDE_AGENCY_NAME, "rows": records}, indent=2))
+    context.log.info("Wrote statewide agency JSON → %s (%d rows)", out_path, len(records))
+
+    base_dir = Path(context.resources.data_dir_out.get_path())
+    uploaded = upload_paths(context, [out_path], base_dir=base_dir)
+    try:
+        meta: dict = {"local_path": str(out_path), "row_count": len(records)}
+        s3_path = s3_uri_for_path(context, out_path, base_dir)
+        if s3_path:
+            meta["s3_path"] = s3_path
+        if uploaded:
+            meta["s3_paths"] = uploaded
+        context.add_output_metadata(meta)
+    except Exception:
+        pass
+
+    return str(out_path)
+
+
+@graph_asset(
+    name="statewide_agency_json_export",
+    group_name="dist",
+    ins={"combine_all_reports": AssetIn(key=AssetKey("combine_all_reports"))},
+    description="Per-agency-format JSON for Missouri (all agencies) statewide aggregate.",
+)
+def statewide_agency_json_export(combine_all_reports: pd.DataFrame) -> str:
+    return write_statewide_agency_json(combine_all_reports)
+
+
 @graph_asset(
     name="metric_year_json_exports",
     group_name="dist",
@@ -1698,14 +1954,19 @@ def homepage_stats_json(combine_all_reports: pd.DataFrame) -> str:
 
 
 @op(out=Out(dict), required_resource_keys={"data_dir_out", "s3"})
-def write_download_vsr_statistics(context, reports: pd.DataFrame) -> dict:
+def write_download_vsr_statistics(
+    context,
+    reports: pd.DataFrame,
+    agency_reference_geocoded: pd.DataFrame,
+) -> dict:
     out_dir = Path(context.resources.data_dir_out.get_path()) / "downloads"
     if reports.empty:
         context.log.warning("Rank/percentile DataFrame empty; no download outputs created.")
         return {}
+    enriched = _add_canonical_names(reports, agency_reference_geocoded)
     return _write_download_bundle(
         context,
-        reports,
+        enriched,
         base_name="vsr_statistics",
         out_dir=out_dir,
     )
@@ -1764,7 +2025,7 @@ def write_downloads_combined(
     agency_index_df = pd.DataFrame(agency_index_records)
 
     datasets = {
-        "vsr_statistics": vsr_statistics,
+        "vsr_statistics": _add_canonical_names(vsr_statistics, agency_reference_geocoded),
         "agency_index": agency_index_df,
         "agency_comments": agency_comments,
     }
@@ -1794,11 +2055,17 @@ def write_downloads_combined(
 @graph_asset(
     name="downloads_vsr_statistics",
     group_name="downloads",
-    ins={"reports_with_rank_percentile": AssetIn(key=AssetKey("reports_with_rank_percentile"))},
+    ins={
+        "reports_with_rank_percentile": AssetIn(key=AssetKey("reports_with_rank_percentile")),
+        "agency_reference_geocoded": AssetIn(key=AssetKey("agency_reference_geocoded")),
+    },
     description="Download bundle for VSR statistics (parquet/json/csv).",
 )
-def downloads_vsr_statistics(reports_with_rank_percentile: pd.DataFrame) -> dict:
-    return write_download_vsr_statistics(reports_with_rank_percentile)
+def downloads_vsr_statistics(
+    reports_with_rank_percentile: pd.DataFrame,
+    agency_reference_geocoded: pd.DataFrame,
+) -> dict:
+    return write_download_vsr_statistics(reports_with_rank_percentile, agency_reference_geocoded)
 
 
 @graph_asset(
