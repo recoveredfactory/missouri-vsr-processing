@@ -51,6 +51,20 @@ Quick reference for future coding agents working on this Dagster pipeline that p
 - Interactive controls: pick a suggestion; `n` mark “not in VSR” (blank canonical); `s` skip for later (leave unresolved); `m` more; `b` back; `q` save/quit. Progress autosaves crosswalk + `.state.json` (same dir) for resume.
 - Crosswalk is still evolving; current spreadsheet columns are in flux—don’t overfit.
 
+## Pre-2020 vs 2020+ format split
+- Years < 2020 use a completely different PDF layout and require `_parse_pre2020_pdftotext_lines()` in `extract.py`.
+- Gate is in `parse_page_range`: dispatch by `year < 2020`.
+- Pre-2020 race column order: `Total White Black Hispanic Asian Am. Indian Other` (Asian before Am. Indian — opposite of 2020+).
+- Pre-2020 tables: `KEY INDICATORS`, `VEHICLE STOP STATS`, `SEARCH STATS` (not "Table N: ... for ...").
+- Pre-2020 section labels are inline/multi-line (e.g., "Reason" on same line as first metric, "for stop" on next line alone).
+- Pre-2020 null tokens: `N/A` and `#Num!` are valid null placeholders in numeric columns — do NOT drop those rows.
+- Pre-2020 end marker: `Agency response` or `Notes:` (not `Agency notes:`).
+
+## Extract philosophy
+- **Extract close to source.** Per-year extract outputs should mirror the PDF as closely as possible. Do NOT normalize metric labels, section names, race column names, or spelling variants (e.g., keep "Am. Indian", "equpiment", "parol officer" as-is).
+- Normalization and crosswalk mapping belong in `combine_all_reports` or downstream steps only.
+- If a metric appears in some years but not others, that's fine — capture everything the PDF contains.
+
 ## Open questions for the human
 - Should we document or check in sample/example PDFs for quick regression runs, or always hit the live AGO URLs?
 - Is there a preferred minimal asset selection to run during development (e.g., a single year) and a standard run config we should default to in commands?
