@@ -399,7 +399,7 @@ _PRE2020_BANNER_RE = re.compile(
 # Agency name line after the banner: optionally prefixed with "Agency:"
 # and suffixed with population info. Strip both.
 _PRE2020_AGENCY_RE = re.compile(
-    r"^(?:Agency:\s*)?(.+?)\s{2,}(?:\d{4}\s+)?Population:.*$",
+    r"^(?:Agency:\s*)?(.+?)\s+(?:\d{4}\s+)?Population:.*$",
     re.IGNORECASE,
 )
 
@@ -622,6 +622,7 @@ def _parse_pre2020_pdftotext_lines(
     current_table_id: str | None = None
     current_section: str | None = None
     has_columns = False
+    tables_allowed = False  # True only after banner + confirmed agency; blocks appendix tables
     pending_metric_label: str | None = None  # for multi-line labels (e.g. "Reasonable / [data] / suspicion-weapon")
 
     records: list[dict] = []
@@ -684,6 +685,7 @@ def _parse_pre2020_pdftotext_lines(
         if _PRE2020_BANNER_RE.match(line):
             stats["banner_lines"] += 1
             expect_agency_name = True
+            tables_allowed = False  # wait for agency confirmation
             current_table_title = None
             current_table_id = None
             current_section = None
@@ -698,6 +700,7 @@ def _parse_pre2020_pdftotext_lines(
             m = _PRE2020_AGENCY_RE.match(line)
             if m:
                 current_agency = _clean_agency_name(m.group(1))
+                tables_allowed = True
                 stats["agency_headers"] += 1
                 log.debug("Agency: %s (%s)", current_agency, pdf_name)
                 expect_agency_name = False
@@ -724,11 +727,12 @@ def _parse_pre2020_pdftotext_lines(
         matched_table = False
         for key, (title, tid) in _PRE2020_TABLES.items():
             if upper == key or upper.startswith(key + " ") or upper.startswith(key + "\t"):
-                current_table_title = title
-                current_table_id = tid
-                current_section = None
-                has_columns = True  # race columns are on the same line as the header
-                stats["table_headers"] += 1
+                if tables_allowed:
+                    current_table_title = title
+                    current_table_id = tid
+                    current_section = None
+                    has_columns = True  # race columns are on the same line as the header
+                    stats["table_headers"] += 1
                 matched_table = True
                 break
 
@@ -743,6 +747,8 @@ def _parse_pre2020_pdftotext_lines(
         low = line.lower()
         if low.startswith("notes:") or low.startswith("agency response"):
             stats["notes_lines"] += 1
+            if low.startswith("agency response"):
+                tables_allowed = False  # this agency's block is complete
             current_table_title = None
             current_table_id = None
             current_section = None
