@@ -6,7 +6,7 @@ number-of-stops-by-race--stop-outcome--warning,Bates City Police Dept,147,140,1,
 search-statistics--arrest-charge--off-against-person,Bates City Police Dept,0,0,0,0,0,0,0,2021,0
 number-of-stops-by-race--non-resident-stops,Missouri Dept of Conservation Protection Branch,43,37,2,1,0,3,0,2021,0
 search-statistics--arrest-charge--outstanding-warrant,Bates City Police Dept,2,0,0,2,0,0,0,2021,0
-disparity-index-by-race--population--acs-population,Bates City Police Dept,132,130,0,0,0,2,0,2021,0
+disparity-index-by-race--population--2020-population,Bates City Police Dept,132,130,0,0,0,2,0,2021,0
 number-of-stops-by-race--reason-for-stop--equpiment,Bates City Police Dept,26,22,3,1,0,0,0,2021,0
 number-of-stops-by-race--location-of-stop--city-street,Bates City Police Dept,213,200,5,5,1,1,1,2021,0
 number-of-stops-by-race--reason-for-stop--moving,Bates City Police Dept,174,161,2,9,1,1,0,2021,0
@@ -42,7 +42,7 @@ rates-by-race--stop-rate-residents--citation-rate,Missouri Capitol Police,9.94,9
 number-of-stops-by-race--reason-for-stop--investigative,Bates City Police Dept,2,1,0,0,0,0,1,2021,0
 rates-by-race--rates--stop-rate,Pemiscot County Sheriff's Dept,0.14,0.13,0.16,0.36,0,0,0,2021,0
 number-of-stops-by-race--location-of-stop--us-hwy,Bates City Police Dept,0,0,0,0,0,0,0,2021,0
-rates-by-race--population--acs-population,Bates City Police Dept,132,130,0,0,0,2,0,2021,0
+rates-by-race--population--2020-population,Bates City Police Dept,132,130,0,0,0,2,0,2021,0
 search-statistics--what-searched--driver,Bates City Police Dept,0,0,0,0,0,0,0,2021,0
 search-statistics--what-searched--car-property,Bates City Police Dept,9,5,1,2,0,1,0,2021,0
 rates-by-race--rates--citation-rate,Anderson Police Dept,29.56,27.9,33.33,44.34,57.14,34.33,84.62,2021,0
@@ -51,7 +51,7 @@ search-statistics--contraband-found--stolen-property,Bates City Police Dept,0,0,
 number-of-stops-by-race--stop-outcome--searches,Bates City Police Dept,12,6,2,2,1,1,0,2021,0
 number-of-stops-by-race--location-of-stop--other,Bates City Police Dept,0,0,0,0,0,0,0,2021,0
 search-statistics--probable-cause--drug-dog-alert,Bates City Police Dept,0,0,0,0,0,0,0,2021,0
-disparity-index-by-race--population--acs-population-pct,Bates City Police Dept,100,98.48,0,0,0,1.52,0,2021,0
+disparity-index-by-race--population--2020-population-pct,Bates City Police Dept,100,98.48,0,0,0,1.52,0,2021,0
 search-statistics--arrest-charge--traffic-violation,Bates City Police Dept,0,0,0,0,0,0,0,2021,0
 rates-by-race--rates--arrest-rate,Anderson Police Dept,1.7,1.73,0,0,0,2.99,7.69,2021,0
 number-of-stops-by-race--driver-age--30-39,Bates City Police Dept,57,51,2,4,0,0,0,2021,0
@@ -64,7 +64,7 @@ search-statistics--probable-cause--inventory,Bates City Police Dept,1,1,0,0,0,0,
 rates-by-race--totals--resident-stops,Bates City Police Dept,194,194,0,0,0,0,0,2021,0
 disparity-index-by-race--stops--resident-stops,Bates City Police Dept,194,194,0,0,0,0,0,2021,0
 number-of-stops-by-race--reason-for-stop--license,Bates City Police Dept,34,34,0,0,0,0,0,2021,0
-rates-by-race--population--acs-population-pct,Bates City Police Dept,100,98.48,0,0,0,1.52,0,2021,0
+rates-by-race--population--2020-population-pct,Bates City Police Dept,100,98.48,0,0,0,1.52,0,2021,0
 rates-by-race--contraband-hit-rate--citation-rate,Warson Woods Police Dept,64.47,65.71,25,,,,100,2021,0
 search-statistics--probable-cause--drug-alcohol-odor,Bates City Police Dept,3,1,0,2,0,0,0,2021,0
 search-statistics--probable-cause--incident-to-arrest,Bates City Police Dept,0,0,0,0,0,0,0,2021,0
@@ -84,7 +84,7 @@ search-statistics--what-searched--driver,St Ann Police Dept,17,6,11,0,0,0,0,2021
 search-statistics--search-duration--31-minutes,Anderson Police Dept,1,1,0,0,0,0,0,2021,0
 search-statistics--arrest-charge--other,Pleasant Hope Police Dept,0,0,0,0,0,0,0,2021,0
 search-statistics--arrest-charge--other,Poplar Bluff Police Dept,25,20,5,0,0,0,0,2021,0
-disparity-index-by-race--population--acs-population,Texas County Sheriff's Dept,20806,18709,507,457,205,449,607,2021,0
+disparity-index-by-race--population--2020-population,Texas County Sheriff's Dept,20806,18709,507,457,205,449,607,2021,0
 search-statistics--arrest-charge--other,Iberia Police Dept,0,0,0,0,0,0,0,2021,0
 number-of-stops-by-race--location-of-stop--state-hwy,Jackson Police Dept,933,822,71,7,23,5,5,2021,0
 search-statistics--arrest-charge--off-against-person,Milan Police Dept,0,0,0,0,0,0,0,2021,0
@@ -109,7 +109,7 @@ number-of-stops-by-race--resident-stops,Cardwell Police Dept,21,17,1,3,0,0,0,202
 number-of-stops-by-race--location-of-stop--county-road,St James Police Dept,6,5,1,0,0,0,0,2021,0
 number-of-stops-by-race--reason-for-stop--equpiment,St Joseph Police Dept,2711,2222,325,114,11,29,10,2021,0
 search-statistics--what-searched--driver,Moberly Police Dept,39,37,1,0,0,0,1,2021,0
-disparity-index-by-race--population--acs-population,Cleveland Police Dept,658,625,0,22,3,0,26,2021,0
+disparity-index-by-race--population--2020-population,Cleveland Police Dept,658,625,0,22,3,0,26,2021,0
 rates-by-race--totals--contraband,Marionville Police Dept,1,1,0,0,0,0,0,2021,0
 number-of-stops-by-race--driver-age--17-and-under,St Joseph Police Dept,354,298,36,14,2,3,1,2021,0
 number-of-stops-by-race--reason-for-stop--investigative,Barry County Sheriff's Dept,14,14,0,0,0,0,0,2021,0
@@ -143,7 +143,7 @@ number-of-stops-by-race--all-stops,Wentzville Police Dept,8217,6850,1100,107,5,5
 search-statistics--probable-cause--consent,Martinsburg Police Dept,0,0,0,0,0,0,0,2021,0
 number-of-stops-by-race--driver-gender--female,Poplar Bluff Police Dept,1101,985,107,5,0,2,2,2021,0
 number-of-stops-by-race--driver-gender--male,Jamestown Police Dept,45,39,2,1,1,2,0,2021,0
-disparity-index-by-race--population--acs-population-pct,Carterville Police Dept,100,88.35,1.03,5.73,0.12,1.45,3.92,2021,0
+disparity-index-by-race--population--2020-population-pct,Carterville Police Dept,100,88.35,1.03,5.73,0.12,1.45,3.92,2021,0
 search-statistics--arrest-charge--traffic-violation,Qulin Police Dept,0,0,0,0,0,0,0,2021,0
 search-statistics--probable-cause--other,Riverview Police Dept,1,0,1,0,0,0,0,2021,0
 rates-by-race--totals--contraband,Manchester Police Dept,158,100,51,2,0,0,5,2021,0

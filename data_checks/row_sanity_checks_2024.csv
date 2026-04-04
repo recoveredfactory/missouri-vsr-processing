@@ -28,7 +28,7 @@ search-statistics--what-searched--driver-property,Monroe City Police Dept,27,20,
 number-of-stops-by-race--reason-for-stop--called-for-service,Hollister Police Dept,11,10,0,1,0,0,0,2024,0
 number-of-stops-by-race--stop-outcome--citation,Granby Police Dept,51,47,0,4,0,0,0,2024,0
 search-statistics--search-duration--31-minutes,Shelby County Sheriff's Dept,0,0,0,0,0,0,0,2024,0
-rates-by-race--population--acs-pop-pct,Easton Police Dept,100,97.1,0,1.24,1.66,0,0,2024,0
+rates-by-race--population--2023-acs-pop-pct,Easton Police Dept,100,97.1,0,1.24,1.66,0,0,2024,0
 number-of-stops-by-race--arrest-violation--property,Creve Coeur Police Dept,1,0,1,0,0,0,0,2024,0
 search-statistics--search-duration--31-minutes,Fulton Police Dept,3,2,1,0,0,0,0,2024,0
 number-of-stops-by-race--stop-outcome--warning,Festus Police Dept,1844,1697,108,22,2,7,8,2024,0
@@ -51,7 +51,7 @@ number-of-stops-by-race--arrest-violation--off-against-person,Holts Summit Polic
 number-of-stops-by-race--non-resident-stops,Mansfield Police Dept,944,916,21,5,0,2,0,2024,0
 rates-by-race--totals--citations,Bolivar Police Dept,477,433,21,20,1,2,0,2024,0
 number-of-stops-by-race--driver-age--30-39,Lake Ozark Police Dept,320,273,17,19,2,2,7,2024,0
-rates-by-race--population--acs-pop-pct,Sullivan Police Dept,100,87.41,1.35,1.69,0.42,0,10.31,2024,0
+rates-by-race--population--2023-acs-pop-pct,Sullivan Police Dept,100,87.41,1.35,1.69,0.42,0,10.31,2024,0
 search-statistics--probable-cause--consent,Oak Grove Police Dept,2,2,0,0,0,0,0,2024,0
 number-of-stops-by-race--officer-assignment--dedicated-traffic,Joplin Police Dept,2143,1877,156,76,9,9,16,2024,0
 number-of-stops-by-race--reason-for-stop--moving,University of Missouri-Kansas City Police Dept,361,238,75,17,2,20,9,2024,0
