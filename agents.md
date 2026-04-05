@@ -187,3 +187,31 @@ The data contract defines what the frontend can rely on across releases. It live
 | `consent-search` | `search-stats--probable-cause-authority-to-search--consent` | `search-statistics--probable-cause--consent` |
 
 Note: some 2020+ metrics have no pre-2020 equivalent (resident-only stops, ACS population rows, citation rate) and vice versa (pre-2020 bakes search rate and contraband hit rate directly; 2020+ derives them from raw counts). The crosswalk config will be the authoritative source; this table is a planning aid.
+
+---
+
+## Data for Frontend
+
+### Query layer
+
+The flat-file / per-agency JSON approach works well for a single year but becomes unwieldy at 20+ years. The planned query layer uses **DuckDB over S3 Parquet** as the substrate, with two access patterns:
+
+**Lambda + DuckDB API** — a thin serverless function that accepts structured queries and returns JSON. Handles cross-agency, cross-year aggregations, and spatial queries (DuckDB spatial extension). This is the primary runtime API for the frontend.
+
+**DuckDB MCP server** — the same DuckDB interface exposed as an MCP tool, used during development and data exploration. A single implementation serves both the developer agent (for querying data mid-task) and potentially the frontend itself. Run locally against `data/processed/*.parquet` or remotely against `releases/vN/` on S3.
+
+**DuckDB WASM** (under consideration) — query Parquet directly from the browser. Eliminates the Lambda layer for read-only queries; requires careful Parquet partitioning and acceptable cold-start times. Best suited for power-user / download features rather than the main editorial interface.
+
+Key design choice: **partition Parquet by year** at layer 3. DuckDB's partition pruning means a query for a single agency's 2024 data only scans the 2024 partition, not the full 11-year corpus.
+
+### Data-derived frontend artifacts
+
+The pipeline can generate frontend-facing content directly from data and schema, reducing manual maintenance:
+
+**"About the data" section** — auto-generated from the canonical metric crosswalk and schema definitions. Lists which metrics are available for which year ranges, what the race columns represent, and data caveats (ACS vintage, population denominator methodology). Emitted as a JSON blob or markdown at layer 3.
+
+**Versioned download links** — the manifest.json + S3 layout enables the frontend to render a "download the data" section that lists every available release, its year range, and a direct link, without any manual upkeep.
+
+**Agency year index** — a lightweight JSON index of `{agency, years_available, canonical_metrics_available}` that lets the frontend quickly determine what to show before fetching the full agency data.
+
+**Schema changelog** — each manifest.json entry includes a human-readable changelog that the frontend can surface in a "what changed" UI, linking data version to editorial context.
