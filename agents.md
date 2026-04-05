@@ -2,9 +2,9 @@
 
 ## Overview
 
-This project extracts, normalizes, and publishes Missouri's annual Vehicle Stops Report (VSR). Agencies are obligated by statute to report aggregate information about a number of metrics relating to the reason and outcomes of stops, broken down by the driver's race. They report their data to Missouri Attorney General's office, who work with researchers at the University of Missouri to generate the stops report.
+This project extracts, normalizes, and publishes Missouri's annual Vehicle Stops Report (VSR). Agencies are obligated by a statute that went into effect in 2000 to report aggregate information about a number of metrics relating to the reason and outcomes of stops, broken down by the driver's race. They report their data to Missouri Attorney General's office, who work with researchers at the University of Missouri to generate the stops report.
 
-Recovered Factory, using code originally developed at The Marshall Project, is extractining, combining, enriching, and publishing this data.
+Recovered Factory, using code originally developed at The Marshall Project, is extracting, combining, enriching, and publishing this data.
 
 The pipeline covers 2014–present across two distinct PDF formats (pre-2020 and 2020+), ~600 law enforcement agencies. Primary outputs are versioned, structured data files consumed by a separate frontend application and perhaps more importantly, available for journalists, researchers, policy makers, and concerned citizens to download and analyze.
 
@@ -153,8 +153,9 @@ The top-level `manifest.json` points to the current frontend-facing version. Upd
 **v2.0 — planned** (2014–2024, cross-era normalization)
 - Pre-2020 data (2014–2019) added to pipeline
 - `canonical_key` column added at layer 2 mapping both eras to shared concept names
-- Layer 3 release exposes canonical metrics; era-specific row_keys remain available for audit/research use
-- DuckDB query layer introduced (see Data for Frontend)
+- Layer 3 dist output collapses on `canonical_key`: where a canonical equivalent exists, the era-specific source row_key is dropped. This matters because 2020+ already has duplicate coverage — the pre-computed rates and the raw counts both appear under different row_keys for the same concept. The dist output should be clean and canonical-only.
+- Era-specific row_keys remain available in the layer 2 processed Parquet for audit/research use
+- **The biggest single task: thorough canonical mapping.** The draft crosswalk table in this doc covers a handful of rows; the full mapping spans all ~50+ row_keys across both eras, including deciding which pre-2020 rows have no 2020+ equivalent and vice versa. This mapping process should be done carefully and verified against source PDFs before any code is written.
 - Requires: canonical metric crosswalk config, processed.py era-aware subset lists, frontend schema update
 
 **v3.0 — future** (TBD)
@@ -232,11 +233,13 @@ The crosswalk config will be the authoritative source; this table is a planning 
 
 ### Query layer
 
-The query layer — Lambda + DuckDB serving the frontend — lives in the frontend repo, not here. Query patterns change when the frontend changes; those two things should evolve together. This repo's job ends at producing well-structured, versioned Parquet files on S3.
+The query layer — Lambda + DuckDB serving the frontend — lives in the frontend repo, not here. Query patterns change when the frontend changes; those two things should evolve together. This repo's job ends at producing well-structured, versioned Parquet, CSV, JSON, and PMTiles files on S3.
 
 For local data exploration, DuckDB against `data/processed/*.parquet` is the expected tool. It handles the full dataset comfortably and requires no infrastructure. Anyone doing serious pipeline work will have the parquets locally already. A local MCP server pointed at those parquets is a one-liner and doesn't need to live in either repo.
 
 Key design choice for layer 3 outputs: **partition Parquet by year**. DuckDB's partition pruning means a query for a single agency's 2024 data only scans the 2024 partition, keeping the frontend Lambda fast even as the year range grows.
+
+Lambda cold starts are not a meaningful concern here: the function will be kept warm with a cron ping, responses are heavily cached, and the data doesn't change between pipeline runs. There's no need for short cache TTLs or aggressive Lambda optimization.
 
 ### Data-derived frontend artifacts
 
