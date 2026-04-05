@@ -106,3 +106,84 @@ Asset checks are the primary regression gate. They run at two levels:
 **Adding sanity check rows**: pick an agency, read its PDF page, verify the values, append to `data_checks/row_sanity_checks_{year}.csv`. The `checked` column is for human review tracking; all rows run regardless.
 
 Unit tests (`pytest`) cover normalization ops and processing helpers but not the PDF parser directly — parser regressions are caught via the golden-file checks above.
+
+---
+
+## Data + Release
+
+### Release / version strategy
+
+Data releases follow semantic versioning (vMAJOR.MINOR):
+
+- **Major** — breaking schema change: columns renamed/removed, row_key structure changed, canonical metric definitions revised. Requires frontend coordination and a deprecation window for the prior major version.
+- **Minor** — backward-compatible addition: new years added, new canonical metrics added, new derived columns added. Frontend can adopt at its own pace.
+
+S3 layout:
+
+```
+s3://{bucket}/
+  releases/
+    v1/          ← current frozen release (2020–2024, era-specific row_keys)
+    v2/          ← next release (2014–2024, canonical_key layer added)
+  staging/
+    v2/          ← pipeline writes here; not safe for production frontend use
+  manifest.json  ← points to the current stable release version
+```
+
+Each release directory contains a `manifest.json`:
+
+```json
+{
+  "version": "2.0",
+  "released": "YYYY-MM-DD",
+  "years": [2014, 2015, ..., 2024],
+  "schema_version": "2.0",
+  "canonical_metrics": ["stops", "searches", "arrests", ...],
+  "changelog": "Added 2014–2019 pre-2020 format data with canonical_key normalization."
+}
+```
+
+The frontend reads `manifest.json` to discover the current release and can hard-pin to a specific version for stability.
+
+### Major migrations + milestones
+
+**v1.0 — current** (2020–2024, 2020+ format only)
+- Per-year extract assets with asset checks
+- Era-specific row_keys (`rates-by-race--*`, `number-of-stops-by-race--*`, `search-statistics--*`)
+- S3 flat-file outputs, per-agency JSON
+
+**v2.0 — planned** (2014–2024, cross-era normalization)
+- Pre-2020 data (2014–2019) added to pipeline
+- `canonical_key` column added at layer 2 mapping both eras to shared concept names
+- Layer 3 release exposes canonical metrics; era-specific row_keys remain available for audit/research use
+- DuckDB query layer introduced (see Data for Frontend)
+- Requires: canonical metric crosswalk config, processed.py era-aware subset lists, frontend schema update
+
+**v3.0 — future** (TBD)
+- May include: additional years as AG publishes, revised ACS population vintages, expanded GIS outputs
+
+### Data contract
+
+The data contract defines what the frontend can rely on across releases. It lives in this file and is the coordination point when pipeline and frontend agents work in parallel.
+
+**Stable across all versions:**
+- Core tidy row schema: `year`, `agency`, `row_key`, `row_id`, `table_id`, `section_id`, `metric_id`, plus race count columns
+- Race columns (2020+): `Total`, `White`, `Black`, `Hispanic`, `Native American`, `Asian`, `Other`
+- Race columns (pre-2020): `Total`, `White`, `Black`, `Hispanic`, `Asian`, `Am. Indian`, `Other`
+- `row_key` pattern: `{table_id}--{section_id}--{metric_id}`
+- `row_id` pattern: `{year}-{agency_slug}-{row_key}`
+
+**Added in v2:**
+- `canonical_key` — era-independent concept name (e.g., `stops`, `searches`, `arrests`, `moving-violation`, `consent-search`). Null for metrics with no cross-era equivalent.
+
+**Canonical metric crosswalk (draft — v2 design):**
+
+| canonical_key | pre-2020 row_key | 2020+ row_key |
+|---|---|---|
+| `stops` | `key-indicators--stops` | `rates-by-race--totals--all-stops` |
+| `searches` | `key-indicators--searches` | `rates-by-race--totals--searches` |
+| `arrests` | `key-indicators--arrests` | `number-of-stops-by-race--stop-outcome--arrests` |
+| `moving-violation` | `vehicle-stop-stats--reason-for-stop--moving` | `number-of-stops-by-race--reason-for-stop--moving` |
+| `consent-search` | `search-stats--probable-cause-authority-to-search--consent` | `search-statistics--probable-cause--consent` |
+
+Note: some 2020+ metrics have no pre-2020 equivalent (resident-only stops, ACS population rows, citation rate) and vice versa (pre-2020 bakes search rate and contraband hit rate directly; 2020+ derives them from raw counts). The crosswalk config will be the authoritative source; this table is a planning aid.
