@@ -186,7 +186,17 @@ The data contract defines what the frontend can rely on across releases. It live
 | `moving-violation` | `vehicle-stop-stats--reason-for-stop--moving` | `number-of-stops-by-race--reason-for-stop--moving` |
 | `consent-search` | `search-stats--probable-cause-authority-to-search--consent` | `search-statistics--probable-cause--consent` |
 
-Note: some 2020+ metrics have no pre-2020 equivalent (resident-only stops, ACS population rows, citation rate) and vice versa (pre-2020 bakes search rate and contraband hit rate directly; 2020+ derives them from raw counts). The crosswalk config will be the authoritative source; this table is a planning aid.
+**On arrests:** `key-indicators--arrests` (pre-2020) and `number-of-stops-by-race--stop-outcome--arrests` (2020+) measure the same thing and can be treated as equivalent in cross-era analysis.
+
+**On rates — the hard part:** This is where the eras diverge most interestingly. Pre-2020 reports pre-compute a small set of rates directly in the PDF (`key-indicators--search-rate`, `key-indicators--contraband-hit-rate`, `key-indicators--arrest-rate`). The 2020+ format drops the pre-computed rates in favor of raw counts, from which more rates can be derived — including citation rate and stop rate vs. ACS population, which have no pre-2020 equivalent. So:
+
+- `search-rate`, `contraband-hit-rate`, `arrest-rate`: present in both eras but sourced differently (pre-2020: pre-computed percentage; 2020+: derived from raw count rows)
+- `citation-rate`, `stop-rate` (vs. ACS population): 2020+ only — these comparisons cannot be made for pre-2020 years
+- The older format is better structured and more uniform in many respects; the newer format is richer analytically
+
+The crosswalk config (to be implemented in v2) will need to flag which rates are available per year range, so the frontend can conditionally show or suppress rate-based comparisons depending on the year selected.
+
+The crosswalk config will be the authoritative source; this table is a planning aid.
 
 ---
 
@@ -194,15 +204,13 @@ Note: some 2020+ metrics have no pre-2020 equivalent (resident-only stops, ACS p
 
 ### Query layer
 
-The flat-file / per-agency JSON approach works well for a single year but becomes unwieldy at 20+ years. The planned query layer uses **DuckDB over S3 Parquet** as the substrate, with two access patterns:
+The flat-file / per-agency JSON approach works well for a single year but becomes unwieldy at 20+ years. The assumed query layer is **DuckDB on S3 Parquet, served via AWS Lambda**. Traffic is currently light enough that Lambda cold starts are acceptable and the operational simplicity outweighs the latency cost of a persistent server.
 
-**Lambda + DuckDB API** — a thin serverless function that accepts structured queries and returns JSON. Handles cross-agency, cross-year aggregations, and spatial queries (DuckDB spatial extension). This is the primary runtime API for the frontend.
+**Lambda + DuckDB** — a thin Lambda function wraps DuckDB queries against versioned Parquet files on S3. Returns JSON. Handles cross-agency, cross-year aggregations and spatial queries (DuckDB spatial extension). This is both the production API for the frontend and, via an MCP wrapper, the developer query tool. One implementation, two consumers.
 
-**DuckDB MCP server** — the same DuckDB interface exposed as an MCP tool, used during development and data exploration. A single implementation serves both the developer agent (for querying data mid-task) and potentially the frontend itself. Run locally against `data/processed/*.parquet` or remotely against `releases/vN/` on S3.
+**MCP server** — the Lambda function is also exposed as an MCP tool during development. Agents can query the data mid-task (e.g., "show me stops for Belle PD 2014–2019") without materializing assets or writing one-off scripts. Run locally against `data/processed/*.parquet`; point at `releases/vN/` for production data.
 
-**DuckDB WASM** (under consideration) — query Parquet directly from the browser. Eliminates the Lambda layer for read-only queries; requires careful Parquet partitioning and acceptable cold-start times. Best suited for power-user / download features rather than the main editorial interface.
-
-Key design choice: **partition Parquet by year** at layer 3. DuckDB's partition pruning means a query for a single agency's 2024 data only scans the 2024 partition, not the full 11-year corpus.
+Key design choice: **partition Parquet by year** at layer 3. DuckDB's partition pruning means a query for a single agency's 2024 data only scans the 2024 partition, not the full corpus.
 
 ### Data-derived frontend artifacts
 
