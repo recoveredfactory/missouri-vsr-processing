@@ -2,17 +2,20 @@
 
 ## Overview
 
-This project extracts, normalizes, and publishes Missouri's annual Vehicle Stops Report (VSR) — a state-mandated racial profiling dataset from the Missouri Attorney General's office — for use in an editorial web product at The Marshall Project.
+This project extracts, normalizes, and publishes Missouri's annual Vehicle Stops Report (VSR). Agencies are obligated by statute to report aggregate information about a number of metrics relating to the reason and outcomes of stops, broken down by the driver's race. They report their data to Missouri Attorney General's office, who work with researchers at the University of Missouri to generate the stops report.
 
-The pipeline covers 2014–present across two distinct PDF formats (pre-2020 and 2020+), ~600 law enforcement agencies, and a growing span of years. Primary outputs are versioned, structured data files consumed by a separate frontend application.
+Recovered Factory, using code originally developed at The Marshall Project, is extractining, combining, enriching, and publishing this data.
+
+The pipeline covers 2014–present across two distinct PDF formats (pre-2020 and 2020+), ~600 law enforcement agencies. Primary outputs are versioned, structured data files consumed by a separate frontend application and perhaps more importantly, available for journalists, researchers, policy makers, and concerned citizens to download and analyze.
 
 **Design principles**
 
 - *Extract close to source.* Raw parsing preserves the original report's structure, metric names, and values without interpretation. Normalization is a separate, explicit layer.
-- *Reproducible by re-run.* Every output can be regenerated from source PDFs and config files in this repo.
-- *Checks at the seam.* Parser regressions are caught at the per-year extract layer before downstream assets run.
+- *Reproducible by re-running.* Every output can be deterministically regenerated from source PDFs and config files in this repo.
+- *Checks at each stage.* Parser regressions and data quality issues are caught at the per-year extract layer before downstream assets run and rely _heavily_ on Dagster asset checks; downstream asset checks (like data transformations) are more focused and use a mix of asset checks and unit tests.  
 - *Stable contracts.* The frontend pins to a versioned data release. Pipeline changes that affect outputs increment the release version rather than silently breaking consumers.
 - *Agent-friendly.* The repo is structured so that AI coding agents working on the pipeline and on the frontend can operate independently against a shared data contract, minimizing coordination overhead.
+- *Entirely backend.* APIs, microservices, and anything other than the most basic file outputs should live elsewhere.
 
 **Tech stack**
 
