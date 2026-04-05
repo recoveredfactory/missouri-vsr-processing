@@ -191,13 +191,24 @@ The data contract defines what the frontend can rely on across releases. It live
 
 **On arrests:** `key-indicators--arrests` (pre-2020) and `number-of-stops-by-race--stop-outcome--arrests` (2020+) measure the same thing and can be treated as equivalent in cross-era analysis.
 
-**On rates — the hard part:** This is where the eras diverge most interestingly. Pre-2020 reports pre-compute a small set of rates directly in the PDF (`key-indicators--search-rate`, `key-indicators--contraband-hit-rate`, `key-indicators--arrest-rate`). The 2020+ format drops the pre-computed rates in favor of raw counts, from which more rates can be derived — including citation rate and stop rate vs. ACS population, which have no pre-2020 equivalent. So:
+**On rates — the hard part:** The 2020+ format defines the canonical set of six rates we need. Their denominators matter:
 
-- `search-rate`, `contraband-hit-rate`, `arrest-rate`: present in both eras but sourced differently (pre-2020: pre-computed percentage; 2020+: derived from raw count rows)
-- `citation-rate`, `stop-rate` (vs. ACS population): 2020+ only — these comparisons cannot be made for pre-2020 years
-- The older format is better structured and more uniform in many respects; the newer format is richer analytically
+| rate | formula | pre-2020 | 2020+ |
+|---|---|---|---|
+| Stop rate | stops / prev-year ACS pop × 100 | ✗ no ACS population data | ✓ derived from raw counts |
+| Resident stop rate | resident stops / prev-year ACS pop × 100 | ✗ no ACS data, no resident split | ✓ derived from raw counts |
+| Search rate | searches / stops × 100 | ✓ pre-computed in PDF | ✓ derived from raw counts |
+| Contraband hit rate | searches w/ contraband / total searches × 100 | ✓ pre-computed in PDF | ✓ derived from raw counts |
+| Arrest rate | arrests / stops × 100 | ✓ pre-computed in PDF | ✓ derived from raw counts |
+| Citation rate | citations / stops × 100 | derivable (raw counts exist) | ✓ derived from raw counts |
 
-The crosswalk config (to be implemented in v2) will need to flag which rates are available per year range, so the frontend can conditionally show or suppress rate-based comparisons depending on the year selected.
+Key observations:
+- Stop rate and resident stop rate are 2020+ only. They require ACS population as the denominator — a methodological choice that makes them the most analytically interesting rates, and which pre-2020 reports simply don't support.
+- Search rate, contraband hit rate, and arrest rate exist in both eras but are sourced differently: pre-2020 gives them pre-computed as percentages in the PDF; 2020+ stores raw counts and derives them at layer 2.
+- Citation rate is technically derivable for pre-2020 (raw citation and stop counts both exist), but it was not a rate the older reports surfaced directly.
+- The pre-2020 format is better structured and more predictable in many respects; 2020+ is analytically richer.
+
+The crosswalk config (to be implemented in v2) must flag which rates are available per year range so the frontend can conditionally show or suppress rate comparisons by year.
 
 The crosswalk config will be the authoritative source; this table is a planning aid.
 
