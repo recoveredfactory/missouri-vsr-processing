@@ -215,3 +215,34 @@ The pipeline can generate frontend-facing content directly from data and schema,
 **Agency year index** — a lightweight JSON index of `{agency, years_available, canonical_metrics_available}` that lets the frontend quickly determine what to show before fetching the full agency data.
 
 **Schema changelog** — each manifest.json entry includes a human-readable changelog that the frontend can surface in a "what changed" UI, linking data version to editorial context.
+
+---
+
+## Development
+
+### Multi-agent setup
+
+The pipeline repo and frontend repo are kept separate — different toolchains, different deployment cadences. The coordination point between agents working on each side is the **data contract** section of this file and the `manifest.json` in each release.
+
+**Running two agents in parallel:**
+
+- Open one Claude Code session in the pipeline repo, one in the frontend repo
+- Give both sessions the relevant section of this file as context (paste or reference `agents.md`)
+- Define the change in terms of the data contract first — agree on what layer 3 will emit before either agent writes code
+- Pipeline agent works against `staging/vN/`; frontend agent works against the same staging path
+- Neither agent needs to understand the other repo's internals — only the contract matters
+
+**CLAUDE.md and memory:** Each repo has its own `CLAUDE.md` and per-project memory. The pipeline memory (`.claude/projects/.../memory/`) captures parser quirks, feedback, and project state that would otherwise be re-derived every session. Frontend repo should have equivalent memory for its own domain.
+
+**Branch and PR conventions:**
+- Feature branches are named `issue-{N}-{short-description}`
+- PRs close the issue they're tied to; commit messages reference the agent co-author
+- `agents.md` changes that affect the data contract should be committed and pushed before the implementing PR is opened, so both repos can reference the same contract version
+
+**Operational notes for agents:**
+- `pdftotext -layout` outputs are cached next to PDFs as `*.layout.txt`; delete to force re-extraction
+- S3 uploads happen only when the `s3` resource is configured; local runs skip upload silently
+- `row_key` encodes `{table_id}--{section_id}--{metric_id}`; `row_id` is `{year}-{agency_slug}-{row_key}`
+- Pre-2020 parser uses `_parse_pre2020_pdftotext_lines`; 2020+ uses the main state machine in `extract.py`
+- Sample PDF for fast dev iteration: `data/src/examples/VSRreport2023.pdf` (pages 1694–1745); use `run_configs/example_2023_sample.yaml` with `--select extract_pdf_data_2023`
+- Agency crosswalk CLI: `uv run python -m missouri_vsr.cli.crosswalk` — interactive fuzzy-match tool for resolving agency name variations; progress autosaves to `.state.json`
