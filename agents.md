@@ -78,20 +78,15 @@ Layer 3 — Released
 
 **The era-coherence problem** (current active design question): Pre-2020 and 2020+ reports use different metric names for equivalent concepts. The planned solution is a `canonical_key` column populated at layer 2 from a crosswalk config — e.g., both `key-indicators--stops` (2014–2019) and `rates-by-race--totals--all-stops` (2020+) map to canonical key `stops`. Layer 1 is untouched; layer 2 gains cross-year query capability; layer 3 exposes only canonical metrics to the frontend.
 
-### Staging + release workflow
+### Release workflow
 
-```
-main branch          → layer 1/2 assets; no versioned release
-staging/vN/ on S3    → pipeline writes here; frontend smoke-tests against it
-releases/vN/ on S3   → promoted from staging; frontend pins here
-```
+No formal staging environment. During active v2 development, outputs are published incrementally to `releases/v2/` on S3. The frontend stays pinned to v1 via the top-level `manifest.json` until a deliberate cutover. The version number is the signal; there's no separate staging path.
 
-A release is triggered manually after:
-1. All asset checks pass on main
-2. Frontend team has validated the staging build
-3. `manifest.json` is updated with schema version, year range, and changelog entry
+A release is cut by:
+1. All asset checks passing on main
+2. Updating the top-level `manifest.json` to point at the new version
 
-Patch releases (vN.x) are backward-compatible changes (new years added, bug fixes that don't change existing values). Minor/major releases require a frontend coordination window and deprecate the prior release after a transition period.
+Patch releases (vN.x) are backward-compatible: new years added, bug fixes that don't change existing values. Major releases require frontend coordination before the manifest is flipped.
 
 ### Testing strategy
 
@@ -121,16 +116,16 @@ Data releases follow semantic versioning (vMAJOR.MINOR):
 - **Major** — breaking schema change: columns renamed/removed, row_key structure changed, canonical metric definitions revised. Requires frontend coordination and a deprecation window for the prior major version.
 - **Minor** — backward-compatible addition: new years added, new canonical metrics added, new derived columns added. Frontend can adopt at its own pace.
 
+No formal staging environment. During active development, v2 is published incrementally to `releases/v2/` until it's ready — the version number is the signal. The frontend stays pinned to v1 until explicitly cut over.
+
 S3 layout:
 
 ```
 s3://{bucket}/
   releases/
-    v1/          ← current frozen release (2020–2024, era-specific row_keys)
-    v2/          ← next release (2014–2024, canonical_key layer added)
-  staging/
-    v2/          ← pipeline writes here; not safe for production frontend use
-  manifest.json  ← points to the current stable release version
+    v1/          ← frozen (2020–2024, era-specific row_keys)
+    v2/          ← live development target; incremented until ready
+  manifest.json  ← points to the current frontend-facing release
 ```
 
 Each release directory contains a `manifest.json`:
@@ -146,7 +141,7 @@ Each release directory contains a `manifest.json`:
 }
 ```
 
-The frontend reads `manifest.json` to discover the current release and can hard-pin to a specific version for stability.
+The top-level `manifest.json` points to the current frontend-facing version. Updating it is the release act.
 
 ### Major migrations + milestones
 
@@ -223,7 +218,9 @@ The University of Missouri researchers who build the report get the pre-computed
 
 Computing from raw counts for pre-2020 also lets us substitute ACS population for 2010 census population once those figures are sourced (a future task), and gives us citation rate for free even though the AG didn't surface it.
 
-Stop rate and resident stop rate remain 2020+-only until pre-2020 ACS population figures are available.
+Stop rate and resident stop rate are 2020+-only; pre-2020 ACS population is not a blocker for v2.
+
+**Editorial note on population-based rates:** Unlike crime statistics, traffic stop rates divided by residential population are methodologically limited — traffic through a place is not the same as who lives there. Population-based rates (stop rate, resident stop rate) are included because the reports provide them and they have analytical uses, but they should not be treated as the primary disparity measure. The resident vs. non-resident split in 2020+ is useful precisely because it partially addresses this, but it doesn't exist pre-2020 and there's no clean equivalent.
 
 The crosswalk config (to be implemented in v2) must flag which rates are available per year range so the frontend can conditionally show or suppress rate comparisons by year.
 
