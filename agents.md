@@ -219,9 +219,9 @@ Note: pre-2020 reports include a "% of population" row per agency (statewide and
 
 For v2, rates will be computed from raw counts at layer 2 for all years rather than using the pre-computed values from the PDFs. This gives a single consistent methodology across 2014–2024.
 
-For 2020+, the University of Missouri researchers who build the report get the pre-computed rates right. This means our computed rates should match the PDF values exactly — which doubles as a validation check on our raw count extraction. Any mismatch between our computed rate and the PDF's pre-computed value signals a parsing error in the underlying counts.
+The University of Missouri researchers who build the report get the pre-computed rates right in both eras. This means our computed rates should match the PDF values exactly — which doubles as a validation check on our raw count extraction. Any mismatch signals a parsing error in the underlying counts.
 
-For pre-2020, computing from raw counts also lets us substitute ACS population for 2010 census population once those figures are sourced (a future task), and gives us citation rate for free even though the AG didn't surface it.
+Computing from raw counts for pre-2020 also lets us substitute ACS population for 2010 census population once those figures are sourced (a future task), and gives us citation rate for free even though the AG didn't surface it.
 
 Stop rate and resident stop rate remain 2020+-only until pre-2020 ACS population figures are available.
 
