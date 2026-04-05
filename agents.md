@@ -215,9 +215,15 @@ Note: pre-2020 reports include a "% of population" row per agency (statewide and
 | Arrest rate | arrests / stops × 100 |
 | Citation rate | citations / stops × 100 |
 
-**Open design question — compute rates uniformly at layer 2?**
+**Design decision — compute rates uniformly at layer 2**
 
-The raw counts needed to derive search rate, arrest rate, and contraband hit rate exist in both eras. Citation rate raw counts also exist pre-2020 (`vehicle-stop-stats--stop-outcome--citation` / `key-indicators--stops`). This raises the option of discarding the pre-computed rates from both eras and recomputing everything consistently at layer 2 — once canonical_key normalization is in place. Benefits: identical methodology across 2014–2024, ability to substitute ACS population for census population in pre-2020 years when that data is available. The stop rate and resident stop rate would remain 2020+-only until pre-2020 ACS population figures are sourced.
+For v2, rates will be computed from raw counts at layer 2 for all years rather than using the pre-computed values from the PDFs. This gives a single consistent methodology across 2014–2024.
+
+For 2020+, the University of Missouri researchers who build the report get the pre-computed rates right. This means our computed rates should match the PDF values exactly — which doubles as a validation check on our raw count extraction. Any mismatch between our computed rate and the PDF's pre-computed value signals a parsing error in the underlying counts.
+
+For pre-2020, computing from raw counts also lets us substitute ACS population for 2010 census population once those figures are sourced (a future task), and gives us citation rate for free even though the AG didn't surface it.
+
+Stop rate and resident stop rate remain 2020+-only until pre-2020 ACS population figures are available.
 
 The crosswalk config (to be implemented in v2) must flag which rates are available per year range so the frontend can conditionally show or suppress rate comparisons by year.
 
