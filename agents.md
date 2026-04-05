@@ -235,13 +235,11 @@ The crosswalk config will be the authoritative source; this table is a planning 
 
 ### Query layer
 
-The flat-file / per-agency JSON approach works well for a single year but becomes unwieldy at 20+ years. The assumed query layer is **DuckDB on S3 Parquet, served via AWS Lambda**. Traffic is currently light enough that Lambda cold starts are acceptable and the operational simplicity outweighs the latency cost of a persistent server.
+The query layer — Lambda + DuckDB serving the frontend — lives in the frontend repo, not here. Query patterns change when the frontend changes; those two things should evolve together. This repo's job ends at producing well-structured, versioned Parquet files on S3.
 
-**Lambda + DuckDB** — a thin Lambda function wraps DuckDB queries against versioned Parquet files on S3. Returns JSON. Handles cross-agency, cross-year aggregations and spatial queries (DuckDB spatial extension). This is both the production API for the frontend and, via an MCP wrapper, the developer query tool. One implementation, two consumers.
+For local data exploration, DuckDB against `data/processed/*.parquet` is the expected tool. It handles the full dataset comfortably and requires no infrastructure. Anyone doing serious pipeline work will have the parquets locally already. A local MCP server pointed at those parquets is a one-liner and doesn't need to live in either repo.
 
-**MCP server** — the Lambda function is also exposed as an MCP tool during development. Agents can query the data mid-task (e.g., "show me stops for Belle PD 2014–2019") without materializing assets or writing one-off scripts. Run locally against `data/processed/*.parquet`; point at `releases/vN/` for production data.
-
-Key design choice: **partition Parquet by year** at layer 3. DuckDB's partition pruning means a query for a single agency's 2024 data only scans the 2024 partition, not the full corpus.
+Key design choice for layer 3 outputs: **partition Parquet by year**. DuckDB's partition pruning means a query for a single agency's 2024 data only scans the 2024 partition, keeping the frontend Lambda fast even as the year range grows.
 
 ### Data-derived frontend artifacts
 
