@@ -407,11 +407,15 @@ def _build_total_stops_lookup(combined: pd.DataFrame) -> Dict[str, int]:
 
 def _prepare_tile_layer(gdf: pd.DataFrame, boundary_type: str):
     gpd = _require_geopandas()
-    cols = ["geoid", "name", "namelsad", "statefp", "agency_id", "agency_name", "total_stops", "geometry"]
+    cols = ["geoid", "name", "namelsad", "statefp", "agency_id", "agency_name", "total_stops", "centroid_lat", "centroid_lng", "geometry"]
     if boundary_type == "county":
         cols.insert(4, "countyfp")
     else:
         cols.insert(4, "placefp")
+    gdf = gdf.copy()
+    centroids = gdf.geometry.centroid
+    gdf["centroid_lat"] = centroids.y
+    gdf["centroid_lng"] = centroids.x
     missing = [col for col in cols if col not in gdf.columns]
     if missing:
         raise ValueError(f"Missing required columns for tiles: {missing}")
