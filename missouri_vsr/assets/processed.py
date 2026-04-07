@@ -705,6 +705,7 @@ def build_agency_index_records(
             key = canonical or display_name
             entry = names_by_key.get(key)
             if entry is None:
+                agency_type = str(row.get("AgencyType") or "").strip() or None
                 entry = {
                     "agency_slug": _agency_slug(canonical or display_name),
                     "canonical_name": canonical,
@@ -713,6 +714,7 @@ def build_agency_index_records(
                     "zip": None,
                     "phone": None,
                     "county": None,
+                    "agency_type": agency_type,
                     "census_geoid": _extract_jurisdiction_geoid(row),
                     metric_row_key: None,
                     metric_alias: None,
@@ -748,6 +750,7 @@ def build_agency_index_records(
                     "zip": None,
                     "phone": None,
                     "county": None,
+                    "agency_type": None,
                     "census_geoid": None,
                     metric_row_key: None,
                     metric_alias: None,
@@ -783,6 +786,7 @@ def build_agency_index_records(
                     "zip": None,
                     "phone": None,
                     "county": None,
+                    "agency_type": None,
                     "census_geoid": None,
                     metric_row_key: None,
                     metric_alias: None,
@@ -802,6 +806,7 @@ def build_agency_index_records(
                 "zip": None,
                 "phone": None,
                 "county": None,
+                "agency_type": None,
                 "census_geoid": None,
                 metric_row_key: None,
                 metric_alias: None,
