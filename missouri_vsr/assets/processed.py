@@ -806,6 +806,7 @@ def build_agency_index_records(
                 "zip": None,
                 "phone": None,
                 "county": None,
+                "agency_type": None,
                 "census_geoid": None,
                 metric_row_key: None,
                 metric_alias: None,
