@@ -42,6 +42,20 @@ YEAR_URLS: Dict[int, str] = {
     2016: "https://ago.mo.gov/wp-content/uploads/2016agencyreports.pdf",
     2015: "https://ago.mo.gov/wp-content/uploads/2015agencyreports.pdf",
     2014: "https://ago.mo.gov/wp-content/uploads/2014agencyreports.pdf",
+    2013: "https://ago.mo.gov/wp-content/uploads/2013agencyreports.pdf",
+    2012: "https://ago.mo.gov/wp-content/uploads/2012agencyreports.pdf",
+    2011: "https://ago.mo.gov/wp-content/uploads/2011agencyreports.pdf",
+    2010: "https://ago.mo.gov/wp-content/uploads/2010agencyreports.pdf",
+    2009: "https://ago.mo.gov/wp-content/uploads/2009agencyreports.pdf",
+    2008: "https://ago.mo.gov/wp-content/uploads/2008agencyreports.pdf",
+    2007: "https://ago.mo.gov/wp-content/uploads/2007agencyreports.pdf",
+    2006: "https://ago.mo.gov/wp-content/uploads/2006agencyreports.pdf",
+    2005: "https://ago.mo.gov/wp-content/uploads/2005agencyreports.pdf",
+    2004: "https://ago.mo.gov/wp-content/uploads/2004agencyreports.pdf",
+    2003: "https://ago.mo.gov/wp-content/uploads/2003agencyreports.pdf",
+    2002: "https://ago.mo.gov/wp-content/uploads/2002agencyreports.pdf",
+    2001: "https://ago.mo.gov/wp-content/uploads/2001agencyreports.pdf",
+    2000: "https://ago.mo.gov/wp-content/uploads/2000agencyreports.pdf",
 }
 
 # ------------------------------------------------------------------------------
