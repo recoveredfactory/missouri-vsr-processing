@@ -419,6 +419,75 @@ def _prepare_tile_layer(gdf: pd.DataFrame, boundary_type: str):
     return layer
 
 
+def _extract_address_point(row: pd.Series):
+    """Return (lat, lng) from geocode_address_response, or (None, None)."""
+    resp = _parse_json(row.get("geocode_address_response"))
+    if resp is None:
+        return None, None
+    results = resp.get("results")
+    if not isinstance(results, list) or not results:
+        return None, None
+    loc = results[0].get("location")
+    if not isinstance(loc, dict):
+        return None, None
+    return loc.get("lat"), loc.get("lng")
+
+
+def _prepare_centroid_layer(
+    counties_gdf: pd.DataFrame,
+    places_gdf: pd.DataFrame,
+    agency_reference_geocoded: pd.DataFrame,
+):
+    gpd = _require_geopandas()
+    from shapely.geometry import Point  # type: ignore
+
+    cols = ["geoid", "name", "agency_id", "agency_name", "total_stops", "boundary_type", "geometry"]
+
+    # Matched agencies: centroid derived from polygon boundary
+    county_matched = counties_gdf[pd.notna(counties_gdf["agency_id"])].copy()
+    place_matched = places_gdf[pd.notna(places_gdf["agency_id"])].copy()
+    county_matched["geometry"] = county_matched.geometry.centroid
+    place_matched["geometry"] = place_matched.geometry.centroid
+
+    matched_ids = set(
+        pd.concat(
+            [county_matched["agency_id"], place_matched["agency_id"]], ignore_index=True
+        ).dropna().astype(str)
+    )
+
+    # Unmatched agencies: fall back to geocoded address point
+    fallback_rows = []
+    for _, row in agency_reference_geocoded.iterrows():
+        agency_id = _pick_agency_id(row)
+        if agency_id is None or str(agency_id) in matched_ids:
+            continue
+        lat, lng = _extract_address_point(row)
+        if lat is None or lng is None:
+            continue
+        fallback_rows.append({
+            "geoid": None,
+            "name": _pick_agency_name(row),
+            "agency_id": agency_id,
+            "agency_name": _pick_agency_name(row),
+            "total_stops": None,
+            "boundary_type": "point",
+            "geometry": Point(lng, lat),
+        })
+
+    parts: list[pd.DataFrame] = [
+        p[cols] for p in [county_matched, place_matched] if not p.empty
+    ]
+    if fallback_rows:
+        parts.append(
+            gpd.GeoDataFrame(fallback_rows, geometry="geometry", crs="EPSG:4326")[cols]
+        )
+
+    if not parts:
+        return gpd.GeoDataFrame(columns=cols, geometry="geometry", crs="EPSG:4326")
+    combined = pd.concat(parts, ignore_index=True)
+    return gpd.GeoDataFrame(combined, geometry="geometry", crs="EPSG:4326")
+
+
 def _run_command(cmd: List[str], log) -> None:
     log.info("Running command: %s", " ".join(cmd))
     try:
@@ -694,6 +763,7 @@ def map_agencies_to_boundaries(
     ins={
         "mo_counties_enriched": AssetIn(key=AssetKey("mo_counties_enriched")),
         "mo_places_enriched": AssetIn(key=AssetKey("mo_places_enriched")),
+        "agency_reference_geocoded": AssetIn(key=AssetKey("agency_reference_geocoded")),
     },
     outs={
         "mo_jurisdictions_pmtiles": AssetOut(),
@@ -703,7 +773,12 @@ def map_agencies_to_boundaries(
     required_resource_keys={"data_dir_processed", "data_dir_out", "s3"},
     description="Build PMTiles for Missouri jurisdictions and write a manifest.",
 )
-def build_mo_jurisdiction_tiles(context, mo_counties_enriched: pd.DataFrame, mo_places_enriched: pd.DataFrame):
+def build_mo_jurisdiction_tiles(
+    context,
+    mo_counties_enriched: pd.DataFrame,
+    mo_places_enriched: pd.DataFrame,
+    agency_reference_geocoded: pd.DataFrame,
+):
     tiles_dir = _out_tiles_dir(context)
     _ensure_dir(tiles_dir)
     tmp_dir = _processed_gis_dir(context) / "tiles_tmp"
@@ -711,11 +786,14 @@ def build_mo_jurisdiction_tiles(context, mo_counties_enriched: pd.DataFrame, mo_
 
     counties_layer = _prepare_tile_layer(mo_counties_enriched, boundary_type="county")
     places_layer = _prepare_tile_layer(mo_places_enriched, boundary_type="place")
+    centroids_layer = _prepare_centroid_layer(mo_counties_enriched, mo_places_enriched, agency_reference_geocoded)
 
     counties_geojson = tmp_dir / "counties.geojson"
     places_geojson = tmp_dir / "places.geojson"
+    centroids_geojson = tmp_dir / "centroids.geojson"
     counties_layer.to_file(counties_geojson, driver="GeoJSON", index=False)
     places_layer.to_file(places_geojson, driver="GeoJSON", index=False)
+    centroids_layer.to_file(centroids_geojson, driver="GeoJSON", index=False)
 
     tippecanoe = shutil.which("tippecanoe")
     tile_join = shutil.which("tile-join")
@@ -725,6 +803,7 @@ def build_mo_jurisdiction_tiles(context, mo_counties_enriched: pd.DataFrame, mo_
 
     counties_mbtiles = tmp_dir / "counties.mbtiles"
     places_mbtiles = tmp_dir / "places.mbtiles"
+    centroids_mbtiles = tmp_dir / "centroids.mbtiles"
     combined_mbtiles = tmp_dir / "mo_jurisdictions.mbtiles"
 
     _run_command(
@@ -756,7 +835,29 @@ def build_mo_jurisdiction_tiles(context, mo_counties_enriched: pd.DataFrame, mo_
         context.log,
     )
     _run_command(
-        [tile_join, "-o", str(combined_mbtiles), "--force", str(counties_mbtiles), str(places_mbtiles)],
+        [
+            tippecanoe,
+            "-o",
+            str(centroids_mbtiles),
+            "-l",
+            "centroids",
+            "-Z0",
+            "-z12",
+            "--force",
+            str(centroids_geojson),
+        ],
+        context.log,
+    )
+    _run_command(
+        [
+            tile_join,
+            "-o",
+            str(combined_mbtiles),
+            "--force",
+            str(counties_mbtiles),
+            str(places_mbtiles),
+            str(centroids_mbtiles),
+        ],
         context.log,
     )
 
@@ -777,6 +878,8 @@ def build_mo_jurisdiction_tiles(context, mo_counties_enriched: pd.DataFrame, mo_
                 f"counties:{counties_geojson}",
                 "-L",
                 f"places:{places_geojson}",
+                "-L",
+                f"centroids:{centroids_geojson}",
             ],
             context.log,
         )
@@ -794,6 +897,12 @@ def build_mo_jurisdiction_tiles(context, mo_counties_enriched: pd.DataFrame, mo_
                 "row_count": int(len(places_layer)),
                 "bounds": [float(v) for v in places_layer.total_bounds],
                 "schema": {col: str(places_layer[col].dtype) for col in places_layer.columns if col != "geometry"},
+            },
+            "centroids": {
+                "row_count": int(len(centroids_layer)),
+                "bounds": [float(v) for v in centroids_layer.total_bounds] if not centroids_layer.empty else [],
+                "schema": {col: str(centroids_layer[col].dtype) for col in centroids_layer.columns if col != "geometry"},
+                "note": "Point layer: polygon centroid for county/municipal agencies; geocoded address point for others.",
             },
         },
         "pmtiles": {
