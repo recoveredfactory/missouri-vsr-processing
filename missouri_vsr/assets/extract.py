@@ -42,9 +42,9 @@ YEAR_URLS: Dict[int, str] = {
     2016: "https://ago.mo.gov/wp-content/uploads/2016agencyreports.pdf",
     2015: "https://ago.mo.gov/wp-content/uploads/2015agencyreports.pdf",
     2014: "https://ago.mo.gov/wp-content/uploads/2014agencyreports.pdf",
-    2013: "https://ago.mo.gov/wp-content/uploads/2013agencyreports.pdf",
-    2012: "https://ago.mo.gov/wp-content/uploads/2012agencyreports.pdf",
-    2011: "https://ago.mo.gov/wp-content/uploads/2011agencyreports.pdf",
+    2013: "https://ago.mo.gov/wp-content/uploads/2013-agency-reports.pdf",
+    2012: "https://ago.mo.gov/wp-content/uploads/2012agencyreport.pdf",
+    2011: "https://ago.mo.gov/wp-content/uploads/2011agencyreport.pdf",
     2010: "https://ago.mo.gov/wp-content/uploads/2010agencyreports.pdf",
     2009: "https://ago.mo.gov/wp-content/uploads/2009agencyreports.pdf",
     2008: "https://ago.mo.gov/wp-content/uploads/2008agencyreports.pdf",
@@ -62,7 +62,7 @@ YEAR_URLS: Dict[int, str] = {
 # Download PDFs (one logical asset per year)
 # ------------------------------------------------------------------------------
 @multi_asset(
-    outs={str(year): AssetOut(metadata={"url": url}) for year, url in YEAR_URLS.items()},
+    outs={str(year): AssetOut(metadata={"url": url}, is_required=False) for year, url in YEAR_URLS.items()},
     group_name="reports",
     can_subset=True,
     required_resource_keys={"data_dir_report_pdfs"},

@@ -137,7 +137,7 @@ Each release directory contains a `manifest.json`:
   "years": [2014, 2015, ..., 2024],
   "schema_version": "2.0",
   "canonical_metrics": ["stops", "searches", "arrests", ...],
-  "changelog": "Added 2014–2019 pre-2020 format data with canonical_key normalization."
+  "changelog": "Added 2000–2019 pre-2020 format data with canonical_key normalization."
 }
 ```
 
@@ -150,8 +150,12 @@ The top-level `manifest.json` points to the current frontend-facing version. Upd
 - Era-specific row_keys (`rates-by-race--*`, `number-of-stops-by-race--*`, `search-statistics--*`)
 - S3 flat-file outputs, per-agency JSON
 
-**v2.0 — planned** (2014–2024, cross-era normalization)
-- Pre-2020 data (2014–2019) added to pipeline
+**v2.0 — planned** (2000–2024, cross-era normalization)
+- Pre-2020 data (2000–2019) added to pipeline. **Year-range notes from verification:**
+  - 2000: fully parsed; key-indicators + search-stats only (no vehicle-stop-stats, no arrest-rate/contraband-hit-rate)
+  - 2001–2003: **partially parsed** — ~50% of agencies have data. Root cause: PDFs omit blank race columns entirely instead of printing "0", but the parser expects ≥6 numeric tokens per row. Tracked as a known parser limitation; fix deferred.
+  - 2002+: arrest-charge table added; 2004+: vehicle-stop-stats table added; 2009: some row_key renames (reason-for-stop--for-moving→moving, driver-age--age-17-and-under→17-and-under, arrest-charge--offense-against→off-against-person)
+  - 2014–2019: full parse, stable schema
 - `canonical_key` column added at layer 2 mapping both eras to shared concept names
 - Layer 3 dist output collapses on `canonical_key`: where a canonical equivalent exists, the era-specific source row_key is dropped. This matters because 2020+ already has duplicate coverage — the pre-computed rates and the raw counts both appear under different row_keys for the same concept. The dist output should be clean and canonical-only.
 - Era-specific row_keys remain available in the layer 2 processed Parquet for audit/research use
