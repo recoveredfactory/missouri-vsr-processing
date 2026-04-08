@@ -449,6 +449,14 @@ _SEARCH_STATS_TRIGGERS: Dict[str, str | None] = {
 # Strip these tokens when they lead the label so they don't pollute metric names.
 _SEARCH_STATS_SECONDARY_FRAGMENTS = {"authority", "band", "found"}
 
+# Second words of multi-line section headers that appear on a no-value line AFTER the
+# trigger word. When seen while a pending_metric_label is set, the remainder of the
+# line should be appended to pending_metric_label rather than replacing it.
+# e.g. 2000 format: "Arrest Outstanding\ncharge warrant\n[values]"
+#   → section trigger "arrest" fires, pending = "Outstanding"
+#   → "charge warrant" → "charge" is a header continuation → append "warrant" → pending = "Outstanding warrant"
+_SEARCH_STATS_HEADER_CONTINUATIONS = {"charge"}
+
 _PRE2020_DRIVER_GENDER_METRICS = {"male", "female"}
 
 
@@ -812,9 +820,31 @@ def _parse_pre2020_pdftotext_lines(
         # Save the stripped text as a candidate label.  If the next data line
         # has no label of its own (values-only), this becomes the metric name.
         # This handles e.g. "Reasonable\n  [data]\nsuspicion-weapon".
+        # Also fires section triggers that appear on no-value lines (e.g. 2000
+        # "Arrest Outstanding" / "charge warrant" / "[values]" pattern).
         tokens = [t for t in line.split() if t]
         if tokens and not any(_is_numeric(t) for t in tokens):
             stats["section_continuations"] += 1
+            trigger = tokens[0].lower()
+            # Fire section triggers even when the line has no values
+            if current_table_id == "search-stats" and trigger in _SEARCH_STATS_TRIGGERS:
+                new_section = _SEARCH_STATS_TRIGGERS[trigger]
+                if new_section is not None:
+                    current_section = new_section
+                remaining = " ".join(tokens[1:]).strip()
+                pending_metric_label = remaining if remaining else None
+                continue
+            # Append to pending label when this is a multi-line section-header continuation
+            # (e.g. "charge" as the second word of "Arrest charge")
+            if (
+                current_table_id == "search-stats"
+                and pending_metric_label is not None
+                and trigger in _SEARCH_STATS_HEADER_CONTINUATIONS
+            ):
+                remaining = " ".join(tokens[1:]).strip()
+                if remaining:
+                    pending_metric_label = pending_metric_label + " " + remaining
+                continue
             pending_metric_label = line  # already stripped by _normalize_line
             continue
 
