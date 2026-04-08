@@ -1,0 +1,12 @@
+{
+  "name": "missouri-vsr-analysis",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "observable preview",
+    "build": "observable build"
+  },
+  "dependencies": {
+    "@observablehq/framework": "^1.13.4"
+  }
+}
