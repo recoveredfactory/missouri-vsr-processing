@@ -186,6 +186,54 @@ def _parse_agency_comments(lines: list[str], *, year: int, pdf_name: str, url: s
     return list(records.values())
 
 # ------------------------------------------------------------------------------
+# Canonical key crosswalk helpers
+# ------------------------------------------------------------------------------
+
+def _parse_year_range(yr_range: str) -> list[int]:
+    """Parse "2020-2024" or "2019" into a list of years."""
+    yr_range = yr_range.strip()
+    if "-" in yr_range:
+        parts = yr_range.split("-")
+        return list(range(int(parts[0]), int(parts[-1]) + 1))
+    return [int(yr_range)]
+
+
+def _build_canonical_key_lookup(crosswalk_path: Path) -> dict[tuple[str, int], str]:
+    """
+    Build a {(row_key, year): canonical_key} lookup from the crosswalk CSV.
+
+    Handles pipe-separated row_keys and year ranges for renamed metrics.
+    Multiple pipe-separated values align 1:1; if there are more row_keys than
+    year ranges (post-2020 duplicates covering the same years), the last year
+    range is repeated for the extra row_keys.
+    """
+    lookup: dict[tuple[str, int], str] = {}
+    df = pd.read_csv(crosswalk_path)
+
+    for _, row in df.iterrows():
+        canonical_key = row["canonical_key"]
+
+        for col_key, col_years in (
+            ("pre_2020_row_key", "pre_2020_years"),
+            ("post_2020_row_key", "post_2020_years"),
+        ):
+            raw_keys = str(row.get(col_key, ""))
+            raw_years = str(row.get(col_years, ""))
+            if not raw_keys or raw_keys == "nan" or not raw_years or raw_years == "nan":
+                continue
+
+            keys = [k.strip() for k in raw_keys.split("|")]
+            year_ranges = [y.strip() for y in raw_years.split("|")]
+
+            for i, rk in enumerate(keys):
+                yr_range = year_ranges[min(i, len(year_ranges) - 1)]
+                for year in _parse_year_range(yr_range):
+                    lookup[(rk, year)] = canonical_key
+
+    return lookup
+
+
+# ------------------------------------------------------------------------------
 # Combine all extracted DataFrame assets into one JSON and DataFrame
 # ------------------------------------------------------------------------------
 def _normalize_acs_population_rows(combined: pd.DataFrame, log) -> pd.DataFrame:
@@ -250,6 +298,25 @@ def combine_reports(context, **extracted_reports: dict[str, pd.DataFrame]) -> pd
         combined = combined.rename(columns={"slug": "row_key"})
     if "slug" in combined.columns:
         combined = combined.drop(columns=["slug"])
+
+    # Add canonical_key column from crosswalk BEFORE ACS normalization so that
+    # year-specific population row_keys (e.g. rates-by-race--population--2019-population)
+    # still match the crosswalk entries before they are stripped to --acs-pop.
+    crosswalk_path = Path("data/src/canonical_crosswalk.csv")
+    if crosswalk_path.exists():
+        ck_lookup = _build_canonical_key_lookup(crosswalk_path)
+        combined["canonical_key"] = [
+            ck_lookup.get((rk, yr))
+            for rk, yr in zip(combined["row_key"], combined["year"])
+        ]
+        mapped = combined["canonical_key"].notna().sum()
+        context.log.info(
+            "canonical_key: %d/%d rows mapped (%.1f%%)",
+            int(mapped), len(combined), 100 * mapped / len(combined) if len(combined) else 0,
+        )
+    else:
+        combined["canonical_key"] = None
+        context.log.warning("canonical_crosswalk.csv not found at %s; canonical_key set to None", crosswalk_path)
 
     combined = _normalize_acs_population_rows(combined, context.log)
 

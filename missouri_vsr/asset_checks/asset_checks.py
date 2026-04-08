@@ -19,6 +19,7 @@ EXPECTED_COLUMNS_COMBINED = [
     "Asian",
     "Other",
     "Am. Indian",  # pre-2020 rows only; NaN for 2020+
+    "canonical_key",  # era-independent concept name; None for era-specific metrics
     "year",
     "row_key",
     "agency",
