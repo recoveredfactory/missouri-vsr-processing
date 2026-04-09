@@ -820,7 +820,7 @@ def build_agency_index_records(
     zip_cols = ["AddressZip", "Zip", "ZipCode"]
     phone_cols = ["Phone", "PhoneNumber", "Phone #"]
     county_cols = ["geocode_jurisdiction_county", "geocode_address_county", "County"]
-    metric_row_key = "rates-by-race--totals--all-stops"
+    metric_row_key = "stops"
     metric_col = f"{metric_row_key}__Total"
     metric_alias = "all_stops_total"
 
@@ -979,7 +979,11 @@ def write_agency_year_json(
     agency_reference_geocoded: pd.DataFrame,
     agency_comments: pd.DataFrame,
 ) -> List[str]:
-    """Write one JSON file per agency with row-level row_key metadata and values."""
+    """Write one JSON file per agency per year under agency_year/{slug}/{year}.json.
+
+    Reads rank/percentile rows from reports_with_rank_percentile.parquet (already
+    canonical-key-collapsed).  One file per (agency, year); ~30–50 KB each.
+    """
     del agency_reference_geocoded
     if combined.empty:
         context.log.warning("Combined DataFrame empty; no JSON outputs created.")
@@ -1055,11 +1059,6 @@ def write_agency_year_json(
                     "source_url": _json_safe_value(row.get("source_url")),
                 }
                 comments_lookup.setdefault(key, []).append(entry)
-            for key in comments_lookup:
-                comments_lookup[key] = sorted(
-                    comments_lookup[key],
-                    key=lambda item: (item.get("year") is None, item.get("year")),
-                )
             context.log.info("Loaded agency comments for %d agencies", len(comments_lookup))
         except Exception as exc:
             context.log.exception("Failed to process agency comments: %s", exc)
@@ -1104,26 +1103,38 @@ def write_agency_year_json(
     working = combined[subset_cols].copy()
 
     output_paths: List[str] = []
-    for agency, group in working.groupby("agency", sort=False):
-        records: List[dict] = []
-        for _, row in group.sort_values(["year", "row_key"], kind="mergesort").iterrows():
-            payload = {col: row.get(col) for col in row_cols if col in row.index}
-            year_val = payload.get("year")
-            payload["year"] = int(year_val) if pd.notna(year_val) else None
-            records.append(_json_safe_record(payload))
-
+    for agency, agency_group in working.groupby("agency", sort=False):
         agency_slug = _agency_slug(agency)
-        out_path = out_root / f"{agency_slug}.json"
-        payload = {"agency": agency, "rows": records}
+        slug_dir = out_root / agency_slug
+        slug_dir.mkdir(parents=True, exist_ok=True)
+
         meta_row = agency_meta_lookup.get(str(agency).strip())
-        if meta_row is not None:
-            payload["agency_metadata"] = _series_to_json_dict(meta_row)
-        comments = comments_lookup.get(_normalize_agency_key(agency))
-        if comments:
-            payload["agency_comments"] = comments
-        out_path.write_text(json.dumps(payload, indent=2))
-        output_paths.append(str(out_path))
-        context.log.info("Wrote %d year rows for %s → %s", len(records), agency, out_path)
+        agency_metadata = _series_to_json_dict(meta_row) if meta_row is not None else None
+        all_agency_comments = comments_lookup.get(_normalize_agency_key(agency)) or []
+
+        sorted_agency_group = agency_group.sort_values(["year", "row_key"], kind="mergesort")
+        for year_val, year_group in sorted_agency_group.groupby("year", sort=True):
+            year = int(year_val) if pd.notna(year_val) else None
+            records: List[dict] = []
+            for _, row in year_group.iterrows():
+                payload = {col: row.get(col) for col in row_cols if col in row.index}
+                yr = payload.get("year")
+                payload["year"] = int(yr) if pd.notna(yr) else None
+                records.append(_json_safe_record(payload))
+
+            out_path = slug_dir / f"{year}.json"
+            file_payload: dict = {"agency": agency, "year": year, "rows": records}
+            if agency_metadata is not None:
+                file_payload["agency_metadata"] = agency_metadata
+            year_comments = [c for c in all_agency_comments if c.get("year") == year]
+            if year_comments:
+                file_payload["agency_comments"] = year_comments
+            out_path.write_text(json.dumps(file_payload, indent=2))
+            output_paths.append(str(out_path))
+
+        context.log.info(
+            "Wrote %d year files for %s → %s/", len(list(slug_dir.glob("*.json"))), agency, slug_dir
+        )
 
     base_dir = Path(context.resources.data_dir_out.get_path())
     uploaded = upload_paths(
@@ -1148,7 +1159,6 @@ def write_agency_year_json(
     return output_paths
 
 
-@op(out=Out(list), required_resource_keys={"data_dir_out", "s3"})
 def write_metric_year_json(context, combined: pd.DataFrame) -> List[str]:
     """Write one JSON file per row_key with agency/year and race columns."""
     combined = _collapse_to_canonical(combined)
@@ -1877,27 +1887,19 @@ def write_report_dimension_index_json(context, combined: pd.DataFrame) -> str:
 @asset(
     name="agency_year_json_exports",
     group_name="dist",
-    deps=[AssetKey("combine_all_reports")],
+    deps=[AssetKey("reports_with_rank_percentile")],
     required_resource_keys={"data_dir_processed", "data_dir_out", "s3"},
-    description="Generate per-agency JSON files from canonical combined Parquet (no rank/percentile rows).",
+    description="Generate per-agency per-year JSON files (dist/agency_year/{slug}/{year}.json) from rank/percentile Parquet.",
 )
 def agency_year_json_exports(context) -> List[str]:
     processed_dir = Path(context.resources.data_dir_processed.get_path())
-    combined = pd.read_parquet(processed_dir / "all_combined_output.parquet")
-    combined = _collapse_to_canonical(combined)
-    context.log.info("Loaded canonical view: %d rows for agency JSON export", len(combined))
-    # Load reference and comments from parquet if available; pass empty frames if not
-    agency_reference_geocoded = pd.DataFrame()
+    combined = pd.read_parquet(processed_dir / "reports_with_rank_percentile.parquet")
+    context.log.info("Loaded rank/percentile view: %d rows for agency-year JSON export", len(combined))
     agency_comments = pd.DataFrame()
-    for ref_name in ("agency_reference_geocoded.parquet", "agency_reference.parquet"):
-        ref_path = processed_dir / ref_name
-        if ref_path.exists():
-            agency_reference_geocoded = pd.read_parquet(ref_path)
-            break
     comments_path = processed_dir / "agency_comments.parquet"
     if comments_path.exists():
         agency_comments = pd.read_parquet(comments_path)
-    return write_agency_year_json(context, combined, agency_reference_geocoded, agency_comments)
+    return write_agency_year_json(context, combined, pd.DataFrame(), agency_comments)
 
 
 @op(out=Out(str), required_resource_keys={"data_dir_out", "s3"})
@@ -1999,14 +2001,19 @@ def statewide_agency_json_export(combine_all_reports: pd.DataFrame) -> str:
     return write_statewide_agency_json(combine_all_reports)
 
 
-@graph_asset(
+@asset(
     name="metric_year_json_exports",
     group_name="dist",
-    ins={"combine_all_reports": AssetIn(key=AssetKey("combine_all_reports"))},
+    deps=[AssetKey("combine_all_reports")],
+    required_resource_keys={"data_dir_processed", "data_dir_out", "s3"},
     description="Generate per-row_key JSON files with agency/year/race values.",
 )
-def metric_year_json_exports(combine_all_reports: pd.DataFrame) -> List[str]:
-    return write_metric_year_json(combine_all_reports)
+def metric_year_json_exports(context) -> List[str]:
+    processed_dir = Path(context.resources.data_dir_processed.get_path())
+    con = _open_canonical_db(str(processed_dir / "all_combined_output.parquet"))
+    combined = con.execute("SELECT * FROM canonical_combined").df()
+    con.close()
+    return write_metric_year_json(context, combined)
 
 
 @graph_asset(
@@ -2019,26 +2026,35 @@ def metric_year_subset_json(combine_all_reports: pd.DataFrame) -> str:
     return write_metric_year_subset_json(combine_all_reports)
 
 
-@graph_asset(
+@asset(
     name="agency_index_json",
     group_name="dist",
-    ins={
-        "pivot_reports_by_slug": AssetIn(key=AssetKey("pivot_reports_by_slug")),
-        "agency_reference_geocoded": AssetIn(key=AssetKey("agency_reference_geocoded")),
-        "combine_all_reports": AssetIn(key=AssetKey("combine_all_reports")),
-    },
+    deps=[AssetKey("combine_all_reports"), AssetKey("agency_reference_geocoded")],
+    required_resource_keys={"data_dir_processed", "data_dir_out", "s3"},
     description="Generate an agency index JSON for search and lookup.",
 )
-def agency_index_json(
-    pivot_reports_by_slug: pd.DataFrame,
-    agency_reference_geocoded: pd.DataFrame,
-    combine_all_reports: pd.DataFrame,
-) -> str:
-    return write_agency_index_json(
-        pivot_reports_by_slug,
-        agency_reference_geocoded,
-        combined=combine_all_reports,
-    )
+def agency_index_json(context) -> str:
+    processed_dir = Path(context.resources.data_dir_processed.get_path())
+
+    # Load canonical combined for the 'allowed agencies with data' filter.
+    con = _open_canonical_db(str(processed_dir / "all_combined_output.parquet"))
+    combined = con.execute("SELECT * FROM canonical_combined").df()
+    con.close()
+
+    # Build a minimal pivot DataFrame: agency, year, stops__Total.
+    # This replaces the full pivot_reports_by_slug pickle dependency.
+    stops_rows = combined[combined["row_key"] == "stops"][["agency", "year", "Total"]].copy()
+    stops_rows = stops_rows.rename(columns={"Total": "stops__Total"})
+
+    # Load geocoded agency reference.
+    agency_reference_geocoded = pd.DataFrame()
+    for ref_name in ("agency_reference_geocoded.parquet", "agency_reference.parquet"):
+        ref_path = processed_dir / ref_name
+        if ref_path.exists():
+            agency_reference_geocoded = pd.read_parquet(ref_path)
+            break
+
+    return write_agency_index_json(stops_rows, agency_reference_geocoded, combined=combined)
 
 
 @graph_asset(
