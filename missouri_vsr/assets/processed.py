@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+from datetime import date
 from pathlib import Path
 from typing import List
 
@@ -1233,7 +1234,6 @@ def write_metric_year_json(context, combined: pd.DataFrame) -> List[str]:
     return output_paths
 
 
-@op(out=Out(str), required_resource_keys={"data_dir_out", "s3"})
 def write_metric_year_subset_json(context, combined: pd.DataFrame) -> str:
     """Write a compact JSON file with selected row_keys across agencies/years."""
     combined = _collapse_to_canonical(combined)
@@ -1408,7 +1408,6 @@ def write_agency_index_json(
     return str(out_path)
 
 
-@op(out=Out(str), required_resource_keys={"data_dir_out", "s3"})
 def write_statewide_baselines_json(context, baselines: pd.DataFrame) -> str:
     """Write statewide baselines to JSON for downstream consumers."""
     out_root = Path(context.resources.data_dir_out.get_path())
@@ -1488,7 +1487,6 @@ def _combine_download_parquet(named_frames: dict[str, pd.DataFrame]) -> pd.DataF
     return pd.concat(frames, ignore_index=True, sort=False)
 
 
-@op(out=Out(str), required_resource_keys={"data_dir_out", "s3"})
 def write_statewide_year_sums_json(context, combined: pd.DataFrame) -> str:
     """Write statewide per-year sums for each row_key and race column."""
     combined = _collapse_to_canonical(combined)
@@ -1650,7 +1648,6 @@ def write_statewide_year_sums_json(context, combined: pd.DataFrame) -> str:
     return str(out_path)
 
 
-@op(out=Out(str), required_resource_keys={"data_dir_out", "s3"})
 def write_statewide_year_sums_subset_json(context, combined: pd.DataFrame) -> str:
     """Write a slimmed-down statewide sums JSON for selected row_keys."""
     combined = _collapse_to_canonical(combined)
@@ -1714,7 +1711,6 @@ def write_statewide_year_sums_subset_json(context, combined: pd.DataFrame) -> st
     return str(out_path)
 
 
-@op(out=Out(str), required_resource_keys={"data_dir_out", "s3"})
 def write_homepage_stats_json(context, combined: pd.DataFrame) -> str:
     """Write homepage stats for the latest report year."""
     combined = _collapse_to_canonical(combined)
@@ -1805,7 +1801,6 @@ def write_homepage_stats_json(context, combined: pd.DataFrame) -> str:
     return str(out_path)
 
 
-@op(out=Out(str), required_resource_keys={"data_dir_out", "s3"})
 def write_report_dimension_index_json(context, combined: pd.DataFrame) -> str:
     """Write unique table/section/metric identifiers to JSON for translations."""
     combined = _collapse_to_canonical(combined)
@@ -1902,7 +1897,6 @@ def agency_year_json_exports(context) -> List[str]:
     return write_agency_year_json(context, combined, pd.DataFrame(), agency_comments)
 
 
-@op(out=Out(str), required_resource_keys={"data_dir_out", "s3"})
 def write_statewide_agency_json(context, combined: pd.DataFrame) -> str:
     """Write an agency-year-format JSON for the Missouri (all agencies) aggregate."""
     combined = _collapse_to_canonical(combined)
@@ -1991,14 +1985,19 @@ def write_statewide_agency_json(context, combined: pd.DataFrame) -> str:
     return str(out_path)
 
 
-@graph_asset(
+@asset(
     name="statewide_agency_json_export",
     group_name="dist",
-    ins={"combine_all_reports": AssetIn(key=AssetKey("combine_all_reports"))},
+    deps=[AssetKey("combine_all_reports")],
+    required_resource_keys={"data_dir_processed", "data_dir_out", "s3"},
     description="Per-agency-format JSON for Missouri (all agencies) statewide aggregate.",
 )
-def statewide_agency_json_export(combine_all_reports: pd.DataFrame) -> str:
-    return write_statewide_agency_json(combine_all_reports)
+def statewide_agency_json_export(context) -> str:
+    processed_dir = Path(context.resources.data_dir_processed.get_path())
+    con = _open_canonical_db(str(processed_dir / "all_combined_output.parquet"))
+    combined = con.execute("SELECT * FROM canonical_combined").df()
+    con.close()
+    return write_statewide_agency_json(context, combined)
 
 
 @asset(
@@ -2016,14 +2015,19 @@ def metric_year_json_exports(context) -> List[str]:
     return write_metric_year_json(context, combined)
 
 
-@graph_asset(
+@asset(
     name="metric_year_subset_json",
     group_name="dist",
-    ins={"combine_all_reports": AssetIn(key=AssetKey("combine_all_reports"))},
+    deps=[AssetKey("combine_all_reports")],
+    required_resource_keys={"data_dir_processed", "data_dir_out", "s3"},
     description="Write a compact JSON file with selected row_keys across agencies/years.",
 )
-def metric_year_subset_json(combine_all_reports: pd.DataFrame) -> str:
-    return write_metric_year_subset_json(combine_all_reports)
+def metric_year_subset_json(context) -> str:
+    processed_dir = Path(context.resources.data_dir_processed.get_path())
+    con = _open_canonical_db(str(processed_dir / "all_combined_output.parquet"))
+    combined = con.execute("SELECT * FROM canonical_combined").df()
+    con.close()
+    return write_metric_year_subset_json(context, combined)
 
 
 @asset(
@@ -2057,54 +2061,139 @@ def agency_index_json(context) -> str:
     return write_agency_index_json(stops_rows, agency_reference_geocoded, combined=combined)
 
 
-@graph_asset(
+@asset(
     name="statewide_slug_baselines_json",
     group_name="dist",
-    ins={"statewide_slug_baselines": AssetIn(key=AssetKey("statewide_slug_baselines"))},
+    deps=[AssetKey("statewide_slug_baselines")],
+    required_resource_keys={"data_dir_processed", "data_dir_out", "s3"},
     description="Generate statewide baselines JSON for downstream consumers.",
 )
-def statewide_slug_baselines_json(statewide_slug_baselines: pd.DataFrame) -> str:
-    return write_statewide_baselines_json(statewide_slug_baselines)
+def statewide_slug_baselines_json(context) -> str:
+    processed_dir = Path(context.resources.data_dir_processed.get_path())
+    baselines = pd.read_parquet(processed_dir / "statewide_slug_baselines.parquet")
+    return write_statewide_baselines_json(context, baselines)
 
 
-@graph_asset(
+@asset(
     name="statewide_year_sums_json",
     group_name="dist",
-    ins={"combine_all_reports": AssetIn(key=AssetKey("combine_all_reports"))},
+    deps=[AssetKey("combine_all_reports")],
+    required_resource_keys={"data_dir_processed", "data_dir_out", "s3"},
     description="Write statewide per-year sums for each row_key and race column.",
 )
-def statewide_year_sums_json(combine_all_reports: pd.DataFrame) -> str:
-    return write_statewide_year_sums_json(combine_all_reports)
+def statewide_year_sums_json(context) -> str:
+    processed_dir = Path(context.resources.data_dir_processed.get_path())
+    con = _open_canonical_db(str(processed_dir / "all_combined_output.parquet"))
+    combined = con.execute("SELECT * FROM canonical_combined").df()
+    con.close()
+    return write_statewide_year_sums_json(context, combined)
 
 
-@graph_asset(
+@asset(
     name="statewide_year_sums_subset_json",
     group_name="dist",
-    ins={"combine_all_reports": AssetIn(key=AssetKey("combine_all_reports"))},
+    deps=[AssetKey("combine_all_reports")],
+    required_resource_keys={"data_dir_processed", "data_dir_out", "s3"},
     description="Write a slim statewide sums JSON for selected metrics.",
 )
-def statewide_year_sums_subset_json(combine_all_reports: pd.DataFrame) -> str:
-    return write_statewide_year_sums_subset_json(combine_all_reports)
+def statewide_year_sums_subset_json(context) -> str:
+    processed_dir = Path(context.resources.data_dir_processed.get_path())
+    con = _open_canonical_db(str(processed_dir / "all_combined_output.parquet"))
+    combined = con.execute("SELECT * FROM canonical_combined").df()
+    con.close()
+    return write_statewide_year_sums_subset_json(context, combined)
 
 
-@graph_asset(
+@asset(
     name="report_dimension_index_json",
     group_name="dist",
-    ins={"combine_all_reports": AssetIn(key=AssetKey("combine_all_reports"))},
+    deps=[AssetKey("combine_all_reports")],
+    required_resource_keys={"data_dir_processed", "data_dir_out", "s3"},
     description="Write unique table/section/metric identifiers for translations.",
 )
-def report_dimension_index_json(combine_all_reports: pd.DataFrame) -> str:
-    return write_report_dimension_index_json(combine_all_reports)
+def report_dimension_index_json(context) -> str:
+    processed_dir = Path(context.resources.data_dir_processed.get_path())
+    con = _open_canonical_db(str(processed_dir / "all_combined_output.parquet"))
+    combined = con.execute("SELECT * FROM canonical_combined").df()
+    con.close()
+    return write_report_dimension_index_json(context, combined)
 
 
-@graph_asset(
+@asset(
     name="homepage_stats_json",
     group_name="dist",
-    ins={"combine_all_reports": AssetIn(key=AssetKey("combine_all_reports"))},
+    deps=[AssetKey("combine_all_reports")],
+    required_resource_keys={"data_dir_processed", "data_dir_out", "s3"},
     description="Generate homepage stats JSON for the latest report year.",
 )
-def homepage_stats_json(combine_all_reports: pd.DataFrame) -> str:
-    return write_homepage_stats_json(combine_all_reports)
+def homepage_stats_json(context) -> str:
+    processed_dir = Path(context.resources.data_dir_processed.get_path())
+    con = _open_canonical_db(str(processed_dir / "all_combined_output.parquet"))
+    combined = con.execute("SELECT * FROM canonical_combined").df()
+    con.close()
+    return write_homepage_stats_json(context, combined)
+
+
+@asset(
+    name="dist_manifest_json",
+    group_name="dist",
+    deps=[AssetKey("combine_all_reports"), AssetKey("reports_with_rank_percentile")],
+    required_resource_keys={"data_dir_processed", "data_dir_out", "s3"},
+    description="Write releases/v2/manifest.json describing the v2 data release.",
+)
+def dist_manifest_json(context) -> str:
+    processed_dir = Path(context.resources.data_dir_processed.get_path())
+
+    con = duckdb.connect()
+    years_rows = con.execute(
+        f"SELECT DISTINCT year FROM read_parquet('{processed_dir}/all_combined_output.parquet') "
+        "WHERE year IS NOT NULL ORDER BY year"
+    ).fetchall()
+    canonical_rows = con.execute(
+        f"SELECT DISTINCT canonical_key FROM read_parquet('{processed_dir}/all_combined_output.parquet') "
+        "WHERE canonical_key IS NOT NULL ORDER BY canonical_key"
+    ).fetchall()
+    con.close()
+
+    years = [int(r[0]) for r in years_rows]
+    canonical_metrics = [r[0] for r in canonical_rows]
+
+    manifest = {
+        "version": "2.0",
+        "released": date.today().isoformat(),
+        "years": years,
+        "partial_coverage_years": [2001, 2002, 2003],
+        "schema_version": "2.0",
+        "canonical_metrics": canonical_metrics,
+        "changelog": (
+            "v2.0: Added 2000–2019 pre-2020 format data with canonical_key normalization. "
+            "row_key in all dist outputs is now canonical_key (era-independent). "
+            "Agency JSON partitioned by year (dist/agency_year/{slug}/{year}.json). "
+            "Years 2001–2003 have partial coverage (~50% of agencies) due to blank race columns in source PDFs."
+        ),
+    }
+
+    out_dir = Path(context.resources.data_dir_out.get_path())
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / "manifest.json"
+    out_path.write_text(json.dumps(manifest, indent=2))
+    context.log.info(
+        "Wrote manifest.json: %d years, %d canonical metrics → %s",
+        len(years), len(canonical_metrics), out_path,
+    )
+
+    meta: dict = {"local_path": str(out_path), "years": len(years), "canonical_metrics": len(canonical_metrics)}
+    try:
+        s3_meta = upload_file_to_s3(context, out_path, "manifest.json", content_type="application/json")
+        if s3_meta:
+            meta.update(s3_meta)
+    except Exception as exc:
+        context.log.exception("Failed to upload manifest.json to S3: %s", exc)
+    try:
+        context.add_output_metadata(meta)
+    except Exception:
+        pass
+    return str(out_path)
 
 
 @op(out=Out(dict), required_resource_keys={"data_dir_out", "s3"})
