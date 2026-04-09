@@ -29,61 +29,55 @@ from missouri_vsr.assets.s3_utils import (
 MSHP_DEPARTMENT_NAME = "Missouri State Highway Patrol"
 DOWNLOAD_PREFIX = f"missouri_vsr_{min(YEAR_URLS)}_{max(YEAR_URLS)}_"
 METRIC_YEAR_SUBSET_KEYS = [
-    "rates-by-race--totals--all-stops",
-    "rates-by-race--totals--arrests",
-    "rates-by-race--totals--citations",
-    "rates-by-race--totals--searches",
-    "rates-by-race--totals--contraband",
-    "rates-by-race--totals--resident-stops",
-    "rates-by-race--rates--search-rate",
-    "rates-by-race--rates--contraband-hit-rate",
-    "number-of-stops-by-race--stop-outcome--warning",
-    "rates-by-race--population--acs-pop",
+    # Canonical keys (post-collapse row_key = canonical_key)
+    "stops",
+    "arrests",
+    "citations",
+    "searches",
+    "contraband-total",
+    "resident-stops",
+    "search-rate",
+    "contraband-hit-rate",
+    "stop-outcome--warning",
 ]
 STATEWIDE_SUMS_SUBSET_KEYS = [
-    "rates-by-race--totals--all-stops",
-    "search-statistics--probable-cause--consent",
-    "number-of-stops-by-race--stop-outcome--arrests",
-    "number-of-stops-by-race--stop-outcome--citation",
-    "number-of-stops-by-race--stop-outcome--warning",
-    "number-of-stops-by-race--stop-outcome--no-action",
+    # Canonical keys (post-collapse row_key = canonical_key)
+    "stops",
+    "probable-cause--consent",
+    "arrests",
+    "citations",
+    "stop-outcome--warning",
+    "stop-outcome--no-action",
 ]
 
 HOMEPAGE_STATS_YEAR = max(YEAR_URLS)
 HOMEPAGE_STATS_METRICS = {
-    "all_stops": "rates-by-race--totals--all-stops",
-    "searches": "rates-by-race--totals--searches",
-    "contraband": "rates-by-race--totals--contraband",
-    "citations": "number-of-stops-by-race--stop-outcome--citation",
-    "arrests": "number-of-stops-by-race--stop-outcome--arrests",
-    "warnings": "number-of-stops-by-race--stop-outcome--warning",
+    # Canonical keys (post-collapse row_key = canonical_key)
+    "all_stops": "stops",
+    "searches": "searches",
+    "contraband": "contraband-total",
+    "citations": "citations",
+    "arrests": "arrests",
+    "warnings": "stop-outcome--warning",
 }
 STATEWIDE_RATE_SPECS = [
     {
-        "row_key": "rates-by-race--rates--citation-rate",
-        "numerator": "rates-by-race--totals--citations",
-        "denominator": "rates-by-race--totals--all-stops",
+        "row_key": "citation-rate",
+        "numerator": "citations",
+        "denominator": "stops",
     },
     {
-        "row_key": "rates-by-race--rates--search-rate",
-        "numerator": "rates-by-race--totals--searches",
-        "denominator": "rates-by-race--totals--all-stops",
+        "row_key": "search-rate",
+        "numerator": "searches",
+        "denominator": "stops",
     },
     {
-        "row_key": "rates-by-race--rates--contraband-hit-rate",
-        "numerator": "rates-by-race--totals--contraband",
-        "denominator": "rates-by-race--totals--searches",
+        "row_key": "contraband-hit-rate",
+        "numerator": "contraband-total",
+        "denominator": "searches",
     },
-    {
-        "row_key": "rates-by-race--rates--stop-rate",
-        "numerator": "rates-by-race--totals--all-stops",
-        "denominator": "rates-by-race--population--acs-pop",
-    },
-    {
-        "row_key": "rates-by-race--rates--stop-rate-residents",
-        "numerator": "rates-by-race--totals--resident-stops",
-        "denominator": "rates-by-race--population--acs-pop",
-    },
+    # stop-rate / stop-rate-residents omitted: ACS population denominator
+    # key changes each year (era-specific); handled separately if needed.
 ]
 
 STATEWIDE_AGENCY_NAME = "Missouri (all agencies)"
