@@ -1372,7 +1372,6 @@ def _first_non_empty(row: pd.Series, columns: list[str]) -> str | None:
     return None
 
 
-@op(out=Out(str), required_resource_keys={"data_dir_out", "s3"})
 def write_agency_index_json(
     context,
     pivoted: pd.DataFrame,
@@ -2060,7 +2059,7 @@ def agency_index_json(context) -> str:
             agency_reference_geocoded = pd.read_parquet(ref_path)
             break
 
-    return write_agency_index_json(stops_rows, agency_reference_geocoded, combined=combined)
+    return write_agency_index_json(context, stops_rows, agency_reference_geocoded, combined=combined)
 
 
 @asset(
