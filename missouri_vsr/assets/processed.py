@@ -5,6 +5,7 @@ import re
 from pathlib import Path
 from typing import List
 
+import duckdb
 import pandas as pd
 from slugify import slugify
 
@@ -194,6 +195,102 @@ def _build_percentage_frame(
     return percentage_base
 
 
+def _open_canonical_db(parquet_path: str) -> duckdb.DuckDBPyConnection:
+    """
+    Open an in-memory DuckDB connection with a 'canonical_combined' view that
+    applies the canonical collapse directly from the combined Parquet file.
+
+    The view:
+    - Deduplicates canonical_key rows to one per (agency, year, canonical_key),
+      preferring computed--rates-- row_keys (uniform methodology).
+    - Replaces row_key with canonical_key for era-independent grouping.
+    - Passes era-specific (null canonical_key) rows through unchanged.
+
+    Downstream ops query this view rather than loading the full DataFrame.
+    """
+    # DuckDB needs double-quoted identifiers for column names with spaces/dots.
+    race_cols = [
+        '"Total"', '"White"', '"Black"', '"Hispanic"',
+        '"Native American"', '"Asian"', '"Other"', '"Am. Indian"',
+    ]
+    race_sql = ", ".join(race_cols)
+
+    con = duckdb.connect()
+    con.execute(f"""
+        CREATE VIEW canonical_combined AS
+        WITH base AS (
+            SELECT *,
+                (row_key LIKE 'computed--rates--%')::INTEGER AS _priority
+            FROM read_parquet('{parquet_path}')
+        ),
+        best_canonical AS (
+            SELECT *,
+                ROW_NUMBER() OVER (
+                    PARTITION BY agency, year, canonical_key
+                    ORDER BY _priority DESC
+                ) AS _rn
+            FROM base WHERE canonical_key IS NOT NULL
+        )
+        SELECT
+            agency, year,
+            canonical_key AS row_key,
+            canonical_key,
+            {race_sql},
+            table_id, "table", section_id, section, metric_id, metric, row_id
+        FROM best_canonical WHERE _rn = 1
+        UNION ALL
+        SELECT
+            agency, year,
+            row_key,
+            canonical_key,
+            {race_sql},
+            table_id, "table", section_id, section, metric_id, metric, row_id
+        FROM base WHERE canonical_key IS NULL
+    """)
+    return con
+
+
+def _collapse_to_canonical(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Produce the canonical dist view from the full combined DataFrame.
+
+    Rules:
+    - Rows with canonical_key=null (era-specific, no cross-era equivalent) pass through unchanged.
+    - Rows with canonical_key: deduplicate to ONE per (agency, year, canonical_key),
+      preferring computed--rates-- row_keys (uniform methodology) over PDF pre-computed.
+    - The row_key of kept canonical rows is replaced with the canonical_key value so that
+      all downstream grouping (ranks, JSON keys) is era-independent.
+    - row_id is rebuilt after the substitution.
+
+    The full multi-row_key data remains available in the layer-2 combined Parquet; this
+    collapse is only applied for layer-3 dist outputs.
+    """
+    if "canonical_key" not in df.columns or df.empty:
+        return df
+
+    null_mask = df["canonical_key"].isna()
+    era_specific = df[null_mask].copy()
+    canonical = df[~null_mask].copy()
+
+    if canonical.empty:
+        return df
+
+    # Sort so computed--rates-- rows sort first within each group (priority = 1 > 0)
+    canonical["_priority"] = canonical["row_key"].str.startswith("computed--rates--", na=False).astype(int)
+    canonical = canonical.sort_values(
+        ["agency", "year", "canonical_key", "_priority"],
+        ascending=[True, True, True, False],
+    )
+    canonical = canonical.drop_duplicates(subset=["agency", "year", "canonical_key"], keep="first")
+    canonical = canonical.drop(columns=["_priority"])
+
+    # Replace row_key with canonical_key so downstream grouping is era-independent
+    canonical["row_key"] = canonical["canonical_key"]
+
+    result = pd.concat([era_specific, canonical], ignore_index=True)
+    return _rebuild_row_ids(result)
+
+
 def _rebuild_row_ids(frame: pd.DataFrame) -> pd.DataFrame:
     required = {"year", "agency", "row_key"}
     if not required.issubset(frame.columns):
@@ -291,6 +388,9 @@ def add_rank_percentile_rows(context, combined: pd.DataFrame) -> pd.DataFrame:
         context.log.warning("Combined report DataFrame is empty; skipping rank/percentile.")
         return combined
 
+    combined = _collapse_to_canonical(combined)
+    context.log.info("Collapsed to canonical view: %d rows", len(combined))
+
     required_cols = {"agency", "year", "row_key"}
     missing = required_cols - set(combined.columns)
     if missing:
@@ -300,38 +400,47 @@ def add_rank_percentile_rows(context, combined: pd.DataFrame) -> pd.DataFrame:
     if not value_cols:
         raise ValueError("Cannot add ranks/percentiles – no numeric value columns were found.")
 
-    base = combined.copy()
+    # Process year-by-year to stay within memory on large (25-year) datasets.
+    # Ranks are semantically per-year anyway (agencies compete within a year).
+    years = sorted(combined["year"].dropna().unique())
+    year_chunks: List[pd.DataFrame] = []
     metric_col = "metric"
-    percentage_rows = _build_percentage_frame(base, value_cols, metric_col=metric_col)
-    rank_all, percentile_all = _rank_and_percentile(base, value_cols)
-    rank_dense, rank_count = _rank_dense_counts(base, value_col="Total")
 
-    base["rank_dense"] = rank_dense
-    base["rank_count"] = rank_count
-    base["rank_method"] = pd.NA
-    base.loc[base["rank_dense"].notna(), "rank_method"] = "dense"
-    try:
-        base["rank_dense"] = base["rank_dense"].astype("Int64")
-        base["rank_count"] = base["rank_count"].astype("Int64")
-    except Exception:
-        pass
+    for yr in years:
+        base = combined[combined["year"] == yr].copy()
+        if base.empty:
+            continue
 
-    derived = [
-        percentage_rows,
-        _build_rank_percentile_frame(base, rank_all, value_cols, "-rank"),
-        _build_rank_percentile_frame(base, percentile_all, value_cols, "-percentile"),
-    ]
+        percentage_rows = _build_percentage_frame(base, value_cols, metric_col=metric_col)
+        rank_all, percentile_all = _rank_and_percentile(base, value_cols)
+        rank_dense, rank_count = _rank_dense_counts(base, value_col="Total")
 
-    # Issues #4 & #5: add inline pct and ratio columns to base rows only.
-    # Derived rows (rank/percentile/percentage) will receive NaN via pd.concat.
-    _add_ingroup_pcts_and_ratios(base, value_cols)
+        base["rank_dense"] = rank_dense
+        base["rank_count"] = rank_count
+        base["rank_method"] = pd.NA
+        base.loc[base["rank_dense"].notna(), "rank_method"] = "dense"
+        try:
+            base["rank_dense"] = base["rank_dense"].astype("Int64")
+            base["rank_count"] = base["rank_count"].astype("Int64")
+        except Exception:
+            pass
 
-    augmented = pd.concat([base, *derived], ignore_index=True)
+        derived = [
+            percentage_rows,
+            _build_rank_percentile_frame(base, rank_all, value_cols, "-rank"),
+            _build_rank_percentile_frame(base, percentile_all, value_cols, "-percentile"),
+        ]
+        _add_ingroup_pcts_and_ratios(base, value_cols)
+
+        year_chunks.append(pd.concat([base, *derived], ignore_index=True))
+
+    augmented = pd.concat(year_chunks, ignore_index=True)
     augmented = _rebuild_row_ids(augmented)
     context.log.info(
-        "Added rank/percentile/percentage rows: %d base rows → %d total rows",
-        len(base),
+        "Added rank/percentile/percentage rows: %d base rows → %d total rows across %d years",
+        len(combined),
         len(augmented),
+        len(years),
     )
 
     out_dir = Path(context.resources.data_dir_processed.get_path())
@@ -372,6 +481,7 @@ def reports_with_rank_percentile(combine_all_reports: pd.DataFrame) -> pd.DataFr
 @op(out=Out(pd.DataFrame), required_resource_keys={"data_dir_processed", "s3"})
 def compute_statewide_slug_baselines(context, combined: pd.DataFrame) -> pd.DataFrame:
     """Compute statewide mean/median baselines per year/row_key/metric."""
+    combined = _collapse_to_canonical(combined)
     baseline_columns = [
         "year",
         "row_key",
@@ -1024,6 +1134,7 @@ def write_agency_year_json(
 @op(out=Out(list), required_resource_keys={"data_dir_out", "s3"})
 def write_metric_year_json(context, combined: pd.DataFrame) -> List[str]:
     """Write one JSON file per row_key with agency/year and race columns."""
+    combined = _collapse_to_canonical(combined)
     if combined.empty:
         context.log.warning("Combined DataFrame empty; no metric-year JSON outputs created.")
         return []
@@ -1098,6 +1209,7 @@ def write_metric_year_json(context, combined: pd.DataFrame) -> List[str]:
 @op(out=Out(str), required_resource_keys={"data_dir_out", "s3"})
 def write_metric_year_subset_json(context, combined: pd.DataFrame) -> str:
     """Write a compact JSON file with selected row_keys across agencies/years."""
+    combined = _collapse_to_canonical(combined)
     if combined.empty:
         context.log.warning("Combined DataFrame empty; no metric-year subset JSON created.")
         return ""
@@ -1352,6 +1464,7 @@ def _combine_download_parquet(named_frames: dict[str, pd.DataFrame]) -> pd.DataF
 @op(out=Out(str), required_resource_keys={"data_dir_out", "s3"})
 def write_statewide_year_sums_json(context, combined: pd.DataFrame) -> str:
     """Write statewide per-year sums for each row_key and race column."""
+    combined = _collapse_to_canonical(combined)
     if combined.empty:
         context.log.warning("Combined DataFrame empty; no statewide sums JSON created.")
         return ""
@@ -1513,6 +1626,7 @@ def write_statewide_year_sums_json(context, combined: pd.DataFrame) -> str:
 @op(out=Out(str), required_resource_keys={"data_dir_out", "s3"})
 def write_statewide_year_sums_subset_json(context, combined: pd.DataFrame) -> str:
     """Write a slimmed-down statewide sums JSON for selected row_keys."""
+    combined = _collapse_to_canonical(combined)
     if combined.empty:
         context.log.warning("Combined DataFrame empty; no statewide sums subset created.")
         return ""
@@ -1576,6 +1690,7 @@ def write_statewide_year_sums_subset_json(context, combined: pd.DataFrame) -> st
 @op(out=Out(str), required_resource_keys={"data_dir_out", "s3"})
 def write_homepage_stats_json(context, combined: pd.DataFrame) -> str:
     """Write homepage stats for the latest report year."""
+    combined = _collapse_to_canonical(combined)
     if combined.empty:
         context.log.warning("Combined DataFrame empty; no homepage stats created.")
         return ""
@@ -1666,6 +1781,7 @@ def write_homepage_stats_json(context, combined: pd.DataFrame) -> str:
 @op(out=Out(str), required_resource_keys={"data_dir_out", "s3"})
 def write_report_dimension_index_json(context, combined: pd.DataFrame) -> str:
     """Write unique table/section/metric identifiers to JSON for translations."""
+    combined = _collapse_to_canonical(combined)
     out_root = Path(context.resources.data_dir_out.get_path())
     out_root.mkdir(parents=True, exist_ok=True)
     out_path = out_root / "report_dimensions.json"
@@ -1766,6 +1882,7 @@ def agency_year_json_exports(
 @op(out=Out(str), required_resource_keys={"data_dir_out", "s3"})
 def write_statewide_agency_json(context, combined: pd.DataFrame) -> str:
     """Write an agency-year-format JSON for the Missouri (all agencies) aggregate."""
+    combined = _collapse_to_canonical(combined)
     if combined.empty:
         context.log.warning("Combined DataFrame is empty; skipping statewide agency JSON.")
         return ""
