@@ -426,10 +426,23 @@ def _run_command(cmd: List[str], log) -> None:
         if result.stdout:
             log.debug("Command stdout: %s", result.stdout.strip())
         if result.stderr:
-            log.debug("Command stderr: %s", result.stderr.strip())
+            # Suppress tippecanoe percentage-progress lines (start with a digit)
+            non_progress = [
+                line for line in result.stderr.splitlines()
+                if not line.strip()[:1].isdigit()
+            ]
+            if non_progress:
+                log.debug("Command stderr: %s", "\n".join(non_progress))
     except subprocess.CalledProcessError as exc:
-        stderr = exc.stderr.strip() if exc.stderr else str(exc)
-        raise RuntimeError(f"Command failed: {' '.join(cmd)}\n{stderr}") from exc
+        stderr = exc.stderr or str(exc)
+        # Strip progress lines; surface last 50 non-progress lines as the error
+        error_lines = [
+            line for line in stderr.splitlines()
+            if not line.strip()[:1].isdigit()
+        ]
+        raise RuntimeError(
+            f"Command failed: {' '.join(cmd)}\n" + "\n".join(error_lines[-50:])
+        ) from exc
 
 
 @multi_asset(
