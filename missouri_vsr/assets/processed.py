@@ -5,6 +5,9 @@ import re
 from pathlib import Path
 from typing import List
 
+import shutil
+import tempfile
+
 import duckdb
 import pandas as pd
 from slugify import slugify
@@ -400,55 +403,71 @@ def add_rank_percentile_rows(context, combined: pd.DataFrame) -> pd.DataFrame:
     if not value_cols:
         raise ValueError("Cannot add ranks/percentiles – no numeric value columns were found.")
 
-    # Process year-by-year to stay within memory on large (25-year) datasets.
-    # Ranks are semantically per-year anyway (agencies compete within a year).
+    # Process year-by-year and write each chunk to a temp Parquet immediately.
+    # This avoids holding all 25 year-chunks in RAM simultaneously (which OOM-kills
+    # on the final pd.concat).  DuckDB unions the temp files into the final Parquet.
     years = sorted(combined["year"].dropna().unique())
-    year_chunks: List[pd.DataFrame] = []
     metric_col = "metric"
+    total_base = 0
+    total_out = 0
 
-    for yr in years:
-        base = combined[combined["year"] == yr].copy()
-        if base.empty:
-            continue
+    tmp_dir = Path(tempfile.mkdtemp(prefix="vsr_rank_"))
+    try:
+        for yr in years:
+            base = combined[combined["year"] == yr].copy()
+            if base.empty:
+                continue
 
-        percentage_rows = _build_percentage_frame(base, value_cols, metric_col=metric_col)
-        rank_all, percentile_all = _rank_and_percentile(base, value_cols)
-        rank_dense, rank_count = _rank_dense_counts(base, value_col="Total")
+            percentage_rows = _build_percentage_frame(base, value_cols, metric_col=metric_col)
+            rank_all, percentile_all = _rank_and_percentile(base, value_cols)
+            rank_dense, rank_count = _rank_dense_counts(base, value_col="Total")
 
-        base["rank_dense"] = rank_dense
-        base["rank_count"] = rank_count
-        base["rank_method"] = pd.NA
-        base.loc[base["rank_dense"].notna(), "rank_method"] = "dense"
-        try:
-            base["rank_dense"] = base["rank_dense"].astype("Int64")
-            base["rank_count"] = base["rank_count"].astype("Int64")
-        except Exception:
-            pass
+            base["rank_dense"] = rank_dense
+            base["rank_count"] = rank_count
+            base["rank_method"] = pd.NA
+            base.loc[base["rank_dense"].notna(), "rank_method"] = "dense"
+            try:
+                base["rank_dense"] = base["rank_dense"].astype("Int64")
+                base["rank_count"] = base["rank_count"].astype("Int64")
+            except Exception:
+                pass
 
-        derived = [
-            percentage_rows,
-            _build_rank_percentile_frame(base, rank_all, value_cols, "-rank"),
-            _build_rank_percentile_frame(base, percentile_all, value_cols, "-percentile"),
-        ]
-        _add_ingroup_pcts_and_ratios(base, value_cols)
+            derived = [
+                percentage_rows,
+                _build_rank_percentile_frame(base, rank_all, value_cols, "-rank"),
+                _build_rank_percentile_frame(base, percentile_all, value_cols, "-percentile"),
+            ]
+            _add_ingroup_pcts_and_ratios(base, value_cols)
 
-        year_chunks.append(pd.concat([base, *derived], ignore_index=True))
+            chunk = _rebuild_row_ids(pd.concat([base, *derived], ignore_index=True))
+            chunk_path = tmp_dir / f"chunk_{yr}.parquet"
+            chunk.to_parquet(chunk_path, index=False, engine="pyarrow")
+            total_base += len(base)
+            total_out += len(chunk)
+            context.log.debug("Wrote year %d chunk: %d rows", yr, len(chunk))
 
-    augmented = pd.concat(year_chunks, ignore_index=True)
-    augmented = _rebuild_row_ids(augmented)
+        out_dir = Path(context.resources.data_dir_processed.get_path())
+        out_path = out_dir / "reports_with_rank_percentile.parquet"
+        con = duckdb.connect()
+        con.execute(
+            f"COPY (SELECT * FROM read_parquet('{tmp_dir}/chunk_*.parquet')) "
+            f"TO '{out_path}' (FORMAT PARQUET)"
+        )
+        con.close()
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
     context.log.info(
         "Added rank/percentile/percentage rows: %d base rows → %d total rows across %d years",
-        len(combined),
-        len(augmented),
-        len(years),
+        total_base, total_out, len(years),
     )
 
     out_dir = Path(context.resources.data_dir_processed.get_path())
     out_path = out_dir / "reports_with_rank_percentile.parquet"
-    augmented.to_parquet(out_path, index=False, engine="pyarrow")
-    context.log.info("Wrote rank/percentile Parquet → %s (%d rows)", out_path, len(augmented))
+    context.log.info("Wrote rank/percentile Parquet → %s (%d rows)", out_path, total_out)
 
-    meta = {"local_path": str(out_path), "row_count": len(augmented)}
+    augmented = pd.read_parquet(out_path)  # read back for return value + metadata
+    meta = {"local_path": str(out_path), "row_count": total_out}
     try:
         s3_meta = upload_file_to_s3(
             context,
