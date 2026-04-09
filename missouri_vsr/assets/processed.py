@@ -1888,14 +1888,129 @@ def write_report_dimension_index_json(context, combined: pd.DataFrame) -> str:
     description="Generate per-agency per-year JSON files (dist/agency_year/{slug}/{year}.json) from rank/percentile Parquet.",
 )
 def agency_year_json_exports(context) -> List[str]:
+    """Stream one year at a time from parquet to avoid loading 3M rows into RAM."""
     processed_dir = Path(context.resources.data_dir_processed.get_path())
-    combined = pd.read_parquet(processed_dir / "reports_with_rank_percentile.parquet")
-    context.log.info("Loaded rank/percentile view: %d rows for agency-year JSON export", len(combined))
-    agency_comments = pd.DataFrame()
+    parquet_path = str(processed_dir / "reports_with_rank_percentile.parquet")
+
+    # Load small reference data once.
+    agency_meta_lookup: dict = {}
+    for ref_name in ("agency_reference_geocoded.parquet", "agency_reference.parquet"):
+        ref_path = processed_dir / ref_name
+        if ref_path.exists():
+            try:
+                ref_df = pd.read_parquet(ref_path)
+                join_col = next(
+                    (c for c in ["Canonical", "Department", "Agency", "Name"] if c in ref_df.columns),
+                    None,
+                )
+                if join_col:
+                    ref_df = ref_df[pd.notna(ref_df[join_col])].copy()
+                    ref_df[join_col] = ref_df[join_col].astype(str).str.strip()
+                    ref_df = ref_df.drop_duplicates(subset=[join_col], keep="first")
+                    agency_meta_lookup = {
+                        str(k): row for k, row in ref_df.set_index(join_col).iterrows()
+                    }
+            except Exception as exc:
+                context.log.exception("Failed to load agency reference: %s", exc)
+            break
+
+    comments_lookup: dict = {}
     comments_path = processed_dir / "agency_comments.parquet"
     if comments_path.exists():
-        agency_comments = pd.read_parquet(comments_path)
-    return write_agency_year_json(context, combined, pd.DataFrame(), agency_comments)
+        try:
+            for _, row in pd.read_parquet(comments_path).iterrows():
+                key = _normalize_agency_key(row.get("agency"))
+                if not key:
+                    continue
+                yr_val = row.get("year")
+                comments_lookup.setdefault(key, []).append({
+                    "year": int(yr_val) if pd.notna(yr_val) else None,
+                    "comment": _json_safe_value(row.get("comment")),
+                    "has_comment": bool(row.get("has_comment")),
+                    "source_url": _json_safe_value(row.get("source_url")),
+                })
+        except Exception as exc:
+            context.log.exception("Failed to load agency comments: %s", exc)
+
+    # Determine column layout from schema (no data loaded yet).
+    con = duckdb.connect()
+    schema_df = con.execute(f"SELECT * FROM read_parquet('{parquet_path}') LIMIT 0").df()
+    years = sorted(
+        int(r[0]) for r in
+        con.execute(f"SELECT DISTINCT year FROM read_parquet('{parquet_path}') WHERE year IS NOT NULL").fetchall()
+    )
+    con.close()
+
+    value_cols = [c for c in PIVOT_VALUE_COLUMNS if c in schema_df.columns]
+    pct_cols = [c for c in RACE_PCT_COLUMNS if c in schema_df.columns]
+    ratio_cols = [RATIO_COLUMN] if RATIO_COLUMN in schema_df.columns else []
+    rank_cols = [c for c in ["rank_dense", "rank_count", "rank_method"] if c in schema_df.columns]
+    row_cols = [
+        c for c in [
+            "year", "row_key", "table", "table_id", "section", "section_id",
+            "metric", "metric_id", "row_id",
+            *value_cols, *pct_cols, *ratio_cols, *rank_cols,
+        ] if c in schema_df.columns
+    ]
+
+    out_root = Path(context.resources.data_dir_out.get_path()) / "agency_year"
+    out_root.mkdir(parents=True, exist_ok=True)
+
+    output_paths: List[str] = []
+    for yr in years:
+        # Load one year at a time (~120K rows vs 3M).
+        con = duckdb.connect()
+        year_df = con.execute(
+            f"SELECT * FROM read_parquet('{parquet_path}') WHERE year = {yr}"
+        ).df()
+        con.close()
+
+        year_file_count = 0
+        for agency, agency_group in year_df.groupby("agency", sort=False):
+            agency_slug = _agency_slug(agency)
+            slug_dir = out_root / agency_slug
+            slug_dir.mkdir(parents=True, exist_ok=True)
+
+            records: List[dict] = []
+            for _, row in agency_group.sort_values("row_key", kind="mergesort").iterrows():
+                payload = {col: row.get(col) for col in row_cols if col in row.index}
+                yr_val = payload.get("year")
+                payload["year"] = int(yr_val) if pd.notna(yr_val) else None
+                records.append(_json_safe_record(payload))
+
+            file_payload: dict = {"agency": agency, "year": yr, "rows": records}
+            meta_row = agency_meta_lookup.get(str(agency).strip())
+            if meta_row is not None:
+                file_payload["agency_metadata"] = _series_to_json_dict(meta_row)
+            year_comments = [
+                c for c in (comments_lookup.get(_normalize_agency_key(agency)) or [])
+                if c.get("year") == yr
+            ]
+            if year_comments:
+                file_payload["agency_comments"] = year_comments
+
+            out_path = slug_dir / f"{yr}.json"
+            out_path.write_text(json.dumps(file_payload, indent=2))
+            output_paths.append(str(out_path))
+            year_file_count += 1
+
+        context.log.info("Wrote year %d: %d agency files", yr, year_file_count)
+
+    base_dir = Path(context.resources.data_dir_out.get_path())
+    uploaded = upload_paths(context, [Path(p) for p in output_paths], base_dir=base_dir)
+    if uploaded:
+        context.log.info("Uploaded %d agency-year JSON files to S3", len(uploaded))
+    try:
+        metadata = {"output_count": len(output_paths)}
+        s3_folder = s3_uri_for_dir(context, out_root, base_dir)
+        if s3_folder:
+            metadata["s3_folder"] = s3_folder
+        if uploaded:
+            metadata["s3_paths"] = uploaded
+        context.add_output_metadata(metadata)
+    except Exception:
+        pass
+    return output_paths
 
 
 def write_statewide_agency_json(context, combined: pd.DataFrame) -> str:
