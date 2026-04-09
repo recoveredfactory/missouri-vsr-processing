@@ -9,7 +9,7 @@ import requests
 
 from dagster import AssetIn, AssetKey, AssetOut, In, Out, Output, graph_asset, op, multi_asset
 
-from missouri_vsr.assets.extract import YEAR_URLS, _ensure_pdftotext
+from missouri_vsr.assets.extract import YEAR_URLS, _ensure_pdftotext, _slugify_simple
 from missouri_vsr.assets.s3_utils import upload_file_to_s3
 
 AGENCY_RESPONSE_URLS = {
@@ -233,6 +233,83 @@ def _build_canonical_key_lookup(crosswalk_path: Path) -> dict[tuple[str, int], s
     return lookup
 
 
+# Race columns used for per-race rate computation (includes both eras)
+_RATE_RACE_COLS = ["Total", "White", "Black", "Hispanic", "Native American", "Asian", "Other", "Am. Indian"]
+
+# Rate specifications: (output_canonical_key, numerator_ck, denominator_ck, year_limit_fn)
+# year_limit_fn: None = all years; callable = filter years
+_RATE_SPECS = [
+    ("search-rate",         "searches",         "stops",    None),
+    ("arrest-rate",         "arrests",           "stops",    None),
+    ("contraband-hit-rate", "contraband-total",  "searches", lambda y: y >= 2020),
+]
+
+
+def _compute_agency_rates(combined: pd.DataFrame) -> pd.DataFrame:
+    """
+    Compute per-agency rate rows from raw counts using canonical_key.
+
+    Produces rows with canonical_key = 'search-rate', 'arrest-rate', etc.
+    using row_key 'computed--rates--{rate}' to distinguish from PDF pre-computed
+    values.  Both pre-2020 and 2020+ use the same formula; cross-era consistency
+    is guaranteed because canonical_key selects the right raw count row per era.
+
+    Contraband-hit-rate is 2020+-only: pre-2020 has no single-row contraband total.
+    """
+    if "canonical_key" not in combined.columns or combined.empty:
+        return pd.DataFrame()
+
+    race_cols = [c for c in _RATE_RACE_COLS if c in combined.columns]
+    id_cols = ["agency", "year"]
+
+    # Needed canonical keys for numerators/denominators
+    needed_cks = {num for _, num, _, _ in _RATE_SPECS} | {den for _, _, den, _ in _RATE_SPECS}
+    base = combined[combined["canonical_key"].isin(needed_cks)][id_cols + race_cols + ["canonical_key"]].copy()
+
+    # Drop duplicate rows per (agency, year, canonical_key) — 2020+ has two row_keys
+    # for the same canonical (primary + duplicate); values are identical so keep first.
+    base = base.drop_duplicates(subset=[*id_cols, "canonical_key"])
+
+    computed_frames = []
+    for rate_ck, num_ck, den_ck, year_filter in _RATE_SPECS:
+        num_df = base[base["canonical_key"] == num_ck][id_cols + race_cols].copy()
+        den_df = base[base["canonical_key"] == den_ck][id_cols + race_cols].copy()
+        if num_df.empty or den_df.empty:
+            continue
+
+        merged = num_df.merge(
+            den_df, on=id_cols, suffixes=("_num", "_den"), how="inner"
+        )
+        if year_filter:
+            merged = merged[merged["year"].apply(year_filter)]
+        if merged.empty:
+            continue
+
+        rate_frame = merged[id_cols].copy()
+        for col in race_cols:
+            num_vals = pd.to_numeric(merged[f"{col}_num"], errors="coerce")
+            den_vals = pd.to_numeric(merged[f"{col}_den"], errors="coerce")
+            rate_frame[col] = (num_vals / den_vals * 100).where(den_vals > 0)
+
+        rate_frame["canonical_key"] = rate_ck
+        rate_frame["row_key"] = f"computed--rates--{rate_ck}"
+        rate_frame["table_id"] = "computed-rates"
+        rate_frame["table"] = "Computed Rates"
+        rate_frame["section_id"] = "rates"
+        rate_frame["section"] = "Rates"
+        rate_frame["metric_id"] = rate_ck
+        rate_frame["metric"] = rate_ck.replace("-", " ").title()
+        rate_frame["row_id"] = [
+            f"{yr}-{_slugify_simple(ag)}-computed--rates--{rate_ck}"
+            for ag, yr in zip(rate_frame["agency"], rate_frame["year"])
+        ]
+        computed_frames.append(rate_frame)
+
+    if not computed_frames:
+        return pd.DataFrame()
+    return pd.concat(computed_frames, ignore_index=True)
+
+
 # ------------------------------------------------------------------------------
 # Combine all extracted DataFrame assets into one JSON and DataFrame
 # ------------------------------------------------------------------------------
@@ -319,6 +396,16 @@ def combine_reports(context, **extracted_reports: dict[str, pd.DataFrame]) -> pd
         context.log.warning("canonical_crosswalk.csv not found at %s; canonical_key set to None", crosswalk_path)
 
     combined = _normalize_acs_population_rows(combined, context.log)
+
+    # Compute per-agency rates from raw counts (uniform methodology across eras)
+    computed = _compute_agency_rates(combined)
+    if not computed.empty:
+        combined = pd.concat([combined, computed], ignore_index=True)
+        context.log.info(
+            "Appended %d computed rate rows (%s)",
+            len(computed),
+            computed["canonical_key"].value_counts().to_dict(),
+        )
 
     # Write combined Parquet
     processed_dir = Path(context.resources.data_dir_processed.get_path())
