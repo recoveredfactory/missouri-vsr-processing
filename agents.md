@@ -245,6 +245,53 @@ Key design choice for layer 3 outputs: **partition Parquet by year**. DuckDB's p
 
 Lambda cold starts are not a meaningful concern here: the function will be kept warm with a cron ping, responses are heavily cached, and the data doesn't change between pipeline runs. There's no need for short cache TTLs or aggressive Lambda optimization.
 
+### v2 dist file contract
+
+**row_key in all v2 dist outputs = `canonical_key`**, not the era-specific PDF row_key. The frontend must update any hardcoded row_key strings:
+
+| v1 row_key | v2 row_key (canonical) |
+|---|---|
+| `rates-by-race--totals--all-stops` | `stops` |
+| `rates-by-race--totals--searches` | `searches` |
+| `rates-by-race--totals--arrests` | `arrests` |
+| `rates-by-race--totals--citations` | `citations` |
+| `rates-by-race--totals--contraband` | `contraband-total` |
+| `rates-by-race--rates--search-rate` | `search-rate` |
+| `number-of-stops-by-race--stop-outcome--warning` | `stop-outcome--warning` |
+
+Full canonical key list: `data/src/canonical_crosswalk.csv`.
+
+**Race columns:** `Native American` is null for pre-2020 rows; `Am. Indian` is null for 2020+ rows. Both appear in the layer-2 Parquet. The dist JSON uses the standard 7-column set (`Total`, `White`, `Black`, `Hispanic`, `Native American`, `Asian`, `Other`); pre-2020 `Native American` values will be null.
+
+**Year range:** v2 covers 2000–2024. 2001–2003 have partial coverage (~50% of agencies) due to a known parser limitation (blank race columns). Years 2004–2024 have full coverage.
+
+**Dist JSON design principle:** raw counts + canonical keys only. No rank/percentile/percentage derived rows. The frontend computes any display-layer derived values it needs, OR defers to the download Parquet.
+
+**Download Parquet** (`reports_with_rank_percentile.parquet`): includes pre-computed rank, percentile, and in-group percentage rows as convenience derivations for data consumers. These also serve as a data quality signal — computed values should match PDF pre-computed rates.
+
+### Agency year JSON — per-year partition (v2 target)
+
+Agency JSON files should be **partitioned by year**:
+
+```
+dist/agency_year/{agency-slug}/{year}.json   ← one file per agency per year
+```
+
+**Why:** The frontend loads only the most recent year on initial page render; historical years are fetched on demand. With 25 years of data, a monolithic per-agency file would be 700 KB–1.4 MB. Per-year files are ~30–50 KB each (including rank/percentile rows).
+
+**Rank/percentile must be in the per-year file.** The frontend cannot compute rank without all agencies' data, and the N (number of reporting agencies) differs by year. Pre-computed rank is required.
+
+**Not yet implemented** — current pipeline still writes monolithic per-agency files. The next step is to restructure `agency_year_json_exports` to write `{slug}/{year}.json`, reading from `reports_with_rank_percentile.parquet` (which has canonical keys + ranks).
+
+**Current file sizes (monolithic, no ranks):**
+- Average: 500 KB per agency, 436 MB total, 892 agencies
+- Expected with per-year partition + ranks: ~30–50 KB per file, ~22k total files
+
+**Observed sizes for other dist files (v2):**
+- `metric_year_subset.json`: 4.6 MB (9 canonical keys × 884 agencies × 25 years)
+- `statewide_year_sums.json`: 1.1 MB
+- `statewide_year_sums_subset.json`: 30 KB
+
 ### Data-derived frontend artifacts
 
 The pipeline can generate frontend-facing content directly from data and schema, reducing manual maintenance:
