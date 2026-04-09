@@ -600,7 +600,6 @@ def statewide_slug_baselines(combine_all_reports: pd.DataFrame) -> pd.DataFrame:
     return compute_statewide_slug_baselines(combine_all_reports)
 
 
-@op(out=Out(pd.DataFrame))
 def pivot_reports_by_slug_op(context, combined: pd.DataFrame) -> pd.DataFrame:
     """Pivot combined report data so each Agency+Year row contains row_key-based columns."""
     if combined.empty:
@@ -656,14 +655,17 @@ def pivot_reports_by_slug_op(context, combined: pd.DataFrame) -> pd.DataFrame:
     return pivoted
 
 
-@graph_asset(
+@asset(
     name="pivot_reports_by_slug",
     group_name="processed",
-    ins={"reports_with_rank_percentile": AssetIn(key=AssetKey("reports_with_rank_percentile"))},
+    deps=[AssetKey("reports_with_rank_percentile")],
+    required_resource_keys={"data_dir_processed"},
     description="Pivot combined report data so each agency/year row has row_key-derived columns.",
 )
-def pivot_reports_by_slug(reports_with_rank_percentile: pd.DataFrame) -> pd.DataFrame:
-    return pivot_reports_by_slug_op(reports_with_rank_percentile)
+def pivot_reports_by_slug(context) -> pd.DataFrame:
+    processed_dir = Path(context.resources.data_dir_processed.get_path())
+    combined = pd.read_parquet(processed_dir / "reports_with_rank_percentile.parquet")
+    return pivot_reports_by_slug_op(context, combined)
 
 
 def _is_null(value) -> bool:
@@ -2196,7 +2198,6 @@ def dist_manifest_json(context) -> str:
     return str(out_path)
 
 
-@op(out=Out(dict), required_resource_keys={"data_dir_out", "s3"})
 def write_download_vsr_statistics(
     context,
     reports: pd.DataFrame,
@@ -2215,7 +2216,6 @@ def write_download_vsr_statistics(
     )
 
 
-@op(out=Out(dict), required_resource_keys={"data_dir_out", "s3"})
 def write_download_agency_index(
     context,
     pivoted: pd.DataFrame,
@@ -2236,7 +2236,6 @@ def write_download_agency_index(
     )
 
 
-@op(out=Out(dict), required_resource_keys={"data_dir_out", "s3"})
 def write_download_agency_comments(context, agency_comments: pd.DataFrame) -> dict:
     out_dir = Path(context.resources.data_dir_out.get_path()) / "downloads"
     if agency_comments.empty:
@@ -2250,7 +2249,6 @@ def write_download_agency_comments(context, agency_comments: pd.DataFrame) -> di
     )
 
 
-@op(out=Out(dict), required_resource_keys={"data_dir_out", "s3"})
 def write_downloads_combined(
     context,
     vsr_statistics: pd.DataFrame,
@@ -2295,80 +2293,74 @@ def write_downloads_combined(
     }
 
 
-@graph_asset(
+@asset(
     name="downloads_vsr_statistics",
     group_name="downloads",
-    ins={
-        "reports_with_rank_percentile": AssetIn(key=AssetKey("reports_with_rank_percentile")),
-        "agency_reference_geocoded": AssetIn(key=AssetKey("agency_reference_geocoded")),
-    },
+    deps=[AssetKey("reports_with_rank_percentile"), AssetKey("agency_reference_geocoded")],
+    required_resource_keys={"data_dir_processed", "data_dir_out", "s3"},
     description="Download bundle for VSR statistics (parquet/json/csv).",
 )
-def downloads_vsr_statistics(
-    reports_with_rank_percentile: pd.DataFrame,
-    agency_reference_geocoded: pd.DataFrame,
-) -> dict:
-    return write_download_vsr_statistics(reports_with_rank_percentile, agency_reference_geocoded)
+def downloads_vsr_statistics(context) -> dict:
+    processed_dir = Path(context.resources.data_dir_processed.get_path())
+    reports = pd.read_parquet(processed_dir / "reports_with_rank_percentile.parquet")
+    agency_ref = pd.read_parquet(processed_dir / "agency_reference_geocoded.parquet")
+    return write_download_vsr_statistics(context, reports, agency_ref)
 
 
-@graph_asset(
+@asset(
     name="downloads_agency_index",
     group_name="downloads",
-    ins={
-        "pivot_reports_by_slug": AssetIn(key=AssetKey("pivot_reports_by_slug")),
-        "agency_reference_geocoded": AssetIn(key=AssetKey("agency_reference_geocoded")),
-        "combine_all_reports": AssetIn(key=AssetKey("combine_all_reports")),
-    },
+    deps=[AssetKey("combine_all_reports"), AssetKey("agency_reference_geocoded")],
+    required_resource_keys={"data_dir_processed", "data_dir_out", "s3"},
     description="Download bundle for agency_index (parquet/json/csv).",
 )
-def downloads_agency_index(
-    pivot_reports_by_slug: pd.DataFrame,
-    agency_reference_geocoded: pd.DataFrame,
-    combine_all_reports: pd.DataFrame,
-) -> dict:
-    return write_download_agency_index(
-        pivot_reports_by_slug,
-        agency_reference_geocoded,
-        combine_all_reports,
-    )
+def downloads_agency_index(context) -> dict:
+    processed_dir = Path(context.resources.data_dir_processed.get_path())
+    con = _open_canonical_db(str(processed_dir / "all_combined_output.parquet"))
+    combined = con.execute("SELECT * FROM canonical_combined").df()
+    con.close()
+    stops_rows = combined[combined["row_key"] == "stops"][["agency", "year", "Total"]].copy()
+    stops_rows = stops_rows.rename(columns={"Total": "stops__Total"})
+    agency_ref = pd.read_parquet(processed_dir / "agency_reference_geocoded.parquet")
+    return write_download_agency_index(context, stops_rows, agency_ref, combined)
 
 
-@graph_asset(
+@asset(
     name="downloads_agency_comments",
     group_name="downloads",
-    ins={"agency_comments": AssetIn(key=AssetKey("agency_comments"))},
+    deps=[AssetKey("agency_comments")],
+    required_resource_keys={"data_dir_processed", "data_dir_out", "s3"},
     description="Download bundle for agency comments (parquet/json/csv).",
 )
-def downloads_agency_comments(agency_comments: pd.DataFrame) -> dict:
-    return write_download_agency_comments(agency_comments)
+def downloads_agency_comments(context) -> dict:
+    processed_dir = Path(context.resources.data_dir_processed.get_path())
+    agency_comments = pd.read_parquet(processed_dir / "agency_comments.parquet")
+    return write_download_agency_comments(context, agency_comments)
 
 
-@graph_asset(
+@asset(
     name="downloads_combined",
     group_name="downloads",
-    ins={
-        "reports_with_rank_percentile": AssetIn(key=AssetKey("reports_with_rank_percentile")),
-        "pivot_reports_by_slug": AssetIn(key=AssetKey("pivot_reports_by_slug")),
-        "agency_reference_geocoded": AssetIn(key=AssetKey("agency_reference_geocoded")),
-        "combine_all_reports": AssetIn(key=AssetKey("combine_all_reports")),
-        "agency_comments": AssetIn(key=AssetKey("agency_comments")),
-    },
+    deps=[
+        AssetKey("reports_with_rank_percentile"),
+        AssetKey("combine_all_reports"),
+        AssetKey("agency_reference_geocoded"),
+        AssetKey("agency_comments"),
+    ],
+    required_resource_keys={"data_dir_processed", "data_dir_out", "s3"},
     description="Combined downloads bundle (json + parquet).",
 )
-def downloads_combined(
-    reports_with_rank_percentile: pd.DataFrame,
-    pivot_reports_by_slug: pd.DataFrame,
-    agency_reference_geocoded: pd.DataFrame,
-    combine_all_reports: pd.DataFrame,
-    agency_comments: pd.DataFrame,
-) -> dict:
-    return write_downloads_combined(
-        reports_with_rank_percentile,
-        pivot_reports_by_slug,
-        agency_reference_geocoded,
-        combine_all_reports,
-        agency_comments,
-    )
+def downloads_combined(context) -> dict:
+    processed_dir = Path(context.resources.data_dir_processed.get_path())
+    reports = pd.read_parquet(processed_dir / "reports_with_rank_percentile.parquet")
+    con = _open_canonical_db(str(processed_dir / "all_combined_output.parquet"))
+    combined = con.execute("SELECT * FROM canonical_combined").df()
+    con.close()
+    stops_rows = combined[combined["row_key"] == "stops"][["agency", "year", "Total"]].copy()
+    stops_rows = stops_rows.rename(columns={"Total": "stops__Total"})
+    agency_ref = pd.read_parquet(processed_dir / "agency_reference_geocoded.parquet")
+    agency_comments = pd.read_parquet(processed_dir / "agency_comments.parquet")
+    return write_downloads_combined(context, reports, stops_rows, agency_ref, combined, agency_comments)
 
 
 @asset(
