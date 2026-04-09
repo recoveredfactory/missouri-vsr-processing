@@ -2310,19 +2310,17 @@ def downloads_vsr_statistics(context) -> dict:
 @asset(
     name="downloads_agency_index",
     group_name="downloads",
-    deps=[AssetKey("combine_all_reports"), AssetKey("agency_reference_geocoded")],
+    deps=[AssetKey("reports_with_rank_percentile"), AssetKey("agency_reference_geocoded")],
     required_resource_keys={"data_dir_processed", "data_dir_out", "s3"},
     description="Download bundle for agency_index (parquet/json/csv).",
 )
 def downloads_agency_index(context) -> dict:
     processed_dir = Path(context.resources.data_dir_processed.get_path())
-    con = _open_canonical_db(str(processed_dir / "all_combined_output.parquet"))
-    combined = con.execute("SELECT * FROM canonical_combined").df()
-    con.close()
-    stops_rows = combined[combined["row_key"] == "stops"][["agency", "year", "Total"]].copy()
+    reports = pd.read_parquet(processed_dir / "reports_with_rank_percentile.parquet")
+    stops_rows = reports[reports["row_key"] == "stops"][["agency", "year", "Total"]].copy()
     stops_rows = stops_rows.rename(columns={"Total": "stops__Total"})
     agency_ref = pd.read_parquet(processed_dir / "agency_reference_geocoded.parquet")
-    return write_download_agency_index(context, stops_rows, agency_ref, combined)
+    return write_download_agency_index(context, stops_rows, agency_ref, reports)
 
 
 @asset(
@@ -2343,7 +2341,6 @@ def downloads_agency_comments(context) -> dict:
     group_name="downloads",
     deps=[
         AssetKey("reports_with_rank_percentile"),
-        AssetKey("combine_all_reports"),
         AssetKey("agency_reference_geocoded"),
         AssetKey("agency_comments"),
     ],
@@ -2352,15 +2349,13 @@ def downloads_agency_comments(context) -> dict:
 )
 def downloads_combined(context) -> dict:
     processed_dir = Path(context.resources.data_dir_processed.get_path())
+    # Load one large parquet; derive stops_rows and agency filter from it directly.
     reports = pd.read_parquet(processed_dir / "reports_with_rank_percentile.parquet")
-    con = _open_canonical_db(str(processed_dir / "all_combined_output.parquet"))
-    combined = con.execute("SELECT * FROM canonical_combined").df()
-    con.close()
-    stops_rows = combined[combined["row_key"] == "stops"][["agency", "year", "Total"]].copy()
+    stops_rows = reports[reports["row_key"] == "stops"][["agency", "year", "Total"]].copy()
     stops_rows = stops_rows.rename(columns={"Total": "stops__Total"})
     agency_ref = pd.read_parquet(processed_dir / "agency_reference_geocoded.parquet")
     agency_comments = pd.read_parquet(processed_dir / "agency_comments.parquet")
-    return write_downloads_combined(context, reports, stops_rows, agency_ref, combined, agency_comments)
+    return write_downloads_combined(context, reports, stops_rows, agency_ref, reports, agency_comments)
 
 
 @asset(
