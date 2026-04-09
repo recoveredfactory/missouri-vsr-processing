@@ -212,37 +212,42 @@ def _open_canonical_db(parquet_path: str) -> duckdb.DuckDBPyConnection:
     ]
     race_sql = ", ".join(race_cols)
 
+    # Use explicit column lists (not SELECT *) to avoid DuckDB type-binding
+    # errors with window functions on mixed-type CTEs.
+    meta_cols = "agency, CAST(year AS BIGINT) AS year, table_id, \"table\", section_id, section, metric_id, metric, row_id"
+
     con = duckdb.connect()
     con.execute(f"""
         CREATE VIEW canonical_combined AS
         WITH base AS (
-            SELECT *,
+            SELECT
+                {meta_cols},
+                row_key, canonical_key,
+                {race_sql},
                 (row_key LIKE 'computed--rates--%')::INTEGER AS _priority
             FROM read_parquet('{parquet_path}')
         ),
         best_canonical AS (
-            SELECT *,
-                ROW_NUMBER() OVER (
-                    PARTITION BY agency, year, canonical_key
-                    ORDER BY _priority DESC
-                ) AS _rn
-            FROM base WHERE canonical_key IS NOT NULL
+            SELECT
+                {meta_cols},
+                canonical_key AS row_key, canonical_key,
+                {race_sql}
+            FROM (
+                SELECT *,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY agency, year, canonical_key
+                        ORDER BY _priority DESC
+                    ) AS _rn
+                FROM base WHERE canonical_key IS NOT NULL
+            ) sub WHERE _rn = 1
+        ),
+        era_specific AS (
+            SELECT {meta_cols}, row_key, canonical_key, {race_sql}
+            FROM base WHERE canonical_key IS NULL
         )
-        SELECT
-            agency, year,
-            canonical_key AS row_key,
-            canonical_key,
-            {race_sql},
-            table_id, "table", section_id, section, metric_id, metric, row_id
-        FROM best_canonical WHERE _rn = 1
+        SELECT * FROM best_canonical
         UNION ALL
-        SELECT
-            agency, year,
-            row_key,
-            canonical_key,
-            {race_sql},
-            table_id, "table", section_id, section, metric_id, metric, row_id
-        FROM base WHERE canonical_key IS NULL
+        SELECT * FROM era_specific
     """)
     return con
 
@@ -968,7 +973,6 @@ def _normalize_agency_key(value: str | None) -> str:
     return text.lower()
 
 
-@op(out=Out(list), required_resource_keys={"data_dir_out", "data_dir_processed", "s3"})
 def write_agency_year_json(
     context,
     combined: pd.DataFrame,
@@ -1870,26 +1874,30 @@ def write_report_dimension_index_json(context, combined: pd.DataFrame) -> str:
     return str(out_path)
 
 
-@graph_asset(
+@asset(
     name="agency_year_json_exports",
     group_name="dist",
-    ins={
-        "reports_with_rank_percentile": AssetIn(key=AssetKey("reports_with_rank_percentile")),
-        "agency_reference_geocoded": AssetIn(key=AssetKey("agency_reference_geocoded")),
-        "agency_comments": AssetIn(key=AssetKey("agency_comments")),
-    },
-    description="Generate per-agency JSON files containing year-by-year row_key data.",
+    deps=[AssetKey("combine_all_reports")],
+    required_resource_keys={"data_dir_processed", "data_dir_out", "s3"},
+    description="Generate per-agency JSON files from canonical combined Parquet (no rank/percentile rows).",
 )
-def agency_year_json_exports(
-    reports_with_rank_percentile: pd.DataFrame,
-    agency_reference_geocoded: pd.DataFrame,
-    agency_comments: pd.DataFrame,
-) -> List[str]:
-    return write_agency_year_json(
-        reports_with_rank_percentile,
-        agency_reference_geocoded,
-        agency_comments,
-    )
+def agency_year_json_exports(context) -> List[str]:
+    processed_dir = Path(context.resources.data_dir_processed.get_path())
+    combined = pd.read_parquet(processed_dir / "all_combined_output.parquet")
+    combined = _collapse_to_canonical(combined)
+    context.log.info("Loaded canonical view: %d rows for agency JSON export", len(combined))
+    # Load reference and comments from parquet if available; pass empty frames if not
+    agency_reference_geocoded = pd.DataFrame()
+    agency_comments = pd.DataFrame()
+    for ref_name in ("agency_reference_geocoded.parquet", "agency_reference.parquet"):
+        ref_path = processed_dir / ref_name
+        if ref_path.exists():
+            agency_reference_geocoded = pd.read_parquet(ref_path)
+            break
+    comments_path = processed_dir / "agency_comments.parquet"
+    if comments_path.exists():
+        agency_comments = pd.read_parquet(comments_path)
+    return write_agency_year_json(context, combined, agency_reference_geocoded, agency_comments)
 
 
 @op(out=Out(str), required_resource_keys={"data_dir_out", "s3"})
