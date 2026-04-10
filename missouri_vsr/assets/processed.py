@@ -2151,48 +2151,58 @@ def write_statewide_agency_json(context, combined: pd.DataFrame) -> str:
 
 
 @asset(
+    name="canonical_combined_parquet",
+    group_name="processed",
+    deps=[AssetKey("combine_all_reports")],
+    required_resource_keys={"data_dir_processed"},
+    description="Run canonical deduplication window function once; write result to parquet for dist assets.",
+)
+def canonical_combined_parquet(context) -> str:
+    processed_dir = Path(context.resources.data_dir_processed.get_path())
+    out_path = processed_dir / "canonical_combined.parquet"
+    con = _open_canonical_db(str(processed_dir / "all_combined_output.parquet"))
+    con.execute(f"COPY (SELECT * FROM canonical_combined) TO '{out_path}' (FORMAT PARQUET)")
+    row_count = con.execute(f"SELECT COUNT(*) FROM read_parquet('{out_path}')").fetchone()[0]
+    con.close()
+    context.log.info("Wrote canonical combined Parquet → %s (%d rows)", out_path, row_count)
+    try:
+        context.add_output_metadata({"local_path": str(out_path), "row_count": int(row_count)})
+    except Exception:
+        pass
+    return str(out_path)
+
+
+@asset(
     name="statewide_agency_json_export",
     group_name="dist",
-    deps=[AssetKey("combine_all_reports")],
-    required_resource_keys={"data_dir_processed", "data_dir_out", "s3"},
+    ins={"canonical_combined_parquet": AssetIn(key=AssetKey("canonical_combined_parquet"))},
+    required_resource_keys={"data_dir_out", "s3"},
     description="Per-agency-format JSON for Missouri (all agencies) statewide aggregate.",
 )
-def statewide_agency_json_export(context) -> str:
-    processed_dir = Path(context.resources.data_dir_processed.get_path())
-    con = _open_canonical_db(str(processed_dir / "all_combined_output.parquet"))
-    combined = con.execute("SELECT * FROM canonical_combined").df()
-    con.close()
-    return write_statewide_agency_json(context, combined)
+def statewide_agency_json_export(context, canonical_combined_parquet: str) -> str:
+    return write_statewide_agency_json(context, pd.read_parquet(canonical_combined_parquet))
 
 
 @asset(
     name="metric_year_json_exports",
     group_name="dist",
-    deps=[AssetKey("combine_all_reports")],
-    required_resource_keys={"data_dir_processed", "data_dir_out", "s3"},
+    ins={"canonical_combined_parquet": AssetIn(key=AssetKey("canonical_combined_parquet"))},
+    required_resource_keys={"data_dir_out", "s3"},
     description="Generate per-row_key JSON files with agency/year/race values.",
 )
-def metric_year_json_exports(context) -> List[str]:
-    processed_dir = Path(context.resources.data_dir_processed.get_path())
-    con = _open_canonical_db(str(processed_dir / "all_combined_output.parquet"))
-    combined = con.execute("SELECT * FROM canonical_combined").df()
-    con.close()
-    return write_metric_year_json(context, combined)
+def metric_year_json_exports(context, canonical_combined_parquet: str) -> List[str]:
+    return write_metric_year_json(context, pd.read_parquet(canonical_combined_parquet))
 
 
 @asset(
     name="metric_year_subset_json",
     group_name="dist",
-    deps=[AssetKey("combine_all_reports")],
-    required_resource_keys={"data_dir_processed", "data_dir_out", "s3"},
+    ins={"canonical_combined_parquet": AssetIn(key=AssetKey("canonical_combined_parquet"))},
+    required_resource_keys={"data_dir_out", "s3"},
     description="Write a compact JSON file with selected row_keys across agencies/years.",
 )
-def metric_year_subset_json(context) -> str:
-    processed_dir = Path(context.resources.data_dir_processed.get_path())
-    con = _open_canonical_db(str(processed_dir / "all_combined_output.parquet"))
-    combined = con.execute("SELECT * FROM canonical_combined").df()
-    con.close()
-    return write_metric_year_subset_json(context, combined)
+def metric_year_subset_json(context, canonical_combined_parquet: str) -> str:
+    return write_metric_year_subset_json(context, pd.read_parquet(canonical_combined_parquet))
 
 
 @asset(
@@ -2252,61 +2262,45 @@ def statewide_slug_baselines_json(context) -> str:
 @asset(
     name="statewide_year_sums_json",
     group_name="dist",
-    deps=[AssetKey("combine_all_reports")],
-    required_resource_keys={"data_dir_processed", "data_dir_out", "s3"},
+    ins={"canonical_combined_parquet": AssetIn(key=AssetKey("canonical_combined_parquet"))},
+    required_resource_keys={"data_dir_out", "s3"},
     description="Write statewide per-year sums for each row_key and race column.",
 )
-def statewide_year_sums_json(context) -> str:
-    processed_dir = Path(context.resources.data_dir_processed.get_path())
-    con = _open_canonical_db(str(processed_dir / "all_combined_output.parquet"))
-    combined = con.execute("SELECT * FROM canonical_combined").df()
-    con.close()
-    return write_statewide_year_sums_json(context, combined)
+def statewide_year_sums_json(context, canonical_combined_parquet: str) -> str:
+    return write_statewide_year_sums_json(context, pd.read_parquet(canonical_combined_parquet))
 
 
 @asset(
     name="statewide_year_sums_subset_json",
     group_name="dist",
-    deps=[AssetKey("combine_all_reports")],
-    required_resource_keys={"data_dir_processed", "data_dir_out", "s3"},
+    ins={"canonical_combined_parquet": AssetIn(key=AssetKey("canonical_combined_parquet"))},
+    required_resource_keys={"data_dir_out", "s3"},
     description="Write a slim statewide sums JSON for selected metrics.",
 )
-def statewide_year_sums_subset_json(context) -> str:
-    processed_dir = Path(context.resources.data_dir_processed.get_path())
-    con = _open_canonical_db(str(processed_dir / "all_combined_output.parquet"))
-    combined = con.execute("SELECT * FROM canonical_combined").df()
-    con.close()
-    return write_statewide_year_sums_subset_json(context, combined)
+def statewide_year_sums_subset_json(context, canonical_combined_parquet: str) -> str:
+    return write_statewide_year_sums_subset_json(context, pd.read_parquet(canonical_combined_parquet))
 
 
 @asset(
     name="report_dimension_index_json",
     group_name="dist",
-    deps=[AssetKey("combine_all_reports")],
-    required_resource_keys={"data_dir_processed", "data_dir_out", "s3"},
+    ins={"canonical_combined_parquet": AssetIn(key=AssetKey("canonical_combined_parquet"))},
+    required_resource_keys={"data_dir_out", "s3"},
     description="Write unique table/section/metric identifiers for translations.",
 )
-def report_dimension_index_json(context) -> str:
-    processed_dir = Path(context.resources.data_dir_processed.get_path())
-    con = _open_canonical_db(str(processed_dir / "all_combined_output.parquet"))
-    combined = con.execute("SELECT * FROM canonical_combined").df()
-    con.close()
-    return write_report_dimension_index_json(context, combined)
+def report_dimension_index_json(context, canonical_combined_parquet: str) -> str:
+    return write_report_dimension_index_json(context, pd.read_parquet(canonical_combined_parquet))
 
 
 @asset(
     name="homepage_stats_json",
     group_name="dist",
-    deps=[AssetKey("combine_all_reports")],
-    required_resource_keys={"data_dir_processed", "data_dir_out", "s3"},
+    ins={"canonical_combined_parquet": AssetIn(key=AssetKey("canonical_combined_parquet"))},
+    required_resource_keys={"data_dir_out", "s3"},
     description="Generate homepage stats JSON for the latest report year.",
 )
-def homepage_stats_json(context) -> str:
-    processed_dir = Path(context.resources.data_dir_processed.get_path())
-    con = _open_canonical_db(str(processed_dir / "all_combined_output.parquet"))
-    combined = con.execute("SELECT * FROM canonical_combined").df()
-    con.close()
-    return write_homepage_stats_json(context, combined)
+def homepage_stats_json(context, canonical_combined_parquet: str) -> str:
+    return write_homepage_stats_json(context, pd.read_parquet(canonical_combined_parquet))
 
 
 @asset(
