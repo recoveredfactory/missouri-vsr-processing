@@ -1908,7 +1908,6 @@ def _write_agency_year_for_year(
     def _flush(agency: str, rows: list) -> str:
         agency_slug = _agency_slug(agency)
         slug_dir = out_root / agency_slug
-        slug_dir.mkdir(parents=True, exist_ok=True)
         records = []
         for row in rows:
             rec = {}
@@ -1928,7 +1927,7 @@ def _write_agency_year_for_year(
         if year_comments:
             payload["agency_comments"] = year_comments
         out_path = slug_dir / f"{yr}.json"
-        out_path.write_text(json.dumps(payload, indent=2))
+        out_path.write_text(json.dumps(payload, separators=(",", ":")))
         return str(out_path)
 
     paths: list[str] = []
@@ -2005,13 +2004,17 @@ def agency_year_json_exports(context) -> List[str]:
         except Exception as exc:
             context.log.exception("Failed to load agency comments: %s", exc)
 
-    # Determine column layout from schema (no data loaded yet).
+    # Determine column layout and enumerate years + agencies in one DuckDB pass.
     con = duckdb.connect()
     schema_df = con.execute(f"SELECT * FROM read_parquet('{parquet_path}') LIMIT 0").df()
     years = sorted(
         int(r[0]) for r in
         con.execute(f"SELECT DISTINCT year FROM read_parquet('{parquet_path}') WHERE year IS NOT NULL").fetchall()
     )
+    agency_slugs = [
+        _agency_slug(r[0]) for r in
+        con.execute(f"SELECT DISTINCT agency FROM read_parquet('{parquet_path}') WHERE agency IS NOT NULL").fetchall()
+    ]
     con.close()
 
     value_cols = [c for c in PIVOT_VALUE_COLUMNS if c in schema_df.columns]
@@ -2029,8 +2032,14 @@ def agency_year_json_exports(context) -> List[str]:
     out_root = Path(context.resources.data_dir_out.get_path()) / "agency_year"
     out_root.mkdir(parents=True, exist_ok=True)
 
-    # Each thread streams tuples (no pandas DataFrame), so memory per thread is minimal.
-    # Cap at cpu_count to avoid thrashing the parquet file with too many concurrent readers.
+    # Pre-create all per-agency slug directories before the thread pool starts.
+    # This removes 897 mkdir syscalls from the per-thread hot path and eliminates
+    # any race between concurrent threads trying to create the same directory.
+    for slug in agency_slugs:
+        (out_root / slug).mkdir(exist_ok=True)
+    context.log.info("Pre-created %d agency slug directories", len(agency_slugs))
+
+    # Each thread streams tuples (no pandas), so memory per worker is minimal.
     workers = min(len(years), os.cpu_count() or 4)
     output_paths: List[str] = []
     with ThreadPoolExecutor(max_workers=workers) as executor:
