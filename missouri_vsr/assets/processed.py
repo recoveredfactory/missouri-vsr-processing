@@ -1892,9 +1892,13 @@ def _write_agency_year_for_year(
     comments_lookup: dict,
 ) -> tuple[int, list[str]]:
     """Write all per-agency JSON files for a single year. Runs in a thread pool."""
+    # Select only needed columns to minimise in-memory DataFrame size.
+    # DuckDB double-quotes column names with spaces (race columns).
+    needed = ["agency"] + [c for c in row_cols if c != "agency"]
+    col_sql = ", ".join(f'"{c}"' for c in needed)
     con = duckdb.connect()
     year_df = con.execute(
-        f"SELECT * FROM read_parquet('{parquet_path}') WHERE year = {yr}"
+        f"SELECT {col_sql} FROM read_parquet('{parquet_path}') WHERE year = {yr}"
     ).df()
     con.close()
 
@@ -2005,8 +2009,9 @@ def agency_year_json_exports(context) -> List[str]:
     out_root = Path(context.resources.data_dir_out.get_path()) / "agency_year"
     out_root.mkdir(parents=True, exist_ok=True)
 
-    # Run years in parallel — each thread gets its own DuckDB connection.
-    workers = min(len(years), os.cpu_count() or 4)
+    # Cap at 3 concurrent years: each year's DataFrame is ~80-150 MB in-memory
+    # (68 MB parquet / 25 years expands ~4x in pandas), so 3 concurrent = ~500 MB max.
+    workers = min(3, len(years))
     output_paths: List[str] = []
     with ThreadPoolExecutor(max_workers=workers) as executor:
         futures = {
