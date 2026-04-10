@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import subprocess
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
 from pathlib import Path
 from typing import List
@@ -1880,6 +1883,52 @@ def write_report_dimension_index_json(context, combined: pd.DataFrame) -> str:
     return str(out_path)
 
 
+def _write_agency_year_for_year(
+    yr: int,
+    parquet_path: str,
+    out_root: Path,
+    row_cols: list,
+    agency_meta_lookup: dict,
+    comments_lookup: dict,
+) -> tuple[int, list[str]]:
+    """Write all per-agency JSON files for a single year. Runs in a thread pool."""
+    con = duckdb.connect()
+    year_df = con.execute(
+        f"SELECT * FROM read_parquet('{parquet_path}') WHERE year = {yr}"
+    ).df()
+    con.close()
+
+    paths: list[str] = []
+    for agency, agency_group in year_df.groupby("agency", sort=False):
+        agency_slug = _agency_slug(agency)
+        slug_dir = out_root / agency_slug
+        slug_dir.mkdir(parents=True, exist_ok=True)
+
+        records: list[dict] = []
+        for _, row in agency_group.sort_values("row_key", kind="mergesort").iterrows():
+            payload = {col: row.get(col) for col in row_cols if col in row.index}
+            yr_val = payload.get("year")
+            payload["year"] = int(yr_val) if pd.notna(yr_val) else None
+            records.append(_json_safe_record(payload))
+
+        file_payload: dict = {"agency": agency, "year": yr, "rows": records}
+        meta_row = agency_meta_lookup.get(str(agency).strip())
+        if meta_row is not None:
+            file_payload["agency_metadata"] = _series_to_json_dict(meta_row)
+        year_comments = [
+            c for c in (comments_lookup.get(_normalize_agency_key(agency)) or [])
+            if c.get("year") == yr
+        ]
+        if year_comments:
+            file_payload["agency_comments"] = year_comments
+
+        out_path = slug_dir / f"{yr}.json"
+        out_path.write_text(json.dumps(file_payload, indent=2))
+        paths.append(str(out_path))
+
+    return yr, paths
+
+
 @asset(
     name="agency_year_json_exports",
     group_name="dist",
@@ -1888,11 +1937,11 @@ def write_report_dimension_index_json(context, combined: pd.DataFrame) -> str:
     description="Generate per-agency per-year JSON files (dist/agency_year/{slug}/{year}.json) from rank/percentile Parquet.",
 )
 def agency_year_json_exports(context) -> List[str]:
-    """Stream one year at a time from parquet to avoid loading 3M rows into RAM."""
+    """Process years in parallel (ThreadPoolExecutor); each thread owns its DuckDB connection."""
     processed_dir = Path(context.resources.data_dir_processed.get_path())
     parquet_path = str(processed_dir / "reports_with_rank_percentile.parquet")
 
-    # Load small reference data once.
+    # Load small reference data once (shared read-only across threads).
     agency_meta_lookup: dict = {}
     for ref_name in ("agency_reference_geocoded.parquet", "agency_reference.parquet"):
         ref_path = processed_dir / ref_name
@@ -1956,58 +2005,24 @@ def agency_year_json_exports(context) -> List[str]:
     out_root = Path(context.resources.data_dir_out.get_path()) / "agency_year"
     out_root.mkdir(parents=True, exist_ok=True)
 
+    # Run years in parallel — each thread gets its own DuckDB connection.
+    workers = min(len(years), os.cpu_count() or 4)
     output_paths: List[str] = []
-    for yr in years:
-        # Load one year at a time (~120K rows vs 3M).
-        con = duckdb.connect()
-        year_df = con.execute(
-            f"SELECT * FROM read_parquet('{parquet_path}') WHERE year = {yr}"
-        ).df()
-        con.close()
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        futures = {
+            executor.submit(
+                _write_agency_year_for_year,
+                yr, parquet_path, out_root, row_cols, agency_meta_lookup, comments_lookup,
+            ): yr
+            for yr in years
+        }
+        for future in as_completed(futures):
+            yr, year_paths = future.result()
+            output_paths.extend(year_paths)
+            context.log.info("Wrote year %d: %d agency files", yr, len(year_paths))
 
-        year_file_count = 0
-        for agency, agency_group in year_df.groupby("agency", sort=False):
-            agency_slug = _agency_slug(agency)
-            slug_dir = out_root / agency_slug
-            slug_dir.mkdir(parents=True, exist_ok=True)
-
-            records: List[dict] = []
-            for _, row in agency_group.sort_values("row_key", kind="mergesort").iterrows():
-                payload = {col: row.get(col) for col in row_cols if col in row.index}
-                yr_val = payload.get("year")
-                payload["year"] = int(yr_val) if pd.notna(yr_val) else None
-                records.append(_json_safe_record(payload))
-
-            file_payload: dict = {"agency": agency, "year": yr, "rows": records}
-            meta_row = agency_meta_lookup.get(str(agency).strip())
-            if meta_row is not None:
-                file_payload["agency_metadata"] = _series_to_json_dict(meta_row)
-            year_comments = [
-                c for c in (comments_lookup.get(_normalize_agency_key(agency)) or [])
-                if c.get("year") == yr
-            ]
-            if year_comments:
-                file_payload["agency_comments"] = year_comments
-
-            out_path = slug_dir / f"{yr}.json"
-            out_path.write_text(json.dumps(file_payload, indent=2))
-            output_paths.append(str(out_path))
-            year_file_count += 1
-
-        context.log.info("Wrote year %d: %d agency files", yr, year_file_count)
-
-    base_dir = Path(context.resources.data_dir_out.get_path())
-    uploaded = upload_paths(context, [Path(p) for p in output_paths], base_dir=base_dir)
-    if uploaded:
-        context.log.info("Uploaded %d agency-year JSON files to S3", len(uploaded))
     try:
-        metadata = {"output_count": len(output_paths)}
-        s3_folder = s3_uri_for_dir(context, out_root, base_dir)
-        if s3_folder:
-            metadata["s3_folder"] = s3_folder
-        if uploaded:
-            metadata["s3_paths"] = uploaded
-        context.add_output_metadata(metadata)
+        context.add_output_metadata({"output_count": len(output_paths)})
     except Exception:
         pass
     return output_paths
@@ -2535,3 +2550,77 @@ def write_downloads_manifest(context) -> str:
     except Exception:
         pass
     return str(manifest_path)
+
+
+@asset(
+    name="dist_sync",
+    group_name="dist",
+    deps=[
+        AssetKey("agency_year_json_exports"),
+        AssetKey("metric_year_json_exports"),
+        AssetKey("metric_year_subset_json"),
+        AssetKey("agency_index_json"),
+        AssetKey("statewide_slug_baselines_json"),
+        AssetKey("statewide_year_sums_json"),
+        AssetKey("statewide_year_sums_subset_json"),
+        AssetKey("report_dimension_index_json"),
+        AssetKey("homepage_stats_json"),
+        AssetKey("dist_manifest_json"),
+        AssetKey("statewide_agency_json_export"),
+    ],
+    required_resource_keys={"data_dir_out", "s3"},
+    description=(
+        "Sync all locally generated dist outputs to S3 using aws s3 sync. "
+        "Runs after all dist generation assets. No-op when S3 is not configured."
+    ),
+)
+def dist_sync(context) -> dict:
+    """Push data/out/ to S3 using aws s3 sync (parallelized by the AWS CLI)."""
+    s3_res = getattr(context.resources, "s3", None)
+    bucket = s3_res.resolved_bucket() if s3_res else None
+    if not bucket:
+        context.log.info("S3 not configured; skipping dist_sync.")
+        try:
+            context.add_output_metadata({"skipped": True, "reason": "S3 not configured"})
+        except Exception:
+            pass
+        return {"skipped": True}
+
+    prefix = s3_res.resolved_prefix()
+    out_dir = Path(context.resources.data_dir_out.get_path())
+
+    # dist: everything under data_dir_out except downloads/
+    dist_s3 = f"s3://{bucket}/{prefix}/dist/" if prefix else f"s3://{bucket}/dist/"
+    downloads_s3 = f"s3://{bucket}/{prefix}/downloads/" if prefix else f"s3://{bucket}/downloads/"
+
+    def _run_sync(src: str, dst: str, extra_args: list[str] | None = None) -> dict:
+        cmd = ["aws", "s3", "sync", src, dst, "--no-progress"]
+        if extra_args:
+            cmd.extend(extra_args)
+        context.log.info("Running: %s", " ".join(cmd))
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            context.log.error("aws s3 sync failed:\n%s", result.stderr)
+            raise RuntimeError(f"aws s3 sync failed (exit {result.returncode}): {result.stderr[:500]}")
+        lines = [l for l in result.stdout.splitlines() if l.strip()]
+        context.log.info("sync %s → %s: %d lines output", src, dst, len(lines))
+        return {"src": src, "dst": dst, "lines": len(lines)}
+
+    results = []
+    # Sync dist outputs (exclude the downloads/ subdir — it has its own S3 prefix)
+    results.append(_run_sync(
+        str(out_dir) + "/",
+        dist_s3,
+        ["--exclude", "downloads/*"],
+    ))
+    # Sync downloads separately under the downloads/ prefix
+    downloads_dir = out_dir / "downloads"
+    if downloads_dir.exists():
+        results.append(_run_sync(str(downloads_dir) + "/", downloads_s3))
+
+    meta = {"sync_results": results}
+    try:
+        context.add_output_metadata(meta)
+    except Exception:
+        pass
+    return meta
