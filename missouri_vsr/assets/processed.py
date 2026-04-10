@@ -1891,45 +1891,65 @@ def _write_agency_year_for_year(
     agency_meta_lookup: dict,
     comments_lookup: dict,
 ) -> tuple[int, list[str]]:
-    """Write all per-agency JSON files for a single year. Runs in a thread pool."""
-    # Select only needed columns to minimise in-memory DataFrame size.
-    # DuckDB double-quotes column names with spaces (race columns).
+    """Write all per-agency JSON files for a single year. Streams tuples from DuckDB — no pandas."""
+    # Select only needed columns; ORDER BY agency so we can stream agency groups.
     needed = ["agency"] + [c for c in row_cols if c != "agency"]
     col_sql = ", ".join(f'"{c}"' for c in needed)
-    con = duckdb.connect()
-    year_df = con.execute(
-        f"SELECT {col_sql} FROM read_parquet('{parquet_path}') WHERE year = {yr}"
-    ).df()
-    con.close()
+    row_cols_set = set(row_cols)
 
-    paths: list[str] = []
-    for agency, agency_group in year_df.groupby("agency", sort=False):
+    con = duckdb.connect()
+    cur = con.execute(
+        f"SELECT {col_sql} FROM read_parquet('{parquet_path}') "
+        f"WHERE year = {yr} ORDER BY agency, row_key"
+    )
+    col_names = [desc[0] for desc in cur.description]
+    agency_idx = col_names.index("agency")
+
+    def _flush(agency: str, rows: list) -> str:
         agency_slug = _agency_slug(agency)
         slug_dir = out_root / agency_slug
         slug_dir.mkdir(parents=True, exist_ok=True)
-
-        records: list[dict] = []
-        for _, row in agency_group.sort_values("row_key", kind="mergesort").iterrows():
-            payload = {col: row.get(col) for col in row_cols if col in row.index}
-            yr_val = payload.get("year")
-            payload["year"] = int(yr_val) if pd.notna(yr_val) else None
-            records.append(_json_safe_record(payload))
-
-        file_payload: dict = {"agency": agency, "year": yr, "rows": records}
+        records = []
+        for row in rows:
+            rec = {}
+            for col, val in zip(col_names, row):
+                if col == "agency" or col not in row_cols_set:
+                    continue
+                rec[col] = _json_safe_value(val)
+            records.append(rec)
+        payload: dict = {"agency": agency, "year": yr, "rows": records}
         meta_row = agency_meta_lookup.get(str(agency).strip())
         if meta_row is not None:
-            file_payload["agency_metadata"] = _series_to_json_dict(meta_row)
+            payload["agency_metadata"] = _series_to_json_dict(meta_row)
         year_comments = [
             c for c in (comments_lookup.get(_normalize_agency_key(agency)) or [])
             if c.get("year") == yr
         ]
         if year_comments:
-            file_payload["agency_comments"] = year_comments
-
+            payload["agency_comments"] = year_comments
         out_path = slug_dir / f"{yr}.json"
-        out_path.write_text(json.dumps(file_payload, indent=2))
-        paths.append(str(out_path))
+        out_path.write_text(json.dumps(payload, indent=2))
+        return str(out_path)
 
+    paths: list[str] = []
+    current_agency: str | None = None
+    current_rows: list = []
+    while True:
+        batch = cur.fetchmany(2000)
+        if not batch:
+            if current_agency is not None:
+                paths.append(_flush(current_agency, current_rows))
+            break
+        for row in batch:
+            agency = row[agency_idx]
+            if agency != current_agency:
+                if current_agency is not None:
+                    paths.append(_flush(current_agency, current_rows))
+                current_agency = agency
+                current_rows = []
+            current_rows.append(row)
+
+    con.close()
     return yr, paths
 
 
@@ -2009,9 +2029,9 @@ def agency_year_json_exports(context) -> List[str]:
     out_root = Path(context.resources.data_dir_out.get_path()) / "agency_year"
     out_root.mkdir(parents=True, exist_ok=True)
 
-    # Cap at 3 concurrent years: each year's DataFrame is ~80-150 MB in-memory
-    # (68 MB parquet / 25 years expands ~4x in pandas), so 3 concurrent = ~500 MB max.
-    workers = min(3, len(years))
+    # Each thread streams tuples (no pandas DataFrame), so memory per thread is minimal.
+    # Cap at cpu_count to avoid thrashing the parquet file with too many concurrent readers.
+    workers = min(len(years), os.cpu_count() or 4)
     output_paths: List[str] = []
     with ThreadPoolExecutor(max_workers=workers) as executor:
         futures = {
