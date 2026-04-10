@@ -1012,21 +1012,13 @@ def build_agency_relationships(
             out_path.write_text(json.dumps(payload))
             geojson_paths.append(out_path)
 
-    base_dir = Path(context.resources.data_dir_out.get_path())
-    upload_targets = [relationships_path, *geojson_paths]
-    uploaded = upload_paths(
-        context,
-        upload_targets,
-        base_dir=base_dir,
+    context.log.info(
+        "Wrote %d agency boundary GeoJSON files → %s/ (use dist_sync to upload)",
+        len(geojson_paths), boundaries_dir,
     )
-    if uploaded:
-        context.log.info("Uploaded %d agency relationship artifacts to S3", len(uploaded))
-
     try:
+        base_dir = Path(context.resources.data_dir_out.get_path())
         metadata = {"local_path": str(relationships_path), "row_count": len(relationships)}
-        s3_path = s3_uri_for_path(context, relationships_path, base_dir)
-        if s3_path:
-            metadata["s3_path"] = s3_path
         s3_folder = s3_uri_for_dir(context, boundaries_dir, base_dir)
         if s3_folder:
             metadata["s3_folder"] = s3_folder

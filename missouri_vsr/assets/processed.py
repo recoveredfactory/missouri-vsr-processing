@@ -2170,16 +2170,26 @@ def metric_year_subset_json(context) -> str:
 )
 def agency_index_json(context) -> str:
     processed_dir = Path(context.resources.data_dir_processed.get_path())
+    parquet_path = str(processed_dir / "all_combined_output.parquet")
 
-    # Load canonical combined for the 'allowed agencies with data' filter.
-    con = _open_canonical_db(str(processed_dir / "all_combined_output.parquet"))
-    combined = con.execute("SELECT * FROM canonical_combined").df()
-    con.close()
-
-    # Build a minimal pivot DataFrame: agency, year, stops__Total.
-    # This replaces the full pivot_reports_by_slug pickle dependency.
-    stops_rows = combined[combined["row_key"] == "stops"][["agency", "year", "Total"]].copy()
+    # Use DuckDB to avoid loading the full combined DataFrame into memory.
+    con = duckdb.connect()
+    # stops rows: just what build_agency_index_records needs for the metric column
+    stops_rows = con.execute(
+        f"SELECT agency, CAST(year AS BIGINT) AS year, \"Total\" "
+        f"FROM read_parquet('{parquet_path}') "
+        f"WHERE (row_key = 'stops' OR canonical_key = 'stops') AND \"Total\" IS NOT NULL"
+    ).df()
     stops_rows = stops_rows.rename(columns={"Total": "stops__Total"})
+
+    # Distinct agencies with any data — passed as 'combined' so build_agency_index_records
+    # can build the allowed_keys filter without loading all rows.
+    agencies_with_data = con.execute(
+        f"SELECT DISTINCT agency, 1 AS \"Total\" "
+        f"FROM read_parquet('{parquet_path}') "
+        f"WHERE agency IS NOT NULL AND \"Total\" IS NOT NULL"
+    ).df()
+    con.close()
 
     # Load geocoded agency reference.
     agency_reference_geocoded = pd.DataFrame()
@@ -2189,7 +2199,7 @@ def agency_index_json(context) -> str:
             agency_reference_geocoded = pd.read_parquet(ref_path)
             break
 
-    return write_agency_index_json(context, stops_rows, agency_reference_geocoded, combined=combined)
+    return write_agency_index_json(context, stops_rows, agency_reference_geocoded, combined=agencies_with_data)
 
 
 @asset(
@@ -2567,6 +2577,9 @@ def write_downloads_manifest(context) -> str:
         AssetKey("homepage_stats_json"),
         AssetKey("dist_manifest_json"),
         AssetKey("statewide_agency_json_export"),
+        AssetKey("agency_relationships"),
+        AssetKey("agency_boundaries_index"),
+        AssetKey("mo_jurisdictions_manifest"),
     ],
     required_resource_keys={"data_dir_out", "s3"},
     description=(
