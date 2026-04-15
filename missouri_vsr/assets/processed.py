@@ -1233,27 +1233,12 @@ def write_metric_year_json(context, combined: pd.DataFrame) -> List[str]:
         output_paths.append(str(out_path))
         context.log.info("Wrote metric-year JSON → %s (%d rows)", out_path, len(records))
 
-    base_dir = Path(context.resources.data_dir_out.get_path())
-    uploaded = upload_paths(
-        context,
-        [Path(path) for path in output_paths],
-        base_dir=base_dir,
-    )
-    if uploaded:
-        context.log.info("Uploaded %d metric-year JSON files to S3", len(uploaded))
-
     try:
-        metadata = {
+        context.add_output_metadata({
             "output_count": len(output_paths),
             "row_key_count": row_key_count,
             "row_count": row_count,
-        }
-        s3_folder = s3_uri_for_dir(context, out_root, base_dir)
-        if s3_folder:
-            metadata["s3_folder"] = s3_folder
-        if uploaded:
-            metadata["s3_paths"] = uploaded
-        context.add_output_metadata(metadata)
+        })
     except Exception:
         pass
 
