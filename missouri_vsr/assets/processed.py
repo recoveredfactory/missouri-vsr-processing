@@ -41,7 +41,15 @@ METRIC_YEAR_SUBSET_KEYS = [
     "contraband-total",
     "resident-stops",
     "search-rate",
+    "arrest-rate",
+    "citation-rate",
     "contraband-hit-rate",
+    "resident-stop-rate",
+    "equipment-stop-rate",
+    "license-stop-rate",
+    "moving-stop-rate",
+    "male-driver-rate",
+    "warning-rate",
     "stop-outcome--warning",
 ]
 STATEWIDE_SUMS_SUBSET_KEYS = [
@@ -65,23 +73,17 @@ HOMEPAGE_STATS_METRICS = {
     "warnings": "stop-outcome--warning",
 }
 STATEWIDE_RATE_SPECS = [
-    {
-        "row_key": "citation-rate",
-        "numerator": "citations",
-        "denominator": "stops",
-    },
-    {
-        "row_key": "search-rate",
-        "numerator": "searches",
-        "denominator": "stops",
-    },
-    {
-        "row_key": "contraband-hit-rate",
-        "numerator": "contraband-total",
-        "denominator": "searches",
-    },
-    # stop-rate / stop-rate-residents omitted: ACS population denominator
-    # key changes each year (era-specific); handled separately if needed.
+    {"row_key": "citation-rate",       "numerator": "citations",                  "denominator": "stops"},
+    {"row_key": "search-rate",         "numerator": "searches",                   "denominator": "stops"},
+    {"row_key": "arrest-rate",         "numerator": "arrests",                    "denominator": "stops"},
+    {"row_key": "contraband-hit-rate", "numerator": "contraband-total",           "denominator": "searches"},
+    {"row_key": "resident-stop-rate",  "numerator": "resident-stops",             "denominator": "stops"},
+    {"row_key": "equipment-stop-rate", "numerator": "reason-for-stop--equipment", "denominator": "stops"},
+    {"row_key": "license-stop-rate",   "numerator": "reason-for-stop--license",   "denominator": "stops"},
+    {"row_key": "moving-stop-rate",    "numerator": "reason-for-stop--moving",    "denominator": "stops"},
+    {"row_key": "male-driver-rate",    "numerator": "driver-gender--male",        "denominator": "stops"},
+    {"row_key": "warning-rate",        "numerator": "stop-outcome--warning",      "denominator": "stops"},
+    # stop-rate omitted: ACS population denominator key changes each year (era-specific).
 ]
 
 STATEWIDE_AGENCY_NAME = "Missouri (all agencies)"

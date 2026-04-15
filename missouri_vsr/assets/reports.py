@@ -240,9 +240,16 @@ _RATE_RACE_COLS = ["Total", "White", "Black", "Hispanic", "Native American", "As
 # Rate specifications: (output_canonical_key, numerator_ck, denominator_ck, year_limit_fn)
 # year_limit_fn: None = all years; callable = filter years
 _RATE_SPECS = [
-    ("search-rate",         "searches",         "stops",    None),
-    ("arrest-rate",         "arrests",           "stops",    None),
-    ("contraband-hit-rate", "contraband-total",  "searches", lambda y: y >= 2020),
+    ("search-rate",                    "searches",                  "stops",    None),
+    ("arrest-rate",                    "arrests",                   "stops",    None),
+    ("citation-rate",                  "citations",                 "stops",    None),
+    ("contraband-hit-rate",            "contraband-total",          "searches", lambda y: y >= 2020),
+    ("resident-stop-rate",             "resident-stops",            "stops",    lambda y: y >= 2020),
+    ("equipment-stop-rate",            "reason-for-stop--equipment","stops",    None),
+    ("license-stop-rate",              "reason-for-stop--license",  "stops",    None),
+    ("moving-stop-rate",               "reason-for-stop--moving",   "stops",    None),
+    ("male-driver-rate",               "driver-gender--male",       "stops",    None),
+    ("warning-rate",                   "stop-outcome--warning",     "stops",    None),
 ]
 
 
