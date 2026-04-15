@@ -814,6 +814,7 @@ def build_agency_index_records(
     pivoted: pd.DataFrame,
     agency_reference_geocoded: pd.DataFrame,
     combined: pd.DataFrame | None = None,
+    years_by_agency: dict[str, list[int]] | None = None,
 ) -> list[dict]:
     """Build agency index records with optional filtering for agencies with data."""
     names_by_key: dict[str, dict] = {}
@@ -955,6 +956,21 @@ def build_agency_index_records(
             allowed_keys = {_normalize_agency_key(a) for a in agencies if a.strip()}
             # Always keep the statewide aggregate entry even though it is synthetic.
             allowed_keys.add(_normalize_agency_key(STATEWIDE_AGENCY_NAME))
+
+    # Stamp years_with_data / latest_year_with_data onto each entry.
+    if years_by_agency:
+        for entry in names_by_key.values():
+            all_names = list(entry.get("names") or [])
+            canonical = entry.get("canonical_name")
+            if canonical and canonical not in all_names:
+                all_names.append(canonical)
+            years: set[int] = set()
+            for name in all_names:
+                for yr in years_by_agency.get(name) or []:
+                    years.add(yr)
+            sorted_years = sorted(years)
+            entry["years_with_data"] = sorted_years
+            entry["latest_year_with_data"] = sorted_years[-1] if sorted_years else None
 
     records = sorted(names_by_key.values(), key=lambda item: item["agency_slug"])
     if allowed_keys is None:
@@ -1385,6 +1401,7 @@ def write_agency_index_json(
     pivoted: pd.DataFrame,
     agency_reference_geocoded: pd.DataFrame,
     combined: pd.DataFrame | None = None,
+    years_by_agency: dict[str, list[int]] | None = None,
 ) -> str:
     """Write a JSON index of agencies for search/discovery."""
     out_root = Path(context.resources.data_dir_out.get_path())
@@ -1395,6 +1412,7 @@ def write_agency_index_json(
         pivoted,
         agency_reference_geocoded,
         combined=combined,
+        years_by_agency=years_by_agency,
     )
     out_path.write_text(json.dumps(records, indent=2))
     context.log.info("Wrote agency index JSON → %s (%d rows)", out_path, len(records))
@@ -2250,6 +2268,19 @@ def agency_index_json(context) -> str:
         f"FROM read_parquet('{parquet_path}') "
         f"WHERE agency IS NOT NULL AND \"Total\" IS NOT NULL"
     ).df()
+
+    # Per-agency year coverage: which years have at least one non-null value row.
+    years_rows = con.execute(
+        f"SELECT agency, CAST(year AS BIGINT) AS year "
+        f"FROM read_parquet('{parquet_path}') "
+        f"WHERE agency IS NOT NULL AND \"Total\" IS NOT NULL "
+        f"GROUP BY agency, year "
+        f"ORDER BY agency, year"
+    ).df()
+    years_by_agency: dict[str, list[int]] = {}
+    for agency, group in years_rows.groupby("agency"):
+        years_by_agency[str(agency)] = sorted(int(y) for y in group["year"].dropna().unique())
+
     con.close()
 
     # Load geocoded agency reference.
@@ -2260,7 +2291,13 @@ def agency_index_json(context) -> str:
             agency_reference_geocoded = pd.read_parquet(ref_path)
             break
 
-    return write_agency_index_json(context, stops_rows, agency_reference_geocoded, combined=agencies_with_data)
+    return write_agency_index_json(
+        context,
+        stops_rows,
+        agency_reference_geocoded,
+        combined=agencies_with_data,
+        years_by_agency=years_by_agency,
+    )
 
 
 @asset(
