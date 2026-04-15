@@ -1316,14 +1316,64 @@ def write_metric_year_subset_json(context, combined: pd.DataFrame) -> str:
         total_rows += len(rows)
         rows_by_key[key] = rows
 
+    columns = ["agency_idx", "year_idx", *value_cols]
     payload = {
         "agencies": agencies,
         "years": years,
-        "columns": ["agency_idx", "year_idx", *value_cols],
+        "columns": columns,
         "rows": rows_by_key,
     }
     out_path.write_text(json.dumps(payload, separators=(",", ":")))
     context.log.info("Wrote metric-year subset JSON → %s (%d rows)", out_path, total_rows)
+
+    split_dir = out_root / "metric_year_subset"
+    split_dir.mkdir(parents=True, exist_ok=True)
+    # Remove any stale per-key files from a prior run so deletions propagate.
+    for stale in split_dir.glob("*.json"):
+        stale.unlink()
+    index_payload = {
+        "agencies": agencies,
+        "years": years,
+        "columns": columns,
+        "row_keys": list(METRIC_YEAR_SUBSET_KEYS),
+    }
+    (split_dir / "_index.json").write_text(json.dumps(index_payload, separators=(",", ":")))
+    for key, rows in rows_by_key.items():
+        per_key_payload = {"row_key": key, "rows": rows}
+        (split_dir / f"{key}.json").write_text(json.dumps(per_key_payload, separators=(",", ":")))
+    context.log.info(
+        "Wrote metric-year subset split files → %s (%d per-key files)",
+        split_dir,
+        len(rows_by_key),
+    )
+
+    # Per-year combined slice for the scatter use-case: one file per year with
+    # all metrics rolled up. agency_idx is col 0; year_idx is implicit.
+    by_year_dir = split_dir / "by_year"
+    by_year_dir.mkdir(parents=True, exist_ok=True)
+    for stale in by_year_dir.glob("*.json"):
+        stale.unlink()
+    by_year_columns = ["agency_idx", *value_cols]
+    rows_by_year_key: dict[int, dict[str, list[list]]] = {
+        year: {key: [] for key in METRIC_YEAR_SUBSET_KEYS} for year in years
+    }
+    for key, rows in rows_by_key.items():
+        for entry in rows:
+            year = years[entry[1]]
+            rows_by_year_key[year][key].append([entry[0], *entry[2:]])
+    for year in years:
+        per_year_payload = {
+            "year": year,
+            "agencies": agencies,
+            "columns": by_year_columns,
+            "rows": rows_by_year_key[year],
+        }
+        (by_year_dir / f"{year}.json").write_text(json.dumps(per_year_payload, separators=(",", ":")))
+    context.log.info(
+        "Wrote metric-year subset by-year files → %s (%d year files)",
+        by_year_dir,
+        len(years),
+    )
 
     base_dir = Path(context.resources.data_dir_out.get_path())
     uploaded = upload_paths(
