@@ -171,3 +171,6 @@ data/
 
 # Marimo notebook state
 __marimo__/
+
+# Local notes (not for version control)
+notes/
