@@ -89,6 +89,9 @@ STATEWIDE_RATE_SPECS = [
 STATEWIDE_AGENCY_NAME = "Missouri (all agencies)"
 STATEWIDE_AGENCY_SLUG = "missouri-all-agencies"
 
+# Minimum year included in dist outputs (downloads keep full history)
+DIST_MIN_YEAR = 2001
+
 # Issue #4: in-group percentage column names (one per non-Total race column)
 RACE_PCT_COLUMNS = [
     f"{race} Pct"
@@ -2011,7 +2014,7 @@ def agency_year_json_exports(context) -> List[str]:
     schema_df = con.execute(f"SELECT * FROM read_parquet('{parquet_path}') LIMIT 0").df()
     years = sorted(
         int(r[0]) for r in
-        con.execute(f"SELECT DISTINCT year FROM read_parquet('{parquet_path}') WHERE year IS NOT NULL").fetchall()
+        con.execute(f"SELECT DISTINCT year FROM read_parquet('{parquet_path}') WHERE year IS NOT NULL AND year >= {DIST_MIN_YEAR}").fetchall()
     )
     agency_slugs = [
         _agency_slug(r[0]) for r in
@@ -2163,9 +2166,21 @@ def canonical_combined_parquet(context) -> str:
     processed_dir = Path(context.resources.data_dir_processed.get_path())
     out_path = processed_dir / "canonical_combined.parquet"
     con = _open_canonical_db(str(processed_dir / "all_combined_output.parquet"))
-    con.execute(f"COPY (SELECT * FROM canonical_combined) TO '{out_path}' (FORMAT PARQUET)")
-    row_count = con.execute(f"SELECT COUNT(*) FROM read_parquet('{out_path}')").fetchone()[0]
+    con.execute(f"COPY (SELECT * FROM canonical_combined WHERE year >= {DIST_MIN_YEAR}) TO '{out_path}' (FORMAT PARQUET)")
     con.close()
+
+    # Clip rate values to 100% for dist outputs (bad source data can produce >100% rates).
+    # Downloads keep the raw computed values.
+    race_cols = [c for c in PIVOT_VALUE_COLUMNS if c != "Total"]
+    all_val_cols = ["Total"] + race_cols
+    df = pd.read_parquet(out_path)
+    rate_mask = df["canonical_key"].str.endswith("-rate", na=False)
+    for col in all_val_cols:
+        if col in df.columns:
+            df.loc[rate_mask, col] = pd.to_numeric(df.loc[rate_mask, col], errors="coerce").clip(upper=100)
+    df.to_parquet(out_path, index=False)
+
+    row_count = len(df)
     context.log.info("Wrote canonical combined Parquet → %s (%d rows)", out_path, row_count)
     try:
         context.add_output_metadata({"local_path": str(out_path), "row_count": int(row_count)})
@@ -2318,11 +2333,11 @@ def dist_manifest_json(context) -> str:
     con = duckdb.connect()
     years_rows = con.execute(
         f"SELECT DISTINCT year FROM read_parquet('{processed_dir}/all_combined_output.parquet') "
-        "WHERE year IS NOT NULL ORDER BY year"
+        f"WHERE year IS NOT NULL AND year >= {DIST_MIN_YEAR} ORDER BY year"
     ).fetchall()
     canonical_rows = con.execute(
         f"SELECT DISTINCT canonical_key FROM read_parquet('{processed_dir}/all_combined_output.parquet') "
-        "WHERE canonical_key IS NOT NULL ORDER BY canonical_key"
+        f"WHERE canonical_key IS NOT NULL AND year >= {DIST_MIN_YEAR} ORDER BY canonical_key"
     ).fetchall()
     con.close()
 
@@ -2333,14 +2348,13 @@ def dist_manifest_json(context) -> str:
         "version": "2.0",
         "released": date.today().isoformat(),
         "years": years,
-        "partial_coverage_years": [2001, 2002, 2003],
         "schema_version": "2.0",
         "canonical_metrics": canonical_metrics,
         "changelog": (
-            "v2.0: Added 2000–2019 pre-2020 format data with canonical_key normalization. "
+            f"v2.0: Added {DIST_MIN_YEAR}–2019 pre-2020 format data with canonical_key normalization. "
             "row_key in all dist outputs is now canonical_key (era-independent). "
             "Agency JSON partitioned by year (dist/agency_year/{slug}/{year}.json). "
-            "Years 2001–2003 have partial coverage (~50% of agencies) due to blank race columns in source PDFs."
+            f"Years before {DIST_MIN_YEAR} excluded from dist outputs (sparse/unreliable coverage)."
         ),
     }
 
@@ -2654,12 +2668,12 @@ def dist_sync(context) -> dict:
     results.append(_run_sync(
         str(out_dir) + "/",
         dist_s3,
-        ["--exclude", "downloads/*"],
+        ["--exclude", "downloads/*", "--delete"],
     ))
     # Sync downloads separately under the downloads/ prefix
     downloads_dir = out_dir / "downloads"
     if downloads_dir.exists():
-        results.append(_run_sync(str(downloads_dir) + "/", downloads_s3))
+        results.append(_run_sync(str(downloads_dir) + "/", downloads_s3, ["--delete"]))
 
     meta = {"sync_results": results}
     try:
