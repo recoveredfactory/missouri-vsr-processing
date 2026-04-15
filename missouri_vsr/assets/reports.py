@@ -11,6 +11,7 @@ from dagster import AssetIn, AssetKey, AssetOut, In, Out, Output, graph_asset, o
 
 from missouri_vsr.assets.extract import YEAR_URLS, _ensure_pdftotext, _slugify_simple
 from missouri_vsr.assets.s3_utils import upload_file_to_s3
+from missouri_vsr.cli.crosswalk import _normalize_name
 
 AGENCY_RESPONSE_URLS = {
     2024: "https://ago.mo.gov/wp-content/uploads/2024-Agency-Responses-1.pdf",
@@ -353,6 +354,38 @@ def _normalize_acs_population_rows(combined: pd.DataFrame, log) -> pd.DataFrame:
     return combined
 
 
+def _build_agency_name_lookup(crosswalk_path: Path) -> dict[str, str]:
+    """Build a {normalized_name: canonical_name} lookup from the agency crosswalk CSV."""
+    try:
+        df = pd.read_csv(crosswalk_path)
+    except Exception:
+        return {}
+    lookup: dict[str, str] = {}
+    for _, row in df.iterrows():
+        normalized = str(row.get("Normalized", "") or "").strip()
+        canonical = str(row.get("Canonical", "") or "").strip()
+        if normalized and canonical and canonical not in ("None", "nan"):
+            lookup[normalized] = canonical
+    return lookup
+
+
+def _normalize_agency_names(combined: pd.DataFrame, crosswalk_path: Path, log) -> pd.DataFrame:
+    """Replace raw agency name variants with canonical names using the agency crosswalk."""
+    if "agency" not in combined.columns or combined.empty:
+        return combined
+    lookup = _build_agency_name_lookup(crosswalk_path)
+    if not lookup:
+        return combined
+    original = combined["agency"].copy()
+    combined["agency"] = combined["agency"].apply(
+        lambda a: lookup.get(_normalize_name(str(a)), a) if pd.notna(a) else a
+    )
+    updates = int((combined["agency"] != original).sum())
+    if updates:
+        log.info("Agency name normalization: %d rows updated via crosswalk", updates)
+    return combined
+
+
 @op(
     ins={f"extract_pdf_data_{year}": In(pd.DataFrame) for year in YEAR_URLS},
     out=Out(pd.DataFrame),
@@ -375,6 +408,10 @@ def combine_reports(context, **extracted_reports: dict[str, pd.DataFrame]) -> pd
         combined = combined.rename(columns={"slug": "row_key"})
     if "slug" in combined.columns:
         combined = combined.drop(columns=["slug"])
+
+    # Normalize agency names to canonical forms using the agency crosswalk
+    agency_crosswalk_path = Path("data/src/agency_crosswalk.csv")
+    combined = _normalize_agency_names(combined, agency_crosswalk_path, context.log)
 
     # Add canonical_key column from crosswalk BEFORE ACS normalization so that
     # year-specific population row_keys (e.g. rates-by-race--population--2019-population)

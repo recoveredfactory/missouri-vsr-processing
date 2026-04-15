@@ -7,6 +7,8 @@ from dagster import AssetCheckResult, AssetKey, MetadataValue, asset_check
 
 from missouri_vsr.assets.extract import EXTRACT_COLUMNS, EXTRACT_COLUMNS_PRE2020, RACE_COLUMNS, RACE_COLUMNS_PRE2020, YEAR_URLS
 from missouri_vsr.assets.reports import combine_all_reports
+from missouri_vsr.assets.reports import _build_agency_name_lookup
+from missouri_vsr.cli.crosswalk import _normalize_name
 
 # Combined asset has columns from both eras; "Am. Indian" is NaN for 2020+ rows,
 # "Native American" is NaN for pre-2020 rows.
@@ -268,11 +270,50 @@ for _yr in sorted(YEAR_URLS):
         per_year_extract_checks.append(_make_row_sanity_check(_yr, _rows))
 
 
+_AGENCY_CROSSWALK_PATH = Path("data/src/agency_crosswalk.csv")
+
+
+@asset_check(asset=combine_all_reports)
+def check_agency_names_normalized(df: pd.DataFrame) -> AssetCheckResult:
+    """Verify that all agency names in the combined dataset have been canonicalized.
+
+    Any agency name that maps to a *different* canonical via the crosswalk should not
+    appear in the output — it means the normalization step was skipped or the crosswalk
+    is missing an entry.
+    """
+    if "agency" not in df.columns:
+        return AssetCheckResult(passed=False, metadata={"reason": "agency column missing"})
+
+    lookup = _build_agency_name_lookup(_AGENCY_CROSSWALK_PATH)
+    if not lookup:
+        return AssetCheckResult(
+            passed=True,
+            metadata={"skipped": True, "reason": "agency_crosswalk.csv not found or empty"},
+        )
+
+    violations: list[dict] = []
+    for raw in df["agency"].dropna().unique():
+        raw_str = str(raw)
+        canonical = lookup.get(_normalize_name(raw_str))
+        if canonical and canonical != raw_str:
+            count = int((df["agency"] == raw).sum())
+            violations.append({"raw": raw_str, "expected_canonical": canonical, "row_count": count})
+
+    return AssetCheckResult(
+        passed=not violations,
+        metadata={
+            "violation_count": len(violations),
+            "violations": MetadataValue.json(violations[:25]),
+        },
+    )
+
+
 asset_checks = [
     check_expected_columns,
     check_no_duplicate_row_keys,
     check_no_duplicate_row_ids,
     check_numeric_columns_parse,
+    check_agency_names_normalized,
     *per_year_extract_checks,
 ]
 
