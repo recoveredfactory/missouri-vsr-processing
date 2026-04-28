@@ -161,8 +161,9 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
-# Our own data folder
+# Our own data folder (but allow the Observable notebook's data)
 data/
+!analysis/src/data/
 
 # The classic
 .DS_Store
