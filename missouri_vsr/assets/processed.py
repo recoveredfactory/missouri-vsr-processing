@@ -217,7 +217,7 @@ def _open_canonical_db(parquet_path: str) -> duckdb.DuckDBPyConnection:
     # DuckDB needs double-quoted identifiers for column names with spaces/dots.
     race_cols = [
         '"Total"', '"White"', '"Black"', '"Hispanic"',
-        '"Native American"', '"Asian"', '"Other"', '"Am. Indian"',
+        '"Native American"', '"Asian"', '"Other"',
     ]
     race_sql = ", ".join(race_cols)
 

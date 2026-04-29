@@ -10,8 +10,8 @@ from missouri_vsr.assets.reports import combine_all_reports
 from missouri_vsr.assets.reports import _build_agency_name_lookup
 from missouri_vsr.cli.crosswalk import _normalize_name
 
-# Combined asset has columns from both eras; "Am. Indian" is NaN for 2020+ rows,
-# "Native American" is NaN for pre-2020 rows.
+# Combined asset collapses pre-2020 'Am. Indian' into 'Native American' at layer 2,
+# so downstream only sees a single Native American column populated across all eras.
 EXPECTED_COLUMNS_COMBINED = [
     "Total",
     "White",
@@ -20,7 +20,6 @@ EXPECTED_COLUMNS_COMBINED = [
     "Native American",
     "Asian",
     "Other",
-    "Am. Indian",  # pre-2020 rows only; NaN for 2020+
     "canonical_key",  # era-independent concept name; None for era-specific metrics
     "year",
     "row_key",
@@ -42,7 +41,6 @@ NUMERIC_COLS_COMBINED = [
     "Native American",
     "Asian",
     "Other",
-    "Am. Indian",
 ]
 
 

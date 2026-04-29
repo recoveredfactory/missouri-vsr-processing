@@ -235,7 +235,7 @@ def _build_canonical_key_lookup(crosswalk_path: Path) -> dict[tuple[str, int], s
 
 
 # Race columns used for per-race rate computation (includes both eras)
-_RATE_RACE_COLS = ["Total", "White", "Black", "Hispanic", "Native American", "Asian", "Other", "Am. Indian"]
+_RATE_RACE_COLS = ["Total", "White", "Black", "Hispanic", "Native American", "Asian", "Other"]
 
 # Rate specifications: (output_canonical_key, numerator_ck, denominator_ck, year_limit_fn)
 # year_limit_fn: None = all years; callable = filter years
@@ -415,6 +415,16 @@ def combine_reports(context, **extracted_reports: dict[str, pd.DataFrame]) -> pd
         combined = combined.rename(columns={"slug": "row_key"})
     if "slug" in combined.columns:
         combined = combined.drop(columns=["slug"])
+
+    # Collapse pre-2020 'Am. Indian' race column into the 2020+ 'Native American'
+    # column so downstream layers only see one. Pre-2020 reports use 'Am. Indian';
+    # 2020+ reports use 'Native American'. The two never both populate a row.
+    if "Am. Indian" in combined.columns:
+        if "Native American" not in combined.columns:
+            combined["Native American"] = combined["Am. Indian"]
+        else:
+            combined["Native American"] = combined["Native American"].combine_first(combined["Am. Indian"])
+        combined = combined.drop(columns=["Am. Indian"])
 
     # Normalize agency names to canonical forms using the agency crosswalk
     agency_crosswalk_path = Path("data/src/agency_crosswalk.csv")
