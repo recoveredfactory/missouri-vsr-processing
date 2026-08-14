@@ -110,6 +110,28 @@ def _resolve_canonical(ice_name: str, lookup: dict[str, str]) -> str | None:
     return lookup.get(_normalize_name(ice_name))
 
 
+def _build_287g_exclude_set(exclude_path: Path) -> set[str]:
+    """Normalized ICE agency names to drop from the Missouri 287g set before resolution.
+
+    This dataset covers only agencies that make traffic stops (and thus file a Vehicle
+    Stops Report). Non-traffic 287g participants — e.g. the Dept of Corrections — are
+    tracked separately in the "287g watch" project, not here. Listing them in
+    data/src/agency_287g_exclude.csv keeps them out of the published set AND out of the
+    all_mo_agencies_resolved check, without weakening the check for genuinely-new
+    traffic-stop agencies (those still surface as unresolved and get a crosswalk row).
+    """
+    try:
+        df = pd.read_csv(exclude_path)
+    except Exception:
+        return set()
+    out: set[str] = set()
+    for _, row in df.iterrows():
+        norm = str(row.get("Normalized", "") or "").strip()
+        if norm:
+            out.add(norm)
+    return out
+
+
 def _build_canonical_self_lookup(canonical_parquet: Path) -> dict[str, str]:
     """{normalized_canonical_name: canonical_name} from the canonical_combined parquet.
 
@@ -260,6 +282,21 @@ def ice_287g_latest(context) -> pd.DataFrame:
     df = _read_snapshot(xlsx_path)
     mo = df[df["state"].str.upper() == "MISSOURI"].copy()
     context.log.info("287g rows: %d total, %d Missouri", len(df), len(mo))
+
+    # Drop out-of-scope participants (non-traffic-stop agencies) before resolution so
+    # they neither appear in the published set nor trip all_mo_agencies_resolved.
+    exclude_norms = _build_287g_exclude_set(src_dir / "agency_287g_exclude.csv")
+    if exclude_norms:
+        is_excluded = mo["ice_agency_name"].apply(
+            lambda n: _normalize_name(n) in exclude_norms
+        )
+        if int(is_excluded.sum()):
+            context.log.info(
+                "287g: excluded %d out-of-scope (non-traffic) agency row(s): %s",
+                int(is_excluded.sum()),
+                sorted(mo.loc[is_excluded, "ice_agency_name"].unique().tolist()),
+            )
+            mo = mo[~is_excluded].copy()
 
     crosswalk_path = src_dir / "agency_crosswalk.csv"
     crosswalk_lookup = _build_agency_name_lookup(crosswalk_path)
