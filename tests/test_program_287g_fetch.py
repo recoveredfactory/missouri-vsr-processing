@@ -162,3 +162,10 @@ def test_picks_lexically_latest_folder(tmp_path: Path, monkeypatch):
     assert result["appelson_folder"] == "sheets_20260520_175436"
     # Folder-listing call targeted the newest folder, not an older one.
     assert f"{program_287g.APPELSON_SHEETS_API}/sheets_20260520_175436" in calls
+
+
+def test_latest_snapshot_path_ignores_filename_case(tmp_path: Path):
+    """The mirror capitalized the filename in Oct 2026; the newest file must still win."""
+    for name in ("participatingAgencies08132026.xlsx", "ParticipatingAgencies10282026pm.xlsx", "notes.xlsx"):
+        (tmp_path / name).write_bytes(FAKE_XLSX_BYTES)
+    assert program_287g._latest_snapshot_path(tmp_path).name == "ParticipatingAgencies10282026pm.xlsx"

@@ -46,7 +46,10 @@ def _parse_snapshot_filename(name: str) -> tuple[date, str, int] | None:
 
 def _latest_snapshot_path(snapshot_dir: Path) -> Path:
     candidates = []
-    for p in snapshot_dir.glob("participatingAgencies*.xlsx"):
+    # Glob every xlsx and let the case-insensitive regex decide: the mirror started
+    # capitalizing the name (ParticipatingAgencies10282026pm.xlsx), and a
+    # case-sensitive glob silently kept selecting the last lowercase snapshot.
+    for p in snapshot_dir.glob("*.xlsx"):
         parsed = _parse_snapshot_filename(p.name)
         if parsed is None:
             continue
